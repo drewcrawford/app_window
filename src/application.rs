@@ -1,3 +1,5 @@
+use crate::sys;
+
 /**
 Performs the runloop or event loop.
 
@@ -19,6 +21,7 @@ from the first thread.
 
 */
 pub fn main() {
-    todo!()
+    assert!(sys::is_main_thread(), "Call main from the first thread");
+    sys::run_main_thread();
 }
 
