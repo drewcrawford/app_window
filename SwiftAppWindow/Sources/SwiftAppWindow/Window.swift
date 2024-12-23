@@ -15,10 +15,13 @@ public final class Window: Sendable {
             await MainActor.run {
                 NSApplication.shared.setActivationPolicy(.regular)
                 NSApplication.shared.activate()
-                self.window = NSWindow(contentRect: .init(x: x, y: y, width: width, height: height), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-                self.window!.title = title
-                self.window!.makeKeyAndOrderFront(nil)
+                let _window = NSWindow(contentRect: NSRect(origin: .zero, size: .init(width: width, height: height)) , styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+                self.window = _window
                 
+                self.window!.title = title
+                let screen = _window.screen!
+                _window.setFrameOrigin(.init(rustX: x, rustY: y, outerBounds: screen.frame))
+                self.window!.makeKeyAndOrderFront(nil)
             }
         }
     }

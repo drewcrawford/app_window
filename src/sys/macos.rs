@@ -47,7 +47,7 @@ impl Window {
         }
     }
     pub fn default() -> Self {
-        Self::new(Position::new(640.0, 480.0), Size::new(640.0, 480.0), "app_window".to_string())
+        Self::new(Position::new(0.0, 0.0), Size::new(640.0, 480.0), "app_window".to_string())
     }
 }
 
