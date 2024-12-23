@@ -14,6 +14,7 @@ Some other goals of the project are:
 
 */
 
-mod window;
+pub mod window;
 pub mod application;
 mod sys;
+mod coordinates;
