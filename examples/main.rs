@@ -1,6 +1,13 @@
 pub fn main() {
+    #[cfg(target_arch="wasm32")]
+    console_error_panic_hook::set_once();
+    #[cfg(target_arch="wasm32")]
+    use wasm_thread as thread;
+    #[cfg(not(target_arch="wasm32"))]
+    use std::thread as thread;
+
     #[cfg(feature = "app_input")]
-    std::thread::spawn(|| {
+    thread::spawn(|| {
        let k = app_input::keyboard::Keyboard::coalesced();
         let m = app_input::mouse::Mouse::coalesced();
         loop {

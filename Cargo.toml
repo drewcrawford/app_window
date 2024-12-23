@@ -16,7 +16,6 @@ wgpu = "23.0.1"
 test_executors = "0.3.2"
 
 
-
 # macos
 [target.'cfg(target_os = "macos")'.dependencies]
 swift-rs = "1.0.7"
@@ -24,3 +23,7 @@ continue = "0.1.0"
 
 [target.'cfg(target_os = "macos")'.build-dependencies]
 swift-rs = { version = "1.0.7", features = ["build"] }
+
+[target.'cfg(target_arch="wasm32")'.dev-dependencies]
+console_error_panic_hook = "0.1.7"
+wasm_thread = "0.3.3"
