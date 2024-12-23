@@ -1,4 +1,4 @@
-use raw_window_handle::{AppKitWindowHandle, HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use crate::coordinates::Size;
 use crate::sys;
 

@@ -1,33 +1,27 @@
+#![allow(non_snake_case)]
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::{Arc, Weak};
-use std::sync::atomic::{AtomicPtr, Ordering};
 use r#continue::Sender;
 use raw_window_handle::{AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle};
 use swift_rs::{swift, SRString};
 use crate::coordinates::{Position, Size};
-use crate::sys;
 
-#[allow(non_snake_case)]
+
+
 swift!(fn SwiftAppWindowIsMainThread() -> bool);
 
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindowRunMainThread());
 
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_WindowNew( x: f64, y: f64, width: f64, height: f64, title: SRString)  -> *mut c_void);
 
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_WindowFree(window: *mut c_void)  -> ());
 
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_WindowNewFullscreen(title: SRString)  -> *mut c_void);
 
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_WindowSurface(ctx: *mut c_void, window: *mut c_void, ret: *mut c_void)  -> ());
 
 
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_OnMainThread(ctx: *mut c_void, c_fn: *mut c_void)  -> ());
 
 
@@ -118,15 +112,11 @@ impl Window {
     }
 }
 
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_SurfaceSize(ctx: *mut c_void, surface: *mut c_void, ret: *mut c_void)  -> ());
 
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_SurfaceRawHandle(surface: *mut c_void)  -> *mut c_void);
 
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_SurfaceFree(surface: *mut c_void) -> ());
-#[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_SurfaceSizeUpdate(ctx: *mut c_void, surface: *mut c_void, notify: *mut c_void) -> ());
 
 extern "C" fn notify_size<F: Fn(Size) -> ()>(ctx: *const F, width: f64, height: f64) {
