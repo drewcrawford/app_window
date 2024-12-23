@@ -17,7 +17,8 @@ swift!(fn SwiftAppWindow_WindowNew( x: f64, y: f64, width: f64, height: f64, tit
 #[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_WindowFree(window: *mut c_void)  -> ());
 
-
+#[allow(non_snake_case)]
+swift!(fn SwiftAppWindow_WindowNewFullscreen(title: SRString)  -> *mut c_void);
 
 
 
@@ -48,6 +49,13 @@ impl Window {
     }
     pub fn default() -> Self {
         Self::new(Position::new(0.0, 0.0), Size::new(640.0, 480.0), "app_window".to_string())
+    }
+
+    pub fn fullscreen(title: String) -> Self {
+        let imp = unsafe { SwiftAppWindow_WindowNewFullscreen(SRString::from(title.as_str())) };
+        Window {
+            imp,
+        }
     }
 }
 
