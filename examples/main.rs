@@ -5,11 +5,12 @@ pub fn main() {
     use wasm_thread as thread;
     #[cfg(not(target_arch="wasm32"))]
     use std::thread as thread;
+    let k = app_input::keyboard::Keyboard::coalesced();
+    let m = app_input::mouse::Mouse::coalesced();
 
     #[cfg(feature = "app_input")]
-    thread::spawn(|| {
-       let k = app_input::keyboard::Keyboard::coalesced();
-        let m = app_input::mouse::Mouse::coalesced();
+    thread::spawn(move || {
+
         loop {
             for key in app_input::keyboard::key::KeyboardKey::all_keys() {
                 if k.is_pressed(key) {
