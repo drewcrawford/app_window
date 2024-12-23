@@ -17,6 +17,12 @@ impl Surface {
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
         self.sys.raw_display_handle()
     }
+    /**
+    Run the attached callback when size changes.
+    */
+    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
+        self.sys.size_update(update)
+    }
 }
 
 #[cfg(test)] mod tests {

@@ -17,5 +17,5 @@ Some other goals of the project are:
 pub mod window;
 pub mod application;
 mod sys;
-mod coordinates;
+pub mod coordinates;
 mod surface;

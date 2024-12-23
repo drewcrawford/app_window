@@ -22,6 +22,7 @@ impl Window {
     pub async fn surface(&self) -> Surface {
         self.sys.surface().await
     }
+
 }
 
 impl Default for Window {

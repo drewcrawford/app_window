@@ -11,6 +11,7 @@ final class NSWindowCustomize: NSWindow {
     override func keyDown(with event: NSEvent) {
         //don't call super to avoid the noise
     }
+    
 }
 
 public final class Window: Sendable {
@@ -23,6 +24,8 @@ public final class Window: Sendable {
                 NSApplication.shared.activate()
                 let _window = NSWindowCustomize(contentRect: NSRect(origin: .zero, size: .init(width: width, height: height)) , styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
                 _window.isReleasedWhenClosed = false
+                _window.contentView = SurfaceView()
+
                 self.window = _window
                 
                 _window.title = title
@@ -41,7 +44,7 @@ public final class Window: Sendable {
                 NSApplication.shared.activate()
                 let _window = NSWindowCustomize(contentRect: .init(origin: .zero, size: NSScreen.main!.frame.size), styleMask: [.borderless], backing: .buffered, defer: false)
                 _window.isReleasedWhenClosed = false
-
+                _window.contentView = SurfaceView()
                 self.window = _window
                 
                 _window.title = title
@@ -68,7 +71,7 @@ public final class Window: Sendable {
     public func surface() async -> Surface {
         let view = await MainActor.run {
             let window = self.window!
-            let view = window.contentView!
+            let view = window.contentView! as! SurfaceView
             return view
         }
         return Surface(view: view)

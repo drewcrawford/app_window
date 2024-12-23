@@ -1,6 +1,6 @@
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::sync::atomic::{AtomicPtr, Ordering};
 use r#continue::Sender;
 use raw_window_handle::{AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle};
@@ -69,7 +69,7 @@ struct MainThreadClosure<R,F> {
 extern "C" fn recv_surface(ctx: *mut Sender<Surface>, surface: *mut c_void) {
     let c: Sender<Surface> = *unsafe{Box::from_raw(ctx)};
 
-    c.send(Surface { imp: surface })
+    c.send(Surface { imp: surface, update_size: None })
 }
 
 extern "C" fn recv_size(ctx: *mut Sender<Size>, size_w: f64, size_h: f64) {
@@ -126,8 +126,21 @@ swift!(fn SwiftAppWindow_SurfaceRawHandle(surface: *mut c_void)  -> *mut c_void)
 
 #[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_SurfaceFree(surface: *mut c_void) -> ());
+#[allow(non_snake_case)]
+swift!(fn SwiftAppWindow_SurfaceSizeUpdate(ctx: *mut c_void, surface: *mut c_void, notify: *mut c_void) -> ());
+
+extern "C" fn notify_size<F: Fn(Size) -> ()>(ctx: *const F, width: f64, height: f64) {
+    let as_weak = unsafe{Weak::from_raw(ctx)};
+    if let Some(upgrade) = as_weak.upgrade() {
+        (upgrade)(Size::new(width, height));
+    }
+    //todo: balance this somehow
+    std::mem::forget(as_weak);
+
+}
 pub struct Surface {
     imp: *mut c_void,
+    update_size: Option<Arc<dyn Fn(Size)>>,
 }
 //sendable in swift!
 unsafe impl Send for Surface {}
@@ -156,6 +169,16 @@ impl Surface {
     }
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
         RawDisplayHandle::AppKit(AppKitDisplayHandle::new())
+    }
+    /**
+    Run the attached callback when size changes.
+    */
+    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
+        let strong_update = Arc::new(update);
+        let weak = Weak::into_raw(Arc::downgrade(&strong_update));
+        self.update_size = Some(strong_update);
+
+        unsafe{SwiftAppWindow_SurfaceSizeUpdate(weak as *mut c_void, self.imp, notify_size::<F> as *mut c_void)}
     }
 }
 

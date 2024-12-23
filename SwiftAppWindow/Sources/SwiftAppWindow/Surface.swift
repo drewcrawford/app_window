@@ -5,10 +5,19 @@
 //  Created by Drew Crawford on 12/22/24.
 //
 import AppKit
+
+final class SurfaceView: NSView {
+    var sizeNotify: ((CGFloat, CGFloat) -> ())?
+    override func layout() {
+        super.layout()
+        sizeNotify?(frame.width, frame.height)
+    }
+}
+
 public final class Surface: Sendable {
-    let view: NSView
+    let view: SurfaceView
     
-    init(view: NSView) {
+    init(view: SurfaceView) {
         self.view = view
     }
     
@@ -20,6 +29,14 @@ public final class Surface: Sendable {
     var rawHandle: UnsafeMutableRawPointer {
         Unmanaged.passUnretained(view).toOpaque()
     }
+    func sizeUpdate(notify: @escaping @Sendable (CGFloat, CGFloat) -> ()) {
+        Task {
+            await MainActor.run {
+                view.sizeNotify = notify
+            }
+        }
+    }
+    
 }
 
 @_cdecl("SwiftAppWindow_SurfaceSize") public func SurfaceSize(context: UInt64, surface: UnsafeMutableRawPointer, ret: @convention(c) @Sendable (UInt64, Double, Double) -> ()) {
@@ -39,3 +56,8 @@ public final class Surface: Sendable {
     Unmanaged<Surface>.fromOpaque(surface).release()
 }
 
+@_cdecl("SwiftAppWindow_SurfaceSizeUpdate") public func SurfaceSizeUpdate(ctx: UInt64, surface: UnsafeMutableRawPointer, notify: @Sendable @convention(c) (UInt64, CGFloat, CGFloat) -> ()) {
+    Unmanaged<Surface>.fromOpaque(surface).takeUnretainedValue().sizeUpdate(notify: {
+        notify(ctx, $0, $1)
+    })
+}
