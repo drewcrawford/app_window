@@ -1,5 +1,5 @@
 use crate::coordinates::{Position, Size};
-
+use crate::surface::Surface;
 /**
 A platform-appropriate surface.
 */
@@ -18,6 +18,10 @@ impl Window {
             sys: crate::sys::Window::new(position, size, title)
         }
     }
+
+    pub async fn surface(&self) -> Surface {
+        self.sys.surface().await
+    }
 }
 
 impl Default for Window {
@@ -25,5 +29,16 @@ impl Default for Window {
         Window {
             sys: crate::sys::Window::default(),
         }
+    }
+}
+
+#[cfg(test)] mod test {
+    use crate::window::Window;
+
+    #[test] fn test_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<Window>();
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<Window>();
     }
 }

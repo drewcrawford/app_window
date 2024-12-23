@@ -39,6 +39,9 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
 pub struct Window {
     imp: *mut c_void,
 }
+//marked as Sendable in swift
+unsafe impl Send for Window {}
+unsafe impl Sync for Window {}
 impl Window {
     pub fn new(position: Position, size: Size, title: String) -> Self {
 
@@ -56,6 +59,9 @@ impl Window {
         Window {
             imp,
         }
+    }
+    pub async fn surface(&self) -> crate::surface::Surface {
+        todo!()
     }
 }
 
