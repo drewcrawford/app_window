@@ -51,23 +51,19 @@ fn render(state: &State) {
 async fn run(window: Window) {
     let mut app_surface = window.surface().await;
 
+
     let size = app_surface.size().await;
     let instance = Arc::new(wgpu::Instance::default());
 
     struct Move<T>(T);
     unsafe impl<T> Send for Move<T> {}
     unsafe impl<T> Sync for Move<T> {}
-    let wgpu_target = Move(SurfaceTargetUnsafe::RawHandle {
-        raw_window_handle: app_surface.raw_window_handle(),
-        raw_display_handle: app_surface.raw_display_handle(),
-    });
 
-    let move_instance = instance.clone();
-    let surface = on_main_thread(move ||{
-        let target = wgpu_target;
-        unsafe{move_instance.create_surface_unsafe(target.0)}
-    })
-        .await.expect("Can't create surface");
+
+    let app_surface_arc = Arc::new(app_surface);
+    let app_surface_extra = app_surface_arc.clone();
+    let surface = app_surface_extra.create_wgpu_surface(&instance).await;
+    let mut app_surface = Arc::into_inner(app_surface_arc).expect("Can't get app surface");
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
@@ -237,20 +233,7 @@ async fn run(window: Window) {
 }
 
 pub fn main() {
-    #[cfg(target_arch = "wasm32")]
-    {
-        use wasm_bindgen::JsCast;
-        use winit::platform::web::WindowBuilderExtWebSys;
-        let canvas = web_sys::window()
-            .unwrap()
-            .document()
-            .unwrap()
-            .get_element_by_id("canvas")
-            .unwrap()
-            .dyn_into::<web_sys::HtmlCanvasElement>()
-            .unwrap();
-        builder = builder.with_canvas(Some(canvas));
-    }
+
 
     app_window::application::main(|| {
         let w = Window::default();
@@ -262,7 +245,5 @@ pub fn main() {
     #[cfg(target_arch = "wasm32")]
     {
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-        console_log::init().expect("could not initialize logger");
-        wasm_bindgen_futures::spawn_local(run(event_loop, window));
     }
 }
