@@ -52,7 +52,6 @@ public final class Window: Sendable {
                 
             }
         }
-        
     }
     deinit {
         //I'm not really sure why but there's some ARC issue here
@@ -65,7 +64,14 @@ public final class Window: Sendable {
                 }
             }
         }
-
+    }
+    public func surface() async -> Surface {
+        let view = await MainActor.run {
+            let window = self.window!
+            let view = window.contentView!
+            return view
+        }
+        return Surface(view: view)
     }
 }
 
@@ -84,6 +90,15 @@ public final class Window: Sendable {
 @_cdecl("SwiftAppWindow_WindowFree") public func WindowFree(window: UInt64) {
     let window = UnsafeMutableRawPointer(bitPattern: Int(window))!
     Unmanaged<Window>.fromOpaque(window).release()
+}
+
+@_cdecl("SwiftAppWindow_WindowSurface") public func WindowSurface(context: UInt64, window: UnsafeMutableRawPointer, ret: @convention(c) @Sendable (UInt64, UnsafeMutableRawPointer) -> ()) {
+    let window = Unmanaged<Window>.fromOpaque(window).takeUnretainedValue()
+    Task {
+        let surface = await window.surface()
+        let unmanaged = Unmanaged.passRetained(surface).toOpaque()
+        ret(context, unmanaged)
+    }
 }
 
 

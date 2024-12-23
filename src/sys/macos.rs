@@ -1,6 +1,7 @@
 use std::ffi::c_void;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicPtr, Ordering};
+use r#continue::Sender;
 use swift_rs::{swift, SRString};
 use crate::coordinates::{Position, Size};
 use crate::sys;
@@ -20,6 +21,9 @@ swift!(fn SwiftAppWindow_WindowFree(window: *mut c_void)  -> ());
 #[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_WindowNewFullscreen(title: SRString)  -> *mut c_void);
 
+#[allow(non_snake_case)]
+swift!(fn SwiftAppWindow_WindowSurface(ctx: *mut c_void, window: *mut c_void, ret: *mut c_void)  -> ());
+
 
 
 
@@ -32,6 +36,12 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
         closure()
     });
     unsafe { SwiftAppWindowRunMainThread() }
+}
+
+extern "C" fn recv_surface(ctx: *mut Sender<Surface>, surface: *mut c_void) {
+    let c: Sender<Surface> = *unsafe{Box::from_raw(ctx)};
+
+    c.send(Surface { imp: surface })
 }
 
 
@@ -61,6 +71,27 @@ impl Window {
         }
     }
     pub async fn surface(&self) -> crate::surface::Surface {
+        let (sender, fut) = r#continue::continuation();
+
+        let sender_box = Box::into_raw(Box::new(sender));
+        unsafe{SwiftAppWindow_WindowSurface(sender_box as *mut c_void, self.imp,  recv_surface as *mut c_void)};
+
+        let sys_surface = fut.await;
+        let crate_surface = crate::surface::Surface {
+            sys: sys_surface
+        };
+        crate_surface
+    }
+}
+
+pub struct Surface {
+    imp: *mut c_void,
+}
+//sendable in swift!
+unsafe impl Send for Surface {}
+unsafe impl Sync for Surface {}
+impl Drop for Surface {
+    fn drop(&mut self) {
         todo!()
     }
 }
