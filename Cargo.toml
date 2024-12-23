@@ -3,7 +3,13 @@ name = "app_window"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+app_input = ["dep:app_input"]
+
 [dependencies]
+app_input = {version = "0.1.0", optional = true}
+
+
 
 # macos
 [target.'cfg(target_os = "macos")'.dependencies]

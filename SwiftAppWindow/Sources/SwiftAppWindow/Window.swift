@@ -7,6 +7,12 @@
 import AppKit
 import SwiftRs
 
+final class NSWindowCustomize: NSWindow {
+    override func keyDown(with event: NSEvent) {
+        //don't call super to avoid the noise
+    }
+}
+
 public final class Window: Sendable {
     @MainActor var window: NSWindow?
     
@@ -15,7 +21,7 @@ public final class Window: Sendable {
             await MainActor.run {
                 NSApplication.shared.setActivationPolicy(.regular)
                 NSApplication.shared.activate()
-                let _window = NSWindow(contentRect: NSRect(origin: .zero, size: .init(width: width, height: height)) , styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+                let _window = NSWindowCustomize(contentRect: NSRect(origin: .zero, size: .init(width: width, height: height)) , styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
                 _window.isReleasedWhenClosed = false
                 self.window = _window
                 
@@ -33,7 +39,7 @@ public final class Window: Sendable {
             await MainActor.run {
                 NSApplication.shared.setActivationPolicy(.regular)
                 NSApplication.shared.activate()
-                let _window = NSWindow(contentRect: .init(origin: .zero, size: NSScreen.main!.frame.size), styleMask: [.borderless], backing: .buffered, defer: false)
+                let _window = NSWindowCustomize(contentRect: .init(origin: .zero, size: NSScreen.main!.frame.size), styleMask: [.borderless], backing: .buffered, defer: false)
                 _window.isReleasedWhenClosed = false
 
                 self.window = _window
