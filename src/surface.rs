@@ -7,8 +7,8 @@ pub struct Surface {
 }
 
 impl Surface {
-    pub fn size(&self) -> Size {
-        todo!()
+    pub async fn size(&self) -> Size {
+        self.sys.size().await
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {

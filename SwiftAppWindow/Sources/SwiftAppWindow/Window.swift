@@ -93,11 +93,8 @@ public final class Window: Sendable {
 }
 
 @_cdecl("SwiftAppWindow_WindowSurface") public func WindowSurface(context: UInt64, window: UnsafeMutableRawPointer, ret: @convention(c) @Sendable (UInt64, UnsafeMutableRawPointer) -> ()) {
-    let window = Unmanaged<Window>.fromOpaque(window).takeUnretainedValue()
-    Task {
-        let surface = await window.surface()
-        let unmanaged = Unmanaged.passRetained(surface).toOpaque()
-        ret(context, unmanaged)
+    asyncBridge(context: context, input: window, inputType: Window.self, ret: ret) { window in
+        await window.surface()
     }
 }
 

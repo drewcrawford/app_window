@@ -11,5 +11,19 @@ public final class Surface: Sendable {
     init(view: NSView) {
         self.view = view
     }
+    
+    func size() async -> CGSize {
+        await MainActor.run {
+            view.frame.size
+        }
+    }
+}
+
+@_cdecl("SwiftAppWindow_SurfaceSize") public func SurfaceSize(context: UInt64, surface: UnsafeMutableRawPointer, ret: @convention(c) @Sendable (UInt64, Double, Double) -> ()) {
+    let surface = Unmanaged<Surface>.fromOpaque(surface).takeUnretainedValue()
+    Task {
+        let size = await surface.size()
+        ret(context, size.width, size.height)
+    }
 }
 

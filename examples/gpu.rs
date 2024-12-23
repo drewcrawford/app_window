@@ -4,7 +4,7 @@ use app_window::window::Window;
 
 async fn run(window: Window) {
     let app_surface = window.surface().await;
-    let size = app_surface.size();
+    let size = app_surface.size().await;
     let instance = wgpu::Instance::default();
 
     let wgpu_target = SurfaceTargetUnsafe::RawHandle {

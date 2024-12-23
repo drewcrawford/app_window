@@ -44,6 +44,12 @@ extern "C" fn recv_surface(ctx: *mut Sender<Surface>, surface: *mut c_void) {
     c.send(Surface { imp: surface })
 }
 
+extern "C" fn recv_size(ctx: *mut Sender<Size>, size_w: f64, size_h: f64) {
+    let s = Size::new(size_w, size_h);
+    let c: Sender<Size> = *unsafe{Box::from_raw(ctx)};
+    c.send(s);
+}
+
 
 
 pub struct Window {
@@ -84,6 +90,8 @@ impl Window {
     }
 }
 
+#[allow(non_snake_case)]
+swift!(fn SwiftAppWindow_SurfaceSize(ctx: *mut c_void, surface: *mut c_void, ret: *mut c_void)  -> ());
 pub struct Surface {
     imp: *mut c_void,
 }
@@ -93,6 +101,18 @@ unsafe impl Sync for Surface {}
 impl Drop for Surface {
     fn drop(&mut self) {
         todo!()
+    }
+}
+
+impl Surface {
+    pub async fn size(&self) -> Size {
+        let (sender,fut) = r#continue::continuation();
+        let boxed_sender = Box::into_raw(Box::new(sender));
+        unsafe{
+            SwiftAppWindow_SurfaceSize(boxed_sender as *mut c_void, self.imp, recv_size as *mut c_void)
+        }
+        fut.await
+
     }
 }
 
