@@ -1,20 +1,26 @@
 use std::borrow::Cow;
+use std::sync::Arc;
 use wgpu::SurfaceTargetUnsafe;
+use app_window::application::on_main_thread;
 use app_window::window::Window;
 
 async fn run(window: Window) {
     let app_surface = window.surface().await;
     let size = app_surface.size().await;
-    let instance = wgpu::Instance::default();
-
-    let wgpu_target = SurfaceTargetUnsafe::RawHandle {
-        raw_window_handle: app_surface.raw_window_handle(),
-        raw_display_handle: app_surface.raw_display_handle(),
-    };
+    let instance = Arc::new(wgpu::Instance::default());
 
 
 
-    let surface = unsafe{instance.create_surface_unsafe(wgpu_target)}.expect("Can't create surface");
+
+    let move_instance = instance.clone();
+    let surface = on_main_thread(move ||{
+        let wgpu_target = SurfaceTargetUnsafe::RawHandle {
+            raw_window_handle: app_surface.raw_window_handle(),
+            raw_display_handle: app_surface.raw_display_handle(),
+        };
+        unsafe{move_instance.create_surface_unsafe(wgpu_target)}
+    })
+        .await.expect("Can't create surface");
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
@@ -83,7 +89,44 @@ async fn run(window: Window) {
         .unwrap();
     surface.configure(&device, &config);
 
-    let window = &window;
+    //render a frame
+                        let frame = surface
+                            .get_current_texture()
+                            .expect("Failed to acquire next swap chain texture");
+                        let view = frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default());
+                        let mut encoder =
+                            device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: None,
+                            });
+                        {
+                            let mut rpass =
+                                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                    label: None,
+                                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                        view: &view,
+                                        resolve_target: None,
+                                        ops: wgpu::Operations {
+                                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                                            store: wgpu::StoreOp::Store,
+                                        },
+                                    })],
+                                    depth_stencil_attachment: None,
+                                    timestamp_writes: None,
+                                    occlusion_query_set: None,
+                                });
+                            rpass.set_pipeline(&render_pipeline);
+                            rpass.draw(0..3, 0..1);
+                        }
+
+                        queue.submit(Some(encoder.finish()));
+                        frame.present();
+
+    std::mem::forget(window);
+
+    // let window = &window;
+
     // event_loop
     //     .run(move |event, target| {
     //         // Have the closure take ownership of the resources.

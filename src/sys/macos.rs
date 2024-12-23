@@ -1,7 +1,9 @@
 use std::ffi::c_void;
+use std::ptr::NonNull;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use r#continue::Sender;
+use raw_window_handle::{AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle};
 use swift_rs::{swift, SRString};
 use crate::coordinates::{Position, Size};
 use crate::sys;
@@ -25,6 +27,9 @@ swift!(fn SwiftAppWindow_WindowNewFullscreen(title: SRString)  -> *mut c_void);
 swift!(fn SwiftAppWindow_WindowSurface(ctx: *mut c_void, window: *mut c_void, ret: *mut c_void)  -> ());
 
 
+#[allow(non_snake_case)]
+swift!(fn SwiftAppWindow_OnMainThread(ctx: *mut c_void, c_fn: *mut c_void)  -> ());
+
 
 
 pub fn is_main_thread() -> bool {
@@ -36,6 +41,29 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
         closure()
     });
     unsafe { SwiftAppWindowRunMainThread() }
+}
+
+extern "C" fn on_main_thread_callback<R,F: FnOnce() -> R>(ctx: *mut MainThreadClosure<R,F>) {
+    let b: MainThreadClosure<R,F> = *unsafe{Box::from_raw(ctx)};
+    let r = (b.closure)();
+    b.sender.send(r);
+}
+
+pub async fn on_main_thread<R: Send,F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
+    let (sender,fut) = r#continue::continuation();
+
+    let context = MainThreadClosure {
+        sender: sender,
+        closure: closure,
+    };
+    let boxed_ptr = Box::into_raw(Box::new(context)) as *mut c_void;
+    unsafe { SwiftAppWindow_OnMainThread(boxed_ptr, on_main_thread_callback::<R,F> as *mut c_void)}
+    fut.await
+}
+
+struct MainThreadClosure<R,F> {
+    sender: Sender<R>,
+    closure: F,
 }
 
 extern "C" fn recv_surface(ctx: *mut Sender<Surface>, surface: *mut c_void) {
@@ -92,6 +120,12 @@ impl Window {
 
 #[allow(non_snake_case)]
 swift!(fn SwiftAppWindow_SurfaceSize(ctx: *mut c_void, surface: *mut c_void, ret: *mut c_void)  -> ());
+
+#[allow(non_snake_case)]
+swift!(fn SwiftAppWindow_SurfaceRawHandle(surface: *mut c_void)  -> *mut c_void);
+
+#[allow(non_snake_case)]
+swift!(fn SwiftAppWindow_SurfaceFree(surface: *mut c_void) -> ());
 pub struct Surface {
     imp: *mut c_void,
 }
@@ -100,7 +134,7 @@ unsafe impl Send for Surface {}
 unsafe impl Sync for Surface {}
 impl Drop for Surface {
     fn drop(&mut self) {
-        todo!()
+        unsafe { SwiftAppWindow_SurfaceFree(self.imp) }
     }
 }
 
@@ -113,6 +147,15 @@ impl Surface {
         }
         fut.await
 
+    }
+    pub fn raw_window_handle(&self) -> RawWindowHandle {
+        let ptr = unsafe {
+            SwiftAppWindow_SurfaceRawHandle(self.imp)
+        };
+        RawWindowHandle::AppKit(AppKitWindowHandle::new(NonNull::new(ptr as *mut _).unwrap()))
+    }
+    pub fn raw_display_handle(&self) -> RawDisplayHandle {
+        RawDisplayHandle::AppKit(AppKitDisplayHandle::new())
     }
 }
 

@@ -35,3 +35,9 @@ pub fn main<F: FnOnce() -> () + Send + 'static>(closure: F) {
     sys::run_main_thread(closure);
 }
 
+/**
+Run the specified closure on the main thread.
+*/
+pub async fn on_main_thread<R: Send,F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
+    sys::on_main_thread(closure).await
+}

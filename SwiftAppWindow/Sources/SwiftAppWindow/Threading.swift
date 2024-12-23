@@ -18,3 +18,12 @@ public func RunMainThread() {
         NSApplication.shared.run()
     }
 }
+
+@_cdecl("SwiftAppWindow_OnMainThread")
+public func OnMainThread(context: UInt64, cfn: @escaping @convention(c) @Sendable (UInt64) -> Void) {
+    Task {
+        await MainActor.run {
+            cfn(context)
+        }
+    }
+}

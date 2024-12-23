@@ -1,4 +1,4 @@
-use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{AppKitWindowHandle, HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle};
 use crate::coordinates::Size;
 use crate::sys;
 
@@ -12,10 +12,10 @@ impl Surface {
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {
-        todo!()
+        self.sys.raw_window_handle()
     }
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
-        todo!()
+        self.sys.raw_display_handle()
     }
 }
 
