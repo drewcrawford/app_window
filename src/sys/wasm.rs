@@ -30,7 +30,7 @@ impl Window {
             let doc = window.document().expect("Can't get document");
             doc.set_title(&title);
         });
-        wasm_bindgen_futures::spawn_local(f);
+        wasm_bindgen_futures::spawn_local(logwise::context::ApplyContext::new(Context::current(), f));
         Window {
 
         }
@@ -41,7 +41,7 @@ impl Window {
             let doc = window.document().expect("Can't get document");
             doc.set_title(&title);
         });
-        wasm_bindgen_futures::spawn_local(f);
+        wasm_bindgen_futures::spawn_local(logwise::context::ApplyContext::new(Context::current(), f));
         Window {
 
         }
@@ -97,8 +97,11 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     assert!(sent, "Don't call run_main_thread more than once");
 
     let mut event_id = 0;
-    wasm_bindgen_futures::spawn_local(async move {
-        Context::new_task(None, "main thread eventloop").set_current();
+    let push_context = Context::current();
+    let push_context_2 = push_context.clone();
+
+    let event_loop_context = Context::new_task(Some(Context::current()), "main thread eventloop");
+    wasm_bindgen_futures::spawn_local(logwise::context::ApplyContext::new(event_loop_context, async move {
         loop {
             logwise::warn_sync!("Waiting for main event loop...");
             let event = receiver.receive().await.expect("Can't receive event");
@@ -109,10 +112,9 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
             }
             logwise::warn_sync!("main loop finished execution");
         }
-    });
-    let push_context = Context::current();
+    }));
     wasm_thread::spawn(|| {
-        let new_context = Context::new_task(Some(push_context), "app_window after MT context");
+        let new_context = Context::new_task(Some(push_context_2), "app_window after MT context");
         logwise::warn_sync!("app_window after MT context");
         let new_id = new_context.context_id();
         new_context.set_current();

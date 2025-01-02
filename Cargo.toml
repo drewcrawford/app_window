@@ -43,6 +43,7 @@ console_error_panic_hook = "0.1.7"
 wasm_thread = "0.3.3"
 
 [patch.crates-io]
+logwise = {path = "../logwise"}
 app_input = {path = "../app_input"}
 test_executors = {path = "../test_executors"}
 ampsc = {path = "../ampsc"}

@@ -51,7 +51,7 @@ fn render(state: &State) {
 async fn run(window: Window) {
     logwise::warn_sync!("gpu::run");
     let mut app_surface = window.surface().await;
-    logwise::warn_sync!("SURFACE CREATED");
+    logwise::warn_sync!("SURFACE CREATED; will return");
     return;
 
     let size = app_surface.size().await;
@@ -243,7 +243,7 @@ pub fn main() {
         let w = Window::default();
         logwise::warn_sync!("gpu::spawn_local");
 
-        test_executors::spawn_local(run(w));
+        test_executors::spawn_local(run(w), "gpu_main");
     });
 
 
