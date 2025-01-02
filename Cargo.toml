@@ -3,6 +3,9 @@ name = "app_window"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+
+
 [features]
 app_input = ["dep:app_input"]
 
@@ -28,7 +31,12 @@ swift-rs = { version = "1.0.7", features = ["build"] }
 
 # wasm32
 [target.'cfg(target_arch="wasm32")'.dependencies]
-web-sys = { version = "0.3.76", features=["Element"] }
+web-sys = { version = "0.3.76", features=["Element","NamedNodeMap","Attr"] }
+wasm-bindgen = "0.2.99"
+wasm_thread = "0.3.3"
+wasm-bindgen-futures = "0.4.49"
+ampsc = "0.1.0"
+continue = "0.1.0"
 
 [target.'cfg(target_arch="wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.7"
@@ -36,3 +44,10 @@ wasm_thread = "0.3.3"
 
 [patch.crates-io]
 app_input = {path = "../app_input"}
+test_executors = {path = "../test_executors"}
+ampsc = {path = "../ampsc"}
+continue = {path = "../continuation"}
+wasm-bindgen = {path = "../wasm-bindgen"}
+wasm-bindgen-futures = {path = "../wasm-bindgen/crates/futures"}
+js-sys = {path = "../wasm-bindgen/crates/js-sys"}
+web-sys = {path = "../wasm-bindgen/crates/web-sys"}

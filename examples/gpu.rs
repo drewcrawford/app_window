@@ -49,15 +49,13 @@ fn render(state: &State) {
 }
 
 async fn run(window: Window) {
+    logwise::warn_sync!("gpu::run");
     let mut app_surface = window.surface().await;
-
+    logwise::warn_sync!("SURFACE CREATED");
+    return;
 
     let size = app_surface.size().await;
     let instance = Arc::new(wgpu::Instance::default());
-
-    struct Move<T>(T);
-    unsafe impl<T> Send for Move<T> {}
-    unsafe impl<T> Sync for Move<T> {}
 
 
     let app_surface_arc = Arc::new(app_surface);
@@ -89,6 +87,7 @@ async fn run(window: Window) {
         )
         .await
         .expect("Failed to create device");
+
 
     // Load the shaders from disk
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -233,17 +232,21 @@ async fn run(window: Window) {
 }
 
 pub fn main() {
-
+    #[cfg(target_arch = "wasm32")]
+    {
+        console_error_panic_hook::set_once();
+    }
+    logwise::warn_sync!("gpu::main");
 
     app_window::application::main(|| {
+        logwise::warn_sync!("gpu::after_main");
         let w = Window::default();
-        test_executors::spawn_on("gpu_run", run(w));
+        logwise::warn_sync!("gpu::spawn_local");
+
+        test_executors::spawn_local(run(w));
     });
 
 
 
-    #[cfg(target_arch = "wasm32")]
-    {
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    }
+
 }

@@ -1,3 +1,4 @@
+use crate::application::CALL_MAIN;
 use crate::coordinates::{Position, Size};
 use crate::surface::Surface;
 /**
@@ -9,11 +10,13 @@ pub struct Window {
 
 impl Window {
     pub fn fullscreen(title: String) -> Self {
+        assert!(crate::application::is_main_thread_running(), "{}",CALL_MAIN);
         Window {
             sys: crate::sys::Window::fullscreen(title)
         }
     }
     pub fn new(position: Position, size: Size, title: String) -> Self {
+        assert!(crate::application::is_main_thread_running(), "Call app_window::application::run_main_thread");
         Window {
             sys: crate::sys::Window::new(position, size, title)
         }
@@ -27,6 +30,7 @@ impl Window {
 
 impl Default for Window {
     fn default() -> Self {
+        assert!(crate::application::is_main_thread_running(), "Call app_window::application::run_main_thread");
         Window {
             sys: crate::sys::Window::default(),
         }

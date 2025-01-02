@@ -1,7 +1,11 @@
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::SeqCst;
 use crate::sys;
 
 static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
+
+pub(crate) const CALL_MAIN: &'static str = "Call app_window::application::run_main_thread";
+
 
 /**
 Performs the runloop or event loop.
@@ -31,13 +35,19 @@ from the first thread.
 */
 pub fn main<F: FnOnce() -> () + Send + 'static>(closure: F) {
     assert!(sys::is_main_thread(), "Call main from the first thread");
-    IS_MAIN_THREAD_RUNNING.store(true, std::sync::atomic::Ordering::Release);
+    let old = IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Release);
+
+    assert!(!old, "Do not call main more than once.");
     sys::run_main_thread(closure);
+}
+
+pub(crate) fn is_main_thread_running() -> bool {
+    IS_MAIN_THREAD_RUNNING.load(std::sync::atomic::Ordering::Acquire)
 }
 
 /**
 Run the specified closure on the main thread.
 */
-pub async fn on_main_thread<R: Send,F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
+pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
     sys::on_main_thread(closure).await
 }
