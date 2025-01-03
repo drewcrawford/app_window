@@ -33,6 +33,7 @@ struct CanvasHolder {
     handle: WebWindowHandle,
     closure: Closure<dyn FnMut()>,
     canvas: Rc<HtmlCanvasElement>,
+    closure_box: Arc<Mutex<Option<Box<dyn Fn(Size) + Send>>>>,
 }
 impl CanvasHolder {
     fn new_main() -> CanvasHolder {
@@ -72,7 +73,7 @@ impl CanvasHolder {
         window.set_onresize(Some(closure.as_ref().unchecked_ref()));
 
         document.body().unwrap().append_child(canvas_rc.as_ref()).expect("Can't append canvas to body");
-        CanvasHolder { handle: WebWindowHandle::new(1), closure, canvas: canvas_rc }
+        CanvasHolder { handle: WebWindowHandle::new(1), closure, canvas: canvas_rc, closure_box }
     }
 }
 
@@ -144,24 +145,35 @@ impl Window {
         }
 
     }
-    pub fn new(_position: Position, _size: Size, title: String) -> Self {
+    pub async fn new(_position: Position, _size: Size, title: String) -> Self {
         let f = on_main_thread(move || {
             let window = window().expect("Can't get window");
             let doc = window.document().expect("Can't get document");
             doc.set_title(&title);
+            CANVAS_HOLDER.replace(Some(CanvasHolder::new_main()));
         });
-        wasm_bindgen_futures::spawn_local(logwise::context::ApplyContext::new(Context::current(), f));
+        f.await;
         Window {
 
         }
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
-        todo!()
+        let sys_surface = on_main_thread(|| {
+           let surface = CANVAS_HOLDER.with_borrow_mut(|canvas| {
+               let canvas = canvas.as_ref().expect("no canvas");
+               Surface {
+                   display_handle: canvas.handle,
+                   closure_box: canvas.closure_box.clone(),
 
+               }
+           });
+            surface
+        }).await;
+        crate::surface::Surface{sys: sys_surface}
     }
-    pub fn default() -> Self {
-        Window::new(Position::new(0.0, 0.0), Size::new(800.0, 600.0), String::from("app_window"))
+    pub async fn default() -> Self {
+        Window::new(Position::new(0.0, 0.0), Size::new(800.0, 600.0), String::from("app_window")).await
     }
 }
 impl Drop for Surface {
@@ -227,7 +239,6 @@ pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>
 
 pub struct Surface {
     display_handle: WebWindowHandle,
-    _resize_closure: Closure<dyn FnMut()>,
     closure_box: Arc<Mutex<Option<Box<dyn Fn(Size) -> () + Send + 'static>>>>
 }
 impl Surface {

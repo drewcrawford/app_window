@@ -28,10 +28,10 @@ impl Window {
             sys: sys
         })
     }
-    pub fn new(position: Position, size: Size, title: String) -> Self {
+    pub async fn new(position: Position, size: Size, title: String) -> Self {
         assert!(crate::application::is_main_thread_running(), "Call app_window::application::run_main_thread");
         Window {
-            sys: crate::sys::Window::new(position, size, title)
+            sys: crate::sys::Window::new(position, size, title).await
         }
     }
 
@@ -39,16 +39,16 @@ impl Window {
         self.sys.surface().await
     }
 
-}
-
-impl Default for Window {
-    fn default() -> Self {
+    pub async fn default() -> Self {
         assert!(crate::application::is_main_thread_running(), "Call app_window::application::run_main_thread");
         Window {
-            sys: crate::sys::Window::default(),
+            sys: crate::sys::Window::default().await,
         }
     }
+
 }
+
+
 
 #[cfg(test)] mod test {
     use crate::window::Window;

@@ -172,10 +172,11 @@ pub fn main() {
     }
 
     app_window::application::main(|| {
-        let w = Window::default();
         #[cfg(target_arch = "wasm32")] {
             //it isn't documented which thread application_main runs on, so let's park on a new thread
             wasm_thread::spawn(|| {
+                let w = test_executors::sleep_on(Window::default());
+
                 test_executors::sleep_on(run(w));
             });
         }
