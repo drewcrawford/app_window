@@ -27,7 +27,7 @@ impl Surface {
     }
 
     #[cfg(feature = "wgpu")]
-    pub async fn create_wgpu_surface(self: Arc<Self>, instance: &Arc<wgpu::Instance>) -> wgpu::Surface {
+    pub fn create_wgpu_surface(&self, instance: &wgpu::Instance) -> wgpu::Surface {
         use wgpu::SurfaceTargetUnsafe;
 
         #[cfg(target_arch = "wasm32")] {

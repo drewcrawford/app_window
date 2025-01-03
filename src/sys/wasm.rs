@@ -1,10 +1,13 @@
 use std::cell::RefCell;
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 use logwise::context::Context;
 use logwise::debuginternal_sync;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WebCanvasWindowHandle, WebDisplayHandle, WebWindowHandle};
+use wasm_bindgen::closure::{Closure, WasmClosureFnOnce};
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::js_sys::Function;
 use web_sys::{window, HtmlCanvasElement};
 use web_sys::wasm_bindgen::JsValue;
 use crate::coordinates::{Position, Size};
@@ -22,6 +25,7 @@ enum MainThreadEvent {
 }
 
 static MAIN_THREAD_SENDER: OnceLock<ampsc::ChannelProducer<MainThreadEvent>> = OnceLock::new();
+
 
 impl Window {
     pub fn fullscreen(title: String) -> Self {
@@ -49,18 +53,46 @@ impl Window {
 
     pub async fn surface(&self) -> crate::surface::Surface {
         use web_sys::wasm_bindgen::__rt::IntoJsResult;
-        let a = on_main_thread(move || {
-            logwise::warn_sync!("in thread 1");
-            CANVAS_ELEMENT.with_borrow_mut(|thread_canvas| {
+        let closure_box = Arc::new(Mutex::new(None));
+        let move_closure_box = closure_box.clone();
+        let closure = Closure::new(move || {
+            CANVAS_ELEMENT.with_borrow(|c| {
 
+                match c {
+                    Some(canvas) => {
+                        let width = canvas.width();
+                        let height = canvas.height();
+                        logwise::warn_sync!("resized {width}x{height}",width=width,height=height);
+                        move_closure_box.lock().unwrap().as_ref().map(|closure: &Box<dyn Fn(Size) -> () + Send + 'static>| closure(Size::new(width as f64, height as f64)));
+                    }
+                    None => {
+                        //no canvas element?
+                    }
+                }
+            });
+        });
+        struct SendMe(*const Function);
+        unsafe impl Send for SendMe {}
+        let closure_ref = SendMe(closure.as_ref().unchecked_ref());
+        let display_handle = on_main_thread(move || {
+            let closure_ref = closure_ref;
+            CANVAS_ELEMENT.with_borrow_mut(|thread_canvas| {
                 match thread_canvas {
                     None => {
                         let window = window().expect("Can't get window");
+                        //I think this is safe??
+                        window.set_onresize(Some(unsafe{&*closure_ref.0}));
                         let document = window.document().expect("Can't get document");
 
                         let element = document.create_element("canvas").expect("Can't create canvas");
+                        let html_element = web_sys::HtmlElement::from(element.into_js_result().expect("Can't create html element"));
 
-                        let canvas = web_sys::HtmlCanvasElement::from(element.into_js_result().expect("Can't get canvas"));
+                        let style = html_element.style();
+                        style.set_property("width","100vw").expect("Can't set width");
+                        style.set_property("height","100vh").expect("Can't set height");
+
+
+                        let canvas = web_sys::HtmlCanvasElement::from(html_element.into_js_result().expect("Can't get canvas"));
                         document.body().unwrap().append_child(canvas.as_ref()).expect("Can't append canvas to body");
                         canvas.set_attribute("data-raw-handle", "1").expect("Can't set data-raw-handle");
                         *thread_canvas = Some(canvas);
@@ -68,19 +100,26 @@ impl Window {
                     Some(canvas) => ()
                 }
             });
-            let display_handle = WebWindowHandle::new(1);
-            logwise::warn_sync!("in thread");
-            crate::surface::Surface {
-                sys: Surface {
-                    display_handle,
-                }
-            }
+            WebWindowHandle::new(1)
+
+
         }).await;
-        logwise::warn_sync!("back to calling thread");
-        a
+        crate::surface::Surface {
+            sys: Surface {
+                display_handle,
+                resize_closure: closure,
+                closure_box,
+            }
+        }
+
     }
     pub fn default() -> Self {
         Window::new(Position::new(0.0, 0.0), Size::new(800.0, 600.0), String::from("app_window"))
+    }
+}
+impl Drop for Surface {
+    fn drop(&mut self) {
+        todo!("don't drop for now")
     }
 }
 pub fn is_main_thread() -> bool {
@@ -156,6 +195,8 @@ pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>
 
 pub struct Surface {
     display_handle: WebWindowHandle,
+    resize_closure: Closure<dyn FnMut()>,
+    closure_box: Arc<Mutex<Option<Box<dyn Fn(Size) -> () + Send + 'static>>>>
 }
 impl Surface {
     pub async fn size(&self) -> Size {
@@ -177,6 +218,6 @@ impl Surface {
     Run the attached callback when size changes.
     */
     pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
-        todo!()
+        self.closure_box.lock().unwrap().replace(Box::new(update));
     }
 }

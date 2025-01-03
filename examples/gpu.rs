@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use wgpu::{Device, Queue, SurfaceTargetUnsafe};
 use app_window::application::on_main_thread;
 use app_window::window::Window;
@@ -48,20 +49,19 @@ fn render(state: &State) {
     frame.present();
 }
 
-async fn run(window: Window) {
-    logwise::warn_sync!("gpu::run");
+async fn main_run(window: Window) {
+    logwise::warn_sync!("gpu main_run");
     let mut app_surface = window.surface().await;
-    logwise::warn_sync!("SURFACE CREATED; will return");
-    return;
-
-    let size = app_surface.size().await;
+    let ( sender,mut receiver) = ampsc::channel();
+    app_surface.size_update(move |size| {
+        let mut update_sender = sender.clone();
+        test_executors::spawn_on("size_update", async move {
+            update_sender.send(Message::SizeChanged(size)).await.unwrap();
+            update_sender.async_drop().await;
+        })
+    });
     let instance = Arc::new(wgpu::Instance::default());
-
-
-    let app_surface_arc = Arc::new(app_surface);
-    let app_surface_extra = app_surface_arc.clone();
-    let surface = app_surface_extra.create_wgpu_surface(&instance).await;
-    let mut app_surface = Arc::into_inner(app_surface_arc).expect("Can't get app surface");
+    let surface = app_surface.create_wgpu_surface(&instance);
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
@@ -71,7 +71,7 @@ async fn run(window: Window) {
         })
         .await
         .expect("Failed to find an appropriate adapter");
-
+    let size = app_surface.size().await;
     // Create the logical device and command queue
     let (device, queue) = adapter
         .request_device(
@@ -131,6 +131,7 @@ async fn run(window: Window) {
         .unwrap();
     surface.configure(&device, &config);
 
+
     let state = State {
         surface,
         device,
@@ -140,16 +141,13 @@ async fn run(window: Window) {
 
     render(&state);
 
-    let (sender,receiver) = std::sync::mpsc::channel();
 
     enum Message {
         SizeChanged(app_window::coordinates::Size),
     }
-    app_surface.size_update(move |size| {
-        sender.send(Message::SizeChanged(size)).unwrap();
-    });
 
-    while let Ok(msg) = receiver.recv() {
+
+    while let Ok(msg) = receiver.receive().await {
         match msg {
             Message::SizeChanged(new_size) => {
                 config.width = new_size.width() as u32;
@@ -159,76 +157,17 @@ async fn run(window: Window) {
             }
         }
     }
+}
+
+async fn run(window: Window) {
 
 
+    logwise::warn_sync!("gpu run");
+    on_main_thread(|| {
+        logwise::warn_sync!("gpu run MT");
 
-
-
-    std::mem::forget(window);
-
-    // let window = &window;
-
-    // event_loop
-    //     .run(move |event, target| {
-    //         // Have the closure take ownership of the resources.
-    //         // `event_loop.run` never returns, therefore we must do this to ensure
-    //         // the resources are properly cleaned up.
-    //         let _ = (&instance, &adapter, &shader, &pipeline_layout);
-    //
-    //         if let Event::WindowEvent {
-    //             window_id: _,
-    //             event,
-    //         } = event
-    //         {
-    //             match event {
-    //                 WindowEvent::Resized(new_size) => {
-    //                     // Reconfigure the surface with the new size
-    //                     config.width = new_size.width.max(1);
-    //                     config.height = new_size.height.max(1);
-    //                     surface.configure(&device, &config);
-    //                     // On macos the window needs to be redrawn manually after resizing
-    //                     window.request_redraw();
-    //                 }
-    //                 WindowEvent::RedrawRequested => {
-    //                     let frame = surface
-    //                         .get_current_texture()
-    //                         .expect("Failed to acquire next swap chain texture");
-    //                     let view = frame
-    //                         .texture
-    //                         .create_view(&wgpu::TextureViewDescriptor::default());
-    //                     let mut encoder =
-    //                         device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-    //                             label: None,
-    //                         });
-    //                     {
-    //                         let mut rpass =
-    //                             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-    //                                 label: None,
-    //                                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-    //                                     view: &view,
-    //                                     resolve_target: None,
-    //                                     ops: wgpu::Operations {
-    //                                         load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
-    //                                         store: wgpu::StoreOp::Store,
-    //                                     },
-    //                                 })],
-    //                                 depth_stencil_attachment: None,
-    //                                 timestamp_writes: None,
-    //                                 occlusion_query_set: None,
-    //                             });
-    //                         rpass.set_pipeline(&render_pipeline);
-    //                         rpass.draw(0..3, 0..1);
-    //                     }
-    //
-    //                     queue.submit(Some(encoder.finish()));
-    //                     frame.present();
-    //                 }
-    //                 WindowEvent::CloseRequested => target.exit(),
-    //                 _ => {}
-    //             };
-    //         }
-    //     })
-    //     .unwrap();
+        test_executors::spawn_local(main_run(window), "gpu.rs main_run");
+    }).await;
 }
 
 pub fn main() {
