@@ -242,8 +242,19 @@ pub fn main() {
         logwise::warn_sync!("gpu::after_main");
         let w = Window::default();
         logwise::warn_sync!("gpu::spawn_local");
+        #[cfg(target_arch = "wasm32")] {
+            //it isn't documented which thread application_main runs on, so let's park on a new thread
+            wasm_thread::spawn(|| {
+                test_executors::sleep_on(run(w));
+            });
+        }
+        #[cfg(not(target_arch = "wasm32"))] {
+            std::thread::spawn(|| {
+                test_executors::sleep_on(crate::run(w));
 
-        test_executors::spawn_local(run(w), "gpu_main");
+            })
+        }
+
     });
 
 
