@@ -1,15 +1,11 @@
 use std::cell::RefCell;
-use std::ffi::c_void;
-use std::ptr::NonNull;
 use std::sync::{Arc, Mutex, OnceLock};
 use logwise::context::Context;
-use logwise::debuginternal_sync;
-use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WebCanvasWindowHandle, WebDisplayHandle, WebWindowHandle};
-use wasm_bindgen::closure::{Closure, WasmClosureFnOnce};
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WebDisplayHandle, WebWindowHandle};
+use wasm_bindgen::closure::{Closure};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::js_sys::Function;
 use web_sys::{window, HtmlCanvasElement};
-use web_sys::wasm_bindgen::JsValue;
 use crate::coordinates::{Position, Size};
 
 pub struct Window {
@@ -62,7 +58,6 @@ impl Window {
                     Some(canvas) => {
                         let width = canvas.width();
                         let height = canvas.height();
-                        logwise::warn_sync!("resized {width}x{height}",width=width,height=height);
                         move_closure_box.lock().unwrap().as_ref().map(|closure: &Box<dyn Fn(Size) -> () + Send + 'static>| closure(Size::new(width as f64, height as f64)));
                     }
                     None => {
@@ -97,7 +92,7 @@ impl Window {
                         canvas.set_attribute("data-raw-handle", "1").expect("Can't set data-raw-handle");
                         *thread_canvas = Some(canvas);
                     }
-                    Some(canvas) => ()
+                    Some(..) => ()
                 }
             });
             WebWindowHandle::new(1)
@@ -107,7 +102,7 @@ impl Window {
         crate::surface::Surface {
             sys: Surface {
                 display_handle,
-                resize_closure: closure,
+                _resize_closure: closure,
                 closure_box,
             }
         }
@@ -129,7 +124,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let (sender, mut receiver) = ampsc::channel();
 
     let mut sent = false;
-    let main_thread_sender = MAIN_THREAD_SENDER.get_or_init(|| {
+    MAIN_THREAD_SENDER.get_or_init(|| {
         sent = true;
         sender
     });
@@ -142,19 +137,15 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let event_loop_context = Context::new_task(Some(Context::current()), "main thread eventloop");
     wasm_bindgen_futures::spawn_local(logwise::context::ApplyContext::new(event_loop_context, async move {
         loop {
-            logwise::warn_sync!("Waiting for main event loop...");
             let event = receiver.receive().await.expect("Can't receive event");
-            logwise::warn_sync!("Got event {event_id}",event_id=event_id);
             event_id += 1;
             match event {
                 MainThreadEvent::Execute(f) => f(),
             }
-            logwise::warn_sync!("main loop finished execution");
         }
     }));
     wasm_thread::spawn(|| {
         let new_context = Context::new_task(Some(push_context_2), "app_window after MT context");
-        logwise::warn_sync!("app_window after MT context");
         let new_id = new_context.context_id();
         new_context.set_current();
         closure();
@@ -164,38 +155,27 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
 
 pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
     if is_main_thread() {
-        logwise::warn_sync!("on_main_thread: inline");
         closure()
     }
     else {
-        logwise::warn_sync!("on_main_thread: outline");
         let (c_sender, c_receiver) = r#continue::continuation();
         let mut mt_sender = MAIN_THREAD_SENDER.get().expect(crate::application::CALL_MAIN).clone();
         let boxed_closure = Box::new(||{
-            logwise::warn_sync!("Will run closure");
             let r = closure();
-            logwise::warn_sync!("Will send c_sender");
             c_sender.send(r);
-            logwise::warn_sync!("Did send c_sender");
         }) as Box<dyn FnOnce() -> () + Send + 'static>;
-        logwise::warn_sync!("Will send mte");
         mt_sender.send(MainThreadEvent::Execute(boxed_closure)).await.expect("Can't schedule on main thread");
-        logwise::warn_sync!("will run async_drop");
         mt_sender.async_drop().await;
-        logwise::warn_sync!("did run async_drop");
-
-        logwise::warn_sync!("Did send mte");
 
         let r = c_receiver.await;
 
-        logwise::warn_sync!("Did receive mte");
         r
     }
 }
 
 pub struct Surface {
     display_handle: WebWindowHandle,
-    resize_closure: Closure<dyn FnMut()>,
+    _resize_closure: Closure<dyn FnMut()>,
     closure_box: Arc<Mutex<Option<Box<dyn Fn(Size) -> () + Send + 'static>>>>
 }
 impl Surface {

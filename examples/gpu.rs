@@ -1,7 +1,6 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
-use wgpu::{Device, Queue, SurfaceTargetUnsafe};
+use std::sync::{Arc};
+use wgpu::{Device, Queue};
 use app_window::application::on_main_thread;
 use app_window::window::Window;
 
@@ -50,18 +49,17 @@ fn render(state: &State) {
 }
 
 async fn main_run(window: Window) {
-    logwise::warn_sync!("gpu main_run");
     let mut app_surface = window.surface().await;
     let ( sender,mut receiver) = ampsc::channel();
     app_surface.size_update(move |size| {
         let mut update_sender = sender.clone();
-        test_executors::spawn_on("size_update", async move {
+        test_executors::spawn_local(async move {
             update_sender.send(Message::SizeChanged(size)).await.unwrap();
             update_sender.async_drop().await;
-        })
+        }, "resize");
     });
     let instance = Arc::new(wgpu::Instance::default());
-    let surface = app_surface.create_wgpu_surface(&instance);
+    let surface = app_surface.create_wgpu_surface(&instance).expect("Can't create surface");
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
@@ -128,7 +126,7 @@ async fn main_run(window: Window) {
 
     let mut config = surface
         .get_default_config(&adapter, size.width() as u32, size.height() as u32)
-        .unwrap();
+        .expect("Can't configure");
     surface.configure(&device, &config);
 
 
@@ -162,10 +160,7 @@ async fn main_run(window: Window) {
 async fn run(window: Window) {
 
 
-    logwise::warn_sync!("gpu run");
     on_main_thread(|| {
-        logwise::warn_sync!("gpu run MT");
-
         test_executors::spawn_local(main_run(window), "gpu.rs main_run");
     }).await;
 }
@@ -175,12 +170,9 @@ pub fn main() {
     {
         console_error_panic_hook::set_once();
     }
-    logwise::warn_sync!("gpu::main");
 
     app_window::application::main(|| {
-        logwise::warn_sync!("gpu::after_main");
         let w = Window::default();
-        logwise::warn_sync!("gpu::spawn_local");
         #[cfg(target_arch = "wasm32")] {
             //it isn't documented which thread application_main runs on, so let's park on a new thread
             wasm_thread::spawn(|| {

@@ -1,6 +1,4 @@
-use std::sync::Arc;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
-use crate::application::on_main_thread;
 use crate::coordinates::Size;
 use crate::sys;
 
@@ -27,17 +25,17 @@ impl Surface {
     }
 
     #[cfg(feature = "wgpu")]
-    pub fn create_wgpu_surface(&self, instance: &wgpu::Instance) -> wgpu::Surface {
+    pub fn create_wgpu_surface(&self, instance: &wgpu::Instance) -> Result<wgpu::Surface,wgpu::CreateSurfaceError> {
         use wgpu::SurfaceTargetUnsafe;
 
         #[cfg(target_arch = "wasm32")] {
             //on this platform we can't send instance
-            unsafe{instance.create_surface_unsafe(
+            Ok(unsafe{instance.create_surface_unsafe(
                 SurfaceTargetUnsafe::RawHandle {
                     raw_display_handle: self.raw_display_handle(),
                     raw_window_handle: self.raw_window_handle(),
                 }
-            )}.expect("Can't create instance")
+            )})?
         }
         #[cfg(not(target_arch = "wasm32"))] {
             let clone_instance = instance.clone();
