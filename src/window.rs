@@ -1,6 +1,9 @@
+use std::fmt::Display;
 use crate::application::CALL_MAIN;
 use crate::coordinates::{Position, Size};
 use crate::surface::Surface;
+use crate::sys;
+
 /**
 A platform-appropriate surface.
 */
@@ -8,12 +11,22 @@ pub struct Window {
     sys: crate::sys::Window,
 }
 
+#[derive(thiserror::Error,Debug)]
+pub struct FullscreenError(#[from]sys::FullscreenError);
+
+impl Display for FullscreenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl Window {
-    pub fn fullscreen(title: String) -> Self {
+    pub async fn fullscreen(title: String) -> Result<Self,FullscreenError> {
         assert!(crate::application::is_main_thread_running(), "{}",CALL_MAIN);
-        Window {
-            sys: crate::sys::Window::fullscreen(title)
-        }
+        let sys = crate::sys::Window::fullscreen(title).await?;
+        Ok(Window {
+            sys: sys
+        })
     }
     pub fn new(position: Position, size: Size, title: String) -> Self {
         assert!(crate::application::is_main_thread_running(), "Call app_window::application::run_main_thread");

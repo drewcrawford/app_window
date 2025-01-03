@@ -1,11 +1,18 @@
 use std::cell::RefCell;
+use std::error::Error;
+use std::fmt::Display;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
 use logwise::context::Context;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WebDisplayHandle, WebWindowHandle};
+use send_cell::send_cell::SendCell;
 use wasm_bindgen::closure::{Closure};
-use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::js_sys::Function;
-use web_sys::{window, HtmlCanvasElement};
+use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen_futures::js_sys::{Function, Promise};
+use web_sys::{window, Element, HtmlCanvasElement};
+use web_sys::console::error;
+use web_sys::js_sys::TypeError;
 use crate::coordinates::{Position, Size};
 
 pub struct Window {
@@ -13,7 +20,7 @@ pub struct Window {
 }
 
 thread_local! {
-    static CANVAS_ELEMENT: RefCell<Option<HtmlCanvasElement>> = RefCell::new(None);
+    static CANVAS_HOLDER: RefCell<Option<CanvasHolder>> = RefCell::new(None);
 }
 
 enum MainThreadEvent {
@@ -22,18 +29,120 @@ enum MainThreadEvent {
 
 static MAIN_THREAD_SENDER: OnceLock<ampsc::ChannelProducer<MainThreadEvent>> = OnceLock::new();
 
+struct CanvasHolder {
+    handle: WebWindowHandle,
+    closure: Closure<dyn FnMut()>,
+    canvas: Rc<HtmlCanvasElement>,
+}
+impl CanvasHolder {
+    fn new_main() -> CanvasHolder {
+        use web_sys::wasm_bindgen::__rt::IntoJsResult;
+        let closure_box = Arc::new(Mutex::new(None));
+        let move_closure_box = closure_box.clone();
+
+        struct SendMe(*const Function);
+        unsafe impl Send for SendMe {}
+        let window = window().expect("Can't get window");
+
+        let document = window.document().expect("Can't get document");
+
+        let element = document.create_element("canvas").expect("Can't create canvas");
+        let html_element = web_sys::HtmlElement::from(element.into_js_result().expect("Can't create html element"));
+
+        let style = html_element.style();
+        style.set_property("width","100vw").expect("Can't set width");
+        style.set_property("height","100vh").expect("Can't set height");
+
+
+        let canvas = web_sys::HtmlCanvasElement::from(html_element.into_js_result().expect("Can't get canvas"));
+        canvas.set_attribute("data-raw-handle", "1").expect("Can't set data-raw-handle");
+        let canvas_rc = Rc::new(canvas);
+        let canvas_weak = Rc::downgrade(&canvas_rc);
+        let closure = Closure::new(move || {
+            match canvas_weak.upgrade() {
+                None => { /* deallocated? */ }
+                Some(canvas) => {
+                    let width = canvas.width();
+                    let height = canvas.height();
+                    move_closure_box.lock().unwrap().as_ref().map(|closure: &Box<dyn Fn(Size) -> () + Send + 'static>| closure(Size::new(width as f64, height as f64)));
+                }
+            }
+        });
+        //I think this is safe??
+        window.set_onresize(Some(closure.as_ref().unchecked_ref()));
+
+        document.body().unwrap().append_child(canvas_rc.as_ref()).expect("Can't append canvas to body");
+        CanvasHolder { handle: WebWindowHandle::new(1), closure, canvas: canvas_rc }
+    }
+}
+
+#[derive(Debug)]
+pub struct FullscreenError(String);
+
+impl Display for FullscreenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl Error for FullscreenError {}
+
+#[wasm_bindgen]
+extern "C" {
+    type Element2;
+    #[wasm_bindgen::prelude::wasm_bindgen(method,js_class="Element",js_name=requestFullscreen)]
+    fn request_fullscreen_2(this: &Element2) -> Promise;
+}
+
+fn build_canvas_if_needed() {
+
+}
 
 impl Window {
-    pub fn fullscreen(title: String) -> Self {
-         let f = on_main_thread(move || {
+    pub async fn fullscreen(title: String) -> Result<Self,FullscreenError> {
+        let (sender, fut) = r#continue::continuation();
+        let sender_mutex = Arc::new(Mutex::new(Some(sender)));
+        let sender_mutex_error = sender_mutex.clone();
+        let main_thread_job = on_main_thread(move || {
+            let strong_closure = Closure::once(move |a| {
+                let mut lock = sender_mutex.lock().unwrap().take().expect("already sent?");
+                lock.send(Ok(()));
+            });
+            let error_closure = Closure::once(move |a: JsValue| {
+                let mut lock = sender_mutex_error.lock().unwrap().take().expect("already sent?");
+                let a_typeerror: TypeError = a.unchecked_into();
+                let a_string = a_typeerror.to_string();
+
+                lock.send(Err(ToString::to_string(&a_string)));
+            });
             let window = window().expect("Can't get window");
             let doc = window.document().expect("Can't get document");
+            let canvas = CanvasHolder::new_main();
+            let as_element_2: &Element2 = canvas.canvas.as_ref().unchecked_ref();
             doc.set_title(&title);
+            let promise = as_element_2.request_fullscreen_2();
+            drop(promise.then2(&strong_closure,&error_closure));
+            CANVAS_HOLDER.replace(Some(canvas));
+            SendCell::new((strong_closure, error_closure))
         });
-        wasm_bindgen_futures::spawn_local(logwise::context::ApplyContext::new(Context::current(), f));
-        Window {
+        logwise::warn_sync!("Waiting for main thread...");
+        let closures = main_thread_job.await;
+        logwise::warn_sync!("Waiting for fut...");
+        let fullscreen_result = fut.await;
+        //drop our closures
+        let main_thread_drop = on_main_thread(move || {
+            drop(closures);
+        }).await;
+        match fullscreen_result {
+            Ok(..) => {
+                Ok(Window {
 
+                })
+            }
+            Err(err) => {
+                Err(FullscreenError(err))
+            }
         }
+
     }
     pub fn new(_position: Position, _size: Size, title: String) -> Self {
         let f = on_main_thread(move || {
@@ -48,64 +157,7 @@ impl Window {
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
-        use web_sys::wasm_bindgen::__rt::IntoJsResult;
-        let closure_box = Arc::new(Mutex::new(None));
-        let move_closure_box = closure_box.clone();
-        let closure = Closure::new(move || {
-            CANVAS_ELEMENT.with_borrow(|c| {
-
-                match c {
-                    Some(canvas) => {
-                        let width = canvas.width();
-                        let height = canvas.height();
-                        move_closure_box.lock().unwrap().as_ref().map(|closure: &Box<dyn Fn(Size) -> () + Send + 'static>| closure(Size::new(width as f64, height as f64)));
-                    }
-                    None => {
-                        //no canvas element?
-                    }
-                }
-            });
-        });
-        struct SendMe(*const Function);
-        unsafe impl Send for SendMe {}
-        let closure_ref = SendMe(closure.as_ref().unchecked_ref());
-        let display_handle = on_main_thread(move || {
-            let closure_ref = closure_ref;
-            CANVAS_ELEMENT.with_borrow_mut(|thread_canvas| {
-                match thread_canvas {
-                    None => {
-                        let window = window().expect("Can't get window");
-                        //I think this is safe??
-                        window.set_onresize(Some(unsafe{&*closure_ref.0}));
-                        let document = window.document().expect("Can't get document");
-
-                        let element = document.create_element("canvas").expect("Can't create canvas");
-                        let html_element = web_sys::HtmlElement::from(element.into_js_result().expect("Can't create html element"));
-
-                        let style = html_element.style();
-                        style.set_property("width","100vw").expect("Can't set width");
-                        style.set_property("height","100vh").expect("Can't set height");
-
-
-                        let canvas = web_sys::HtmlCanvasElement::from(html_element.into_js_result().expect("Can't get canvas"));
-                        document.body().unwrap().append_child(canvas.as_ref()).expect("Can't append canvas to body");
-                        canvas.set_attribute("data-raw-handle", "1").expect("Can't set data-raw-handle");
-                        *thread_canvas = Some(canvas);
-                    }
-                    Some(..) => ()
-                }
-            });
-            WebWindowHandle::new(1)
-
-
-        }).await;
-        crate::surface::Surface {
-            sys: Surface {
-                display_handle,
-                _resize_closure: closure,
-                closure_box,
-            }
-        }
+        todo!()
 
     }
     pub fn default() -> Self {
