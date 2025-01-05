@@ -176,11 +176,7 @@ impl Window {
         Window::new(Position::new(0.0, 0.0), Size::new(800.0, 600.0), String::from("app_window")).await
     }
 }
-impl Drop for Surface {
-    fn drop(&mut self) {
-        todo!("don't drop for now")
-    }
-}
+
 pub fn is_main_thread() -> bool {
     web_sys::window().is_some()
 }

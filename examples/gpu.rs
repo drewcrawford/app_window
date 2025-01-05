@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 use std::sync::{Arc};
 use wgpu::{Device, Queue};
-use app_window::application::on_main_thread;
+use app_window::application::{on_main_thread};
+use app_window::executor::on_main_thread_async;
 use app_window::window::Window;
 
 struct State<'window> {
@@ -159,10 +160,10 @@ async fn main_run(window: Window) {
 
 async fn run(window: Window) {
 
-
-    on_main_thread(|| {
-        test_executors::spawn_local(main_run(window), "gpu.rs main_run");
-    }).await;
+    //on wasm32, we primarily need to operate on the main thread
+    on_main_thread_async(async  {
+        main_run(window).await;
+    }).await
 }
 
 pub fn main() {
@@ -182,9 +183,9 @@ pub fn main() {
         }
         #[cfg(not(target_arch = "wasm32"))] {
             std::thread::spawn(|| {
-                test_executors::sleep_on(crate::run(w));
-
-            })
+                let w = test_executors::sleep_on(Window::default());
+                test_executors::sleep_on(run(w));
+            });
         }
 
     });

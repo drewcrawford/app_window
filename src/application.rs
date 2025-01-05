@@ -1,4 +1,10 @@
+use std::cell::Cell;
+use std::future::Future;
+use std::pin::Pin;
+use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::task::{Context, RawWaker, RawWakerVTable};
 use crate::sys;
 
 static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -46,7 +52,17 @@ pub(crate) fn is_main_thread_running() -> bool {
 
 /**
 Run the specified closure on the main thread.
+
+The main thread may be blocked or unable to receive events while this closure is running.
 */
 pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
-    sys::on_main_thread(closure).await
+    let(sender,receiver) = r#continue::continuation();
+    let block = move ||{
+        let r = closure();
+        sender.send(r);
+    };
+
+    sys::on_main_thread(block);
+    receiver.await
 }
+
