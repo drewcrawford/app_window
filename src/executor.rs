@@ -6,7 +6,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, RawWaker, RawWakerVTable};
-use crate::application::on_main_thread;
 use crate::sys;
 
 struct Inner {
@@ -31,7 +30,7 @@ const WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(
     |data| {
         let w = unsafe{Arc::from_raw(data as *const Waker)};
         let w2 = w.clone();
-        Arc::into_raw(w); //leave original arc unchanged
+        _ = Arc::into_raw(w); //leave original arc unchanged
         RawWaker::new(Arc::into_raw(w2) as *const (), &WAKER_VTABLE)
 
     },
@@ -75,19 +74,22 @@ While the future is yielding, other events can be processed.
 */
 pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output=R> + Send + 'static>(future: F) -> R {
     let (sender, fut) = r#continue::continuation();
-    on_main_thread_async_submit(async move {
+    crate::application::submit_to_main_thread(||{already_on_main_thread_submit(async move {
         let r = future.await;
         sender.send(r);
-    });
+    })});
     fut.await
 }
 
-pub(crate) fn on_main_thread_async_submit<F: Future<Output=()> + 'static>(future: F) {
-    crate::sys::on_main_thread(|| {
-        on_main_thread_submit(future)
-    });
-}
-pub(crate) fn on_main_thread_submit<F: Future<Output=()> + 'static>(future: F) {
+/**
+Submits a future to the main thread executor.
+
+# panics
+
+This function will panic if not already on the main thread.
+*/
+pub fn already_on_main_thread_submit<F: Future<Output=()> + 'static>(future: F) {
+
     assert!(sys::is_main_thread());
     let mut tasks = FUTURES.take();
     let wake_inner = Arc::new(Inner::new());
@@ -117,7 +119,7 @@ fn main_executor_iter(tasks: &mut Vec<Task>) {
 }
 
 fn pump_tasks() {
-    crate::sys::on_main_thread(|| {
+    crate::application::submit_to_main_thread(|| {
         let mut tasks = FUTURES.take();
         main_executor_iter(&mut tasks);
         FUTURES.replace(tasks);

@@ -5,13 +5,16 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
 use logwise::context::Context;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WebDisplayHandle, WebWindowHandle};
+use some_executor::hint::Hint;
+use some_executor::observer::Observer;
+use some_executor::SomeExecutor;
+use some_executor::task::Configuration;
 use send_cell::send_cell::SendCell;
 use wasm_bindgen::closure::{Closure};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen_futures::js_sys::{Function, Promise};
-use web_sys::{window, Element, HtmlCanvasElement};
-use web_sys::console::error;
+use web_sys::{window, HtmlCanvasElement};
 use web_sys::js_sys::TypeError;
 use crate::coordinates::{Position, Size};
 
@@ -103,7 +106,7 @@ impl Window {
         let (sender, fut) = r#continue::continuation();
         let sender_mutex = Arc::new(Mutex::new(Some(sender)));
         let sender_mutex_error = sender_mutex.clone();
-        let main_thread_job = on_main_thread(move || {
+        let main_thread_job = crate::application::on_main_thread(move || {
             let strong_closure = Closure::once(move |a| {
                 let mut lock = sender_mutex.lock().unwrap().take().expect("already sent?");
                 lock.send(Ok(()));
@@ -125,12 +128,11 @@ impl Window {
             CANVAS_HOLDER.replace(Some(canvas));
             SendCell::new((strong_closure, error_closure))
         });
-        logwise::warn_sync!("Waiting for main thread...");
         let closures = main_thread_job.await;
         logwise::warn_sync!("Waiting for fut...");
         let fullscreen_result = fut.await;
         //drop our closures
-        let main_thread_drop = on_main_thread(move || {
+        crate::application::on_main_thread(move || {
             drop(closures);
         }).await;
         match fullscreen_result {
@@ -146,7 +148,7 @@ impl Window {
 
     }
     pub async fn new(_position: Position, _size: Size, title: String) -> Self {
-        let f = on_main_thread(move || {
+        let f = crate::application::on_main_thread(move || {
             let window = window().expect("Can't get window");
             let doc = window.document().expect("Can't get document");
             doc.set_title(&title);
@@ -159,7 +161,7 @@ impl Window {
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
-        let sys_surface = on_main_thread(|| {
+        let sys_surface = crate::application::on_main_thread(|| {
            let surface = CANVAS_HOLDER.with_borrow_mut(|canvas| {
                let canvas = canvas.as_ref().expect("no canvas");
                Surface {
@@ -213,23 +215,20 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     });
 }
 
-pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
+pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     if is_main_thread() {
         closure()
     }
     else {
-        let (c_sender, c_receiver) = r#continue::continuation();
         let mut mt_sender = MAIN_THREAD_SENDER.get().expect(crate::application::CALL_MAIN).clone();
-        let boxed_closure = Box::new(||{
-            let r = closure();
-            c_sender.send(r);
-        }) as Box<dyn FnOnce() -> () + Send + 'static>;
-        mt_sender.send(MainThreadEvent::Execute(boxed_closure)).await.expect("Can't schedule on main thread");
-        mt_sender.async_drop().await;
-
-        let r = c_receiver.await;
-
-        r
+        let boxed_closure = Box::new(closure) as Box<dyn FnOnce() -> () + Send + 'static>;
+        let send_task = some_executor::task::Task::new_objsafe("send to main thread".into(), Box::new(async move {
+            mt_sender.send(MainThreadEvent::Execute(boxed_closure)).await.expect("Can't send");
+            mt_sender.async_drop().await;
+            Box::new(()) as Box<dyn std::any::Any + Send>
+        }), Configuration::new(Hint::Unknown,some_executor::Priority::UserInitiated,some_executor::Instant::now()),None);
+        let o = some_executor::current_executor::current_executor().spawn_objsafe(send_task);
+        o.detach();
     }
 }
 
@@ -239,7 +238,7 @@ pub struct Surface {
 }
 impl Surface {
     pub async fn size(&self) -> Size {
-        on_main_thread(|| {
+        crate::application::on_main_thread(|| {
             let w = window().expect("No window?");
             let width = w.inner_width().expect("No width?").as_f64().expect("No width?");
             let height = w.inner_height().expect("No height?").as_f64().expect("No height?");

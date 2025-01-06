@@ -1,8 +1,12 @@
 use std::borrow::Cow;
 use std::sync::{Arc};
+use some_executor::hint::Hint;
+use some_executor::observer::Observer;
+use some_executor::{Priority, SomeExecutor};
+use some_executor::task::Configuration;
 use wgpu::{Device, Queue};
 use app_window::application::{on_main_thread};
-use app_window::executor::on_main_thread_async;
+use app_window::executor::{already_on_main_thread_submit, on_main_thread_async};
 use app_window::window::Window;
 
 struct State<'window> {
@@ -50,14 +54,18 @@ fn render(state: &State) {
 }
 
 async fn main_run(window: Window) {
+    logwise::warn_sync!("main_run");
     let mut app_surface = window.surface().await;
     let ( sender,mut receiver) = ampsc::channel();
     app_surface.size_update(move |size| {
         let mut update_sender = sender.clone();
-        test_executors::spawn_local(async move {
+        let mut some_executor = some_executor::current_executor::current_executor();
+        let task = some_executor::task::Task::new_objsafe("resize".into(), Box::new(async move {
             update_sender.send(Message::SizeChanged(size)).await.unwrap();
             update_sender.async_drop().await;
-        }, "resize");
+            Box::new(()) as Box<dyn std::any::Any + Send>
+        }),Configuration::new(Hint::CPU, Priority::UserInteractive, some_executor::Instant::now()),None);
+        some_executor.spawn_objsafe(task).detach();
     });
     let instance = Arc::new(wgpu::Instance::default());
     let surface = app_surface.create_wgpu_surface(&instance).expect("Can't create surface");
@@ -161,9 +169,10 @@ async fn main_run(window: Window) {
 async fn run(window: Window) {
 
     //on wasm32, we primarily need to operate on the main thread
-    on_main_thread_async(async  {
-        main_run(window).await;
-    }).await
+    logwise::warn_sync!("hi");
+    on_main_thread(|| {
+        already_on_main_thread_submit(main_run(window))
+    }).await;
 }
 
 pub fn main() {
@@ -173,20 +182,11 @@ pub fn main() {
     }
 
     app_window::application::main(|| {
-        #[cfg(target_arch = "wasm32")] {
-            //it isn't documented which thread application_main runs on, so let's park on a new thread
-            wasm_thread::spawn(|| {
-                let w = test_executors::sleep_on(Window::default());
-
-                test_executors::sleep_on(run(w));
-            });
-        }
-        #[cfg(not(target_arch = "wasm32"))] {
-            std::thread::spawn(|| {
-                let w = test_executors::sleep_on(Window::default());
-                test_executors::sleep_on(run(w));
-            });
-        }
+        let task = some_executor::task::Task::without_notifications("run".into(), async {
+            let window = Window::default().await;
+            run(window).await;
+        }, Configuration::new(Hint::Unknown, Priority::UserInteractive, some_executor::Instant::now()));
+        some_executor::current_executor::current_executor().spawn_objsafe(task.into_objsafe()).detach();
 
     });
 

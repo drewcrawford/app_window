@@ -1,10 +1,5 @@
-use std::cell::Cell;
-use std::future::Future;
-use std::pin::Pin;
-use std::rc::Rc;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::task::{Context, RawWaker, RawWakerVTable};
+
 use crate::sys;
 
 static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -43,9 +38,17 @@ pub fn main<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let old = IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Release);
 
     assert!(!old, "Do not call main more than once.");
+    #[cfg(feature = "some_executor")] {
+        use crate::some_executor::MainThreadExecutor;
+        some_executor::thread_executor::set_thread_executor(Box::new(MainThreadExecutor{}));
+        some_executor::thread_executor::set_thread_local_executor_adapting_notifier(MainThreadExecutor{});
+    }
     sys::run_main_thread(closure);
 }
 
+/**
+Determines if the main thread was started.
+*/
 pub(crate) fn is_main_thread_running() -> bool {
     IS_MAIN_THREAD_RUNNING.load(std::sync::atomic::Ordering::Acquire)
 }
@@ -62,7 +65,15 @@ pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>
         sender.send(r);
     };
 
-    sys::on_main_thread(block);
+    submit_to_main_thread(block);
     receiver.await
+}
+
+/**
+Submits the closure to the main thread, installing a main thread executor if necessary.
+*/
+
+pub(crate) fn submit_to_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
+    sys::on_main_thread(closure);
 }
 
