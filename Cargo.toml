@@ -8,6 +8,7 @@ edition = "2021"
 
 [features]
 app_input = ["dep:app_input"]
+some_executor = ["dep:some_executor"]
 
 [dependencies]
 app_input = {version = "0.1.0", optional = true}
@@ -15,6 +16,7 @@ raw-window-handle = "0.6.2"
 logwise = "0.2.2"
 wgpu = {version = "23.0.1", optional = true}
 thiserror = "2.0.9"
+some_executor = {version = "0.3.0", optional = true}
 
 [dev-dependencies]
 # needed for gpu example
@@ -50,6 +52,7 @@ logwise = {path = "../logwise"}
 #app_input = {path = "../app_input"}
 test_executors = {path = "../test_executors"}
 ampsc = {path = "../ampsc"}
+some_executor = {path = "../some_executor"}
 #continue = {path = "../continuation"}
 #wasm-bindgen = {path = "../wasm-bindgen"}
 #wasm-bindgen-futures = {path = "../wasm-bindgen/crates/futures"}

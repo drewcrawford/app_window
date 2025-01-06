@@ -7,6 +7,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, RawWaker, RawWakerVTable};
 use crate::application::on_main_thread;
+use crate::sys;
+
 struct Inner {
     needs_poll: AtomicBool,
 }
@@ -59,7 +61,7 @@ impl Waker {
     }
 }
 struct Task {
-    future: Pin<Box<dyn Future<Output = ()> + Send>>,
+    future: Pin<Box<dyn Future<Output = ()> + 'static>>,
     wake_inner: Arc<Inner>,
 }
 thread_local! {
@@ -73,22 +75,29 @@ While the future is yielding, other events can be processed.
 */
 pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output=R> + Send + 'static>(future: F) -> R {
     let (sender, fut) = r#continue::continuation();
-    crate::sys::on_main_thread(|| {
-        let mut tasks = FUTURES.take();
-        let wake_inner = Arc::new(Inner::new());
-        let task = Task {
-            future: Box::pin(async{
-                let r = future.await;
-                sender.send(r);
-            }),
-            wake_inner,
-        };
-        tasks.push(task);
-        main_executor_iter(&mut tasks);
-
-        FUTURES.replace(tasks);
+    on_main_thread_async_submit(async move {
+        let r = future.await;
+        sender.send(r);
     });
     fut.await
+}
+
+pub(crate) fn on_main_thread_async_submit<F: Future<Output=()> + 'static>(future: F) {
+    crate::sys::on_main_thread(|| {
+        on_main_thread_submit(future)
+    });
+}
+pub(crate) fn on_main_thread_submit<F: Future<Output=()> + 'static>(future: F) {
+    assert!(sys::is_main_thread());
+    let mut tasks = FUTURES.take();
+    let wake_inner = Arc::new(Inner::new());
+    let task = Task {
+        future: Box::pin(future),
+        wake_inner,
+    };
+    tasks.push(task);
+    main_executor_iter(&mut tasks);
+    FUTURES.replace(tasks);
 }
 
 fn main_executor_iter(tasks: &mut Vec<Task>) {
