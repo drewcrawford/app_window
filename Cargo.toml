@@ -14,16 +14,16 @@ wgpu = ["dep:wgpu"]
 [dependencies]
 app_input = {version = "0.1.0", optional = true}
 raw-window-handle = "0.6.2"
-logwise = "0.2.2"
+logwise = "0.2.3"
 wgpu = {version = "23.0.1", optional = true}
 thiserror = "2.0.9"
-some_executor = {version = "0.3.0", optional = true}
+some_executor = {version = "0.4.0", optional = true}
 
 [dev-dependencies]
 # needed for gpu example
 wgpu = "23.0.1"
-ampsc = "0.1.0"
-some_executor = "0.3.0"
+ampsc = "0.2.0"
+some_executor = "0.4.0"
 
 
 # macos
@@ -41,26 +41,14 @@ web-sys = { version = "0.3.76", features=["Element","NamedNodeMap","Attr","HtmlE
 wasm-bindgen = "0.2.99"
 wasm_thread = "0.3.3"
 wasm-bindgen-futures = "0.4.49"
-ampsc = "0.1.0"
+ampsc = "0.2.0"
 continue = "0.1.0"
-send_cell = {path = "../send_cell"}
+send_cells = "0.1.0"
 #wasm32 requries some_executor to spawn tasks
-some_executor = "0.3.0"
+some_executor = "0.4.0"
 
 [target.'cfg(target_arch="wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.7"
 wasm_thread = "0.3.3"
 
 [patch.crates-io]
-logwise = {path = "../logwise"}
-#app_input = {path = "../app_input"}
-test_executors = {path = "../test_executors"}
-ampsc = {path = "../ampsc"}
-some_executor = {path = "../some_executor"}
-#continue = {path = "../continuation"}
-#wasm-bindgen = {path = "../wasm-bindgen"}
-#wasm-bindgen-futures = {path = "../wasm-bindgen/crates/futures"}
-#js-sys = {path = "../wasm-bindgen/crates/js-sys"}
-#web-sys = {path = "../wasm-bindgen/crates/web-sys"}
-#wasm_thread = {path = "../wasm_thread"}
-# for debugging spin_lock_warn

@@ -9,7 +9,7 @@ use some_executor::hint::Hint;
 use some_executor::observer::Observer;
 use some_executor::SomeExecutor;
 use some_executor::task::Configuration;
-use send_cell::send_cell::SendCell;
+use send_cells::send_cell::SendCell;
 use wasm_bindgen::closure::{Closure};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen::prelude::wasm_bindgen;
