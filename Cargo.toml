@@ -51,4 +51,7 @@ some_executor = "0.4.0"
 console_error_panic_hook = "0.1.7"
 wasm_thread = "0.3.3"
 
+[target.'cfg(target_os="windows")'.dependencies]
+continue = "0.1.0"
+
 [patch.crates-io]
