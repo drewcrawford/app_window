@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt::Display;
 use std::num::NonZero;
@@ -8,7 +10,7 @@ use windows::core::{w, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{GetLastError, HINSTANCE, HSTR, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{COLOR_WINDOW, HBRUSH};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{CloseWindow, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
+use windows::Win32::UI::WindowsAndMessaging::{CloseWindow, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
 use crate::coordinates::{Position, Size};
 const WM_RUN_FUNCTION: u32 = WM_USER;
 
@@ -47,7 +49,19 @@ pub fn is_main_thread() -> bool {
 
 struct WinClosure(Box<dyn FnOnce() + Send + 'static>);
 
-
+struct HwndImp {
+    size_notify: Option<Box<dyn Fn(Size)>>,
+}
+impl Default for HwndImp {
+    fn default() -> Self {
+        Self {
+            size_notify: None,
+        }
+    }
+}
+thread_local! {
+    static HWND_IMPS: RefCell<HashMap<*mut c_void /* hwnd */, HwndImp>> = RefCell::new(HashMap::new());
+}
 
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     //need to create a message queue first
@@ -106,6 +120,16 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: L
     }
 
     match msg {
+        m if m == WM_SIZE => {
+            let width = l_param.0 as i32;
+            let height = (l_param.0 >> 16) as i32;
+            let size = Size::new(width as f64, height as f64);
+            HWND_IMPS.with_borrow_mut(|c|  {
+                let entry = c.entry(hwnd.0).or_insert(HwndImp::default());
+                entry.size_notify.as_ref().map(|f| f(size));
+            });
+            LRESULT(0)
+        }
         _ => {
             unsafe{DefWindowProcW(hwnd,msg,w_param, l_param)}
         }
@@ -183,7 +207,6 @@ impl Window {
         crate::surface::Surface {
             sys: Surface {
                 imp: copy_hwnd,
-                update_size: None,
             },
         }
     }
@@ -201,7 +224,6 @@ impl Drop for Window {
 
 pub struct Surface {
     imp: SendCell<HWND>,
-    update_size: Option<Arc<dyn Fn(Size)>>,
 }
 
 unsafe impl Send for Surface {}
@@ -229,13 +251,20 @@ impl Surface {
     }
 
     pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, _update: F) {
-        //todo: implement
-        self.update_size = Some(Arc::new(_update));
+        let move_hwnd = self.imp.copying();
+        on_main_thread(move || {
+            let hwnd = move_hwnd.get();
+            HWND_IMPS.with_borrow_mut(|c| {
+                let entry = c.entry(hwnd.0).or_insert(HwndImp::default());
+                entry.size_notify = Some(Box::new(_update));
+            });
+        });
+
     }
 }
 
 impl Drop for Surface {
     fn drop(&mut self) {
-        todo!()
+
     }
 }
