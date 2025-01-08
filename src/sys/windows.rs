@@ -1,13 +1,14 @@
 use std::ffi::c_void;
 use std::fmt::Display;
+use std::num::NonZero;
 use std::sync::Arc;
-use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle, Win32WindowHandle, WindowsDisplayHandle};
 use send_cells::send_cell::SendCell;
 use windows::core::{w, HSTRING, PCWSTR};
-use windows::Win32::Foundation::{GetLastError, HINSTANCE, HSTR, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{GetLastError, HINSTANCE, HSTR, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{COLOR_WINDOW, HBRUSH};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{CloseWindow, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
+use windows::Win32::UI::WindowsAndMessaging::{CloseWindow, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
 use crate::coordinates::{Position, Size};
 const WM_RUN_FUNCTION: u32 = WM_USER;
 
@@ -178,7 +179,13 @@ impl Window {
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
-        todo!()
+        let copy_hwnd = self.hwnd.copying();
+        crate::surface::Surface {
+            sys: Surface {
+                imp: copy_hwnd,
+                update_size: None,
+            },
+        }
     }
 }
 
@@ -193,7 +200,7 @@ impl Drop for Window {
 }
 
 pub struct Surface {
-    imp: *mut c_void,
+    imp: SendCell<HWND>,
     update_size: Option<Arc<dyn Fn(Size)>>,
 }
 
@@ -202,19 +209,28 @@ unsafe impl Sync for Surface {}
 
 impl Surface {
     pub async fn size(&self) -> Size {
-        todo!()
+        let send_hwnd = self.imp.copying();
+        crate::application::on_main_thread(move || {
+            let hwnd = send_hwnd.get();
+            let mut rect = RECT::default();
+            unsafe { GetClientRect(*hwnd, &mut rect).expect("Can't get size") }
+            Size::new(rect.right as f64, rect.bottom as f64)
+        }).await
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {
-        todo!()
+        //should be fine since we're just reading the value
+        let unsafe_hwnd: HWND = unsafe{*self.imp.get_unchecked()};
+        RawWindowHandle::Win32(Win32WindowHandle::new(NonZero::new(unsafe_hwnd.0 as isize).expect("HWND is null")))
     }
 
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
-        todo!()
+        RawDisplayHandle::Windows(WindowsDisplayHandle::new())
     }
 
     pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, _update: F) {
-        todo!()
+        //todo: implement
+        self.update_size = Some(Arc::new(_update));
     }
 }
 

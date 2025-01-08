@@ -4,7 +4,8 @@ use some_executor::hint::Hint;
 use some_executor::observer::Observer;
 use some_executor::{Priority, SomeExecutor};
 use some_executor::task::Configuration;
-use wgpu::{Device, Queue};
+use wgpu::{Device, Instance, InstanceDescriptor, Queue};
+use wgpu::util::{backend_bits_from_env, dx12_shader_compiler_from_env, gles_minor_version_from_env};
 use app_window::application::{on_main_thread};
 use app_window::executor::{already_on_main_thread_submit, on_main_thread_async};
 use app_window::window::Window;
@@ -69,7 +70,8 @@ async fn main_run(window: Window) {
         }),Configuration::new(Hint::CPU, Priority::UserInteractive, some_executor::Instant::now()),None);
         some_executor.spawn_objsafe(task).detach();
     });
-    let instance = Arc::new(wgpu::Instance::default());
+    let instance = wgpu::Instance::new(&wgpu::util::instance_descriptor_from_env());
+
     let surface = app_surface.create_wgpu_surface(&instance).expect("Can't create surface");
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
