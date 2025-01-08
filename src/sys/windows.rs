@@ -7,7 +7,7 @@ use windows::core::{w, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{GetLastError, HINSTANCE, HSTR, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{COLOR_WINDOW, HBRUSH};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SW_SHOWNORMAL, WINDOW_EX_STYLE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW};
+use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
 use crate::coordinates::{Position, Size};
 const WM_RUN_FUNCTION: u32 = WM_USER;
 
@@ -105,45 +105,48 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: L
         }
     }
 }
+fn create_window_impl(position: Position, size: Size, title: String, style: WINDOW_STYLE) -> HWND {
+    let instance = unsafe{GetModuleHandleW(PCWSTR::null())}.expect("Can't get module");
+    let cursor = unsafe{LoadCursorW(HINSTANCE::default(), IDC_ARROW)}.expect("Can't load cursor");
+    let winstr: HSTRING = title.into();
+    let class_name = w!("raw_input_debug_window");
+    let window_class = WNDCLASSEXW {
+        cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
+        style: Default::default(),
+        lpfnWndProc: Some(window_proc),
+        cbClsExtra: 0,
+        cbWndExtra: 0,
+        hInstance: instance.into(),
+        hIcon: Default::default(),
+        hCursor: cursor,
+        hbrBackground: HBRUSH::default(),
+        lpszMenuName: PCWSTR::null(),
+        lpszClassName: class_name,
+        hIconSm: Default::default(),
+    };
+    let r = unsafe{RegisterClassExW(&window_class)};
+    assert_ne!(r, 0, "failed to register window class: {:?}",unsafe{GetLastError()});
+
+    let window = unsafe{CreateWindowExW(WINDOW_EX_STYLE(0), //style
+                                        class_name,
+                                        &winstr,
+                                        style,
+                                        position.x() as i32, position.y() as i32, //position
+                                        size.width() as i32, size.height() as i32, //size
+                                        HWND(std::ptr::null_mut()), //parent
+                                        HMENU(std::ptr::null_mut()), //menu
+                                        instance, //instance
+                                        None,
+
+    )}.expect("failed to create window");
+    unsafe{_ = ShowWindow(window, SW_SHOWNORMAL)};
+    window
+}
 
 impl Window {
     pub async fn new(position: Position, size: Size, title: String) -> Self {
         let window = crate::application::on_main_thread(move || {
-
-            let instance = unsafe{GetModuleHandleW(PCWSTR::null())}.expect("Can't get module");
-            let cursor = unsafe{LoadCursorW(HINSTANCE::default(), IDC_ARROW)}.expect("Can't load cursor");
-            let winstr: HSTRING = title.into();
-            let class_name = w!("raw_input_debug_window");
-            let window_class = WNDCLASSEXW {
-                cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
-                style: Default::default(),
-                lpfnWndProc: Some(window_proc),
-                cbClsExtra: 0,
-                cbWndExtra: 0,
-                hInstance: instance.into(),
-                hIcon: Default::default(),
-                hCursor: cursor,
-                hbrBackground: HBRUSH(COLOR_WINDOW.0 as usize as *mut c_void),
-                lpszMenuName: PCWSTR::null(),
-                lpszClassName: class_name,
-                hIconSm: Default::default(),
-            };
-            let r = unsafe{RegisterClassExW(&window_class)};
-            assert_ne!(r, 0, "failed to register window class: {:?}",unsafe{GetLastError()});
-
-            let window = unsafe{CreateWindowExW(WINDOW_EX_STYLE(0), //style
-                                   class_name,
-                                   &winstr,
-                                   WS_OVERLAPPEDWINDOW,
-                                   position.x() as i32, position.y() as i32, //position
-                                   size.width() as i32, size.height() as i32, //size
-                                   HWND(std::ptr::null_mut()), //parent
-                                   HMENU(std::ptr::null_mut()), //menu
-                                   instance, //instance
-                                   None,
-
-            )}.expect("failed to create window");
-            unsafe{_ = ShowWindow(window, SW_SHOWNORMAL)};
+            let window = create_window_impl(position, size, title, WS_OVERLAPPEDWINDOW);
             SendCell::new(window)
         }).await;
 
@@ -157,8 +160,16 @@ impl Window {
         Self::new(Position::new(0.0, 0.0), Size::new(800.0, 600.0), "app_window".to_string()).await
     }
 
-    pub async fn fullscreen(_title: String) -> Result<Self, FullscreenError> {
-        todo!()
+    pub async fn fullscreen(title: String) -> Result<Self, FullscreenError> {
+        let size = Size::new(unsafe { GetSystemMetrics(SM_CXSCREEN) as f64}, unsafe { GetSystemMetrics(SM_CYSCREEN) as f64});
+        let window = crate::application::on_main_thread(move || {
+            let window = create_window_impl(Position::new(0.0, 0.0), size, title, WS_POPUP);
+            SendCell::new(window)
+        }).await;
+
+        Ok(Window {
+            hwnd: window,
+        })
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
