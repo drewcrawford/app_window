@@ -7,7 +7,7 @@ use windows::core::{w, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{GetLastError, HINSTANCE, HSTR, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{COLOR_WINDOW, HBRUSH};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
+use windows::Win32::UI::WindowsAndMessaging::{CloseWindow, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
 use crate::coordinates::{Position, Size};
 const WM_RUN_FUNCTION: u32 = WM_USER;
 
@@ -58,7 +58,6 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     closure(); //I think it's ok to run inline on windows?
     let all_hwnd = HWND::default();
     loop {
-        logwise::warn_sync!("will getMessageW");
         let message_ret = unsafe { GetMessageW(&mut message, all_hwnd, 0, 0) };
         if message_ret.0 == 0 {
             break;
@@ -185,7 +184,11 @@ impl Window {
 
 impl Drop for Window {
     fn drop(&mut self) {
-        todo!()
+        let unsafe_hwnd = unsafe{*self.hwnd.get_unchecked()};
+        let unsafe_port_hwnd = send_cells::unsafe_send_cell::UnsafeSendCell::new(unsafe_hwnd);
+        on_main_thread(move || {
+            unsafe { DestroyWindow(*unsafe_port_hwnd.get()) }.expect("Can't close window");
+        });
     }
 }
 

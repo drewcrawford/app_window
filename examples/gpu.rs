@@ -171,10 +171,11 @@ async fn main_run(window: Window) {
 async fn run(window: Window) {
 
     //on wasm32, we primarily need to operate on the main thread
-    logwise::warn_sync!("hi");
     on_main_thread(|| {
         #[cfg(feature = "wgpu")]
-        already_on_main_thread_submit(main_run(window))
+        already_on_main_thread_submit(main_run(window));
+        #[cfg(not(feature = "wgpu"))]
+        panic!("wgpu feature not enabled");
     }).await;
 }
 
