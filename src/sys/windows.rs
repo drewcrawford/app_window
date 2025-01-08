@@ -51,25 +51,24 @@ struct WinClosure(Box<dyn FnOnce() + Send + 'static>);
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     //need to create a message queue first
     let mut message = MSG::default();
-    _ = unsafe{PeekMessageW(&mut message, HWND::default(), WM_USER, WM_USER, PM_NOREMOVE)}; //create a message queue
+    _ = unsafe { PeekMessageW(&mut message, HWND::default(), WM_USER, WM_USER, PM_NOREMOVE) }; //create a message queue
     //we don't care about the return value of PeekMessageW, it simply tells us if messages are available or not
 
     //now the queue is available so subsequent calls to PostMessageW will work
     closure(); //I think it's ok to run inline on windows?
     let all_hwnd = HWND::default();
     loop {
-        let message_ret = unsafe{GetMessageW(&mut message, all_hwnd, 0, 0)};
-        println!("got message {:?}",message);
+        logwise::warn_sync!("will getMessageW");
+        let message_ret = unsafe { GetMessageW(&mut message, all_hwnd, 0, 0) };
         if message_ret.0 == 0 {
             break;
-        }
-        else if message_ret.0 == -1 {
+        } else if message_ret.0 == -1 {
             panic!("GetMessageW failed");
         }
         match message.message {
             WM_RUN_FUNCTION => {
                 let as_usize = message.wParam.0;
-                let winclosure = unsafe{Box::from_raw(as_usize as *mut WinClosure)};
+                let winclosure = unsafe { Box::from_raw(as_usize as *mut WinClosure) };
                 winclosure.0();
             }
             _ => {
@@ -81,7 +80,6 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
                 }
             }
         }
-
     }
 }
 
