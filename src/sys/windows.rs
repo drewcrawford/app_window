@@ -99,6 +99,12 @@ unsafe impl Sync for Window {}
 
 extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     eprintln!("got msg hwnd {hwnd:?} msg {msg} w_param {w_param:?} l_param {l_param:?}");
+    #[cfg(feature = "app_input")] {
+        if app_input::window_proc(hwnd, msg, w_param, l_param) == LRESULT(0) {
+            return LRESULT(0);
+        }
+    }
+
     match msg {
         _ => {
             unsafe{DefWindowProcW(hwnd,msg,w_param, l_param)}
