@@ -1,9 +1,12 @@
 use std::cell::RefCell;
+use std::ffi::{c_int, c_void};
 use std::fs::File;
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, AsRawFd};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::OnceLock;
-use libc::{getpid, pid_t, syscall, SYS_gettid};
+use std::time::Duration;
+use io_uring::cqueue::Entry;
+use libc::{eventfd, getpid, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE};
 use memmap2::MmapMut;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
@@ -37,13 +40,27 @@ pub fn is_main_thread() -> bool {
     let main_thread_pid = unsafe{syscall(SYS_gettid)} as pid_t;
     current_pid == main_thread_pid
 }
+struct MainThreadSender {
+    sender: Sender<Box<dyn FnOnce() + Send>>,
+    eventfd: c_int,
+}
 
-static MAIN_THREAD_SENDER: OnceLock<Sender<Box<dyn FnOnce() + Send>>> = OnceLock::new();
+impl MainThreadSender {
+    fn send(&self, closure: Box<dyn FnOnce() + Send>)  {
+        self.sender.send(closure).expect("Can't send closure");
+        let val = 1 as u64;
+        let w = unsafe{libc::write(self.eventfd, &val as *const _ as *const c_void, std::mem::size_of_val(&val))};
+        assert_eq!(w, std::mem::size_of_val(&val) as isize, "Failed to write to eventfd: {err}",err=unsafe{*libc::__errno_location()});
+    }
+}
+
+static MAIN_THREAD_SENDER: OnceLock<MainThreadSender> = OnceLock::new();
 
 struct MainThreadInfo {
     globals: GlobalList,
     queue_handle: QueueHandle<App>,
 }
+
 
 
 thread_local! {
@@ -57,15 +74,68 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let qh = event_queue.handle();
     let mut app = App;
     MAIN_THREAD_INFO.replace(Some(MainThreadInfo{globals, queue_handle: qh}));
+    let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
+    let channel_read_event = unsafe{eventfd(0, EFD_SEMAPHORE)};
+    assert_ne!(channel_read_event, -1, "Failed to create eventfd");
+    let (sender, receiver) = channel();
+
+    MAIN_THREAD_SENDER.get_or_init(|| {
+        MainThreadSender{sender, eventfd: channel_read_event}
+    });
     closure();
+    event_queue.flush().expect("Failed to flush event queue");
+    event_queue.dispatch_pending(&mut app).expect("Failed to dispatch pending events");
+    let read_guard = event_queue.prepare_read().expect("Failed to prepare read");
+    const WAYLAND_DATA_AVAILABLE: u64 = 1;
+    const CHANNEL_DATA_AVAILABLE: u64 = 2;
+    let fd = read_guard.connection_fd();
+    let io_uring_fd = io_uring::types::Fd(fd.as_raw_fd());
+    let mut wayland_entry = io_uring::opcode::PollAdd::new(io_uring_fd, libc::POLLIN as u32).build();
+    wayland_entry = wayland_entry.user_data(WAYLAND_DATA_AVAILABLE);
+    let mut sqs = io_uring.submission();
+    unsafe{sqs.push(&wayland_entry)}.expect("Can't submit peek");
+    let mut eventfd_opcode = io_uring::opcode::PollAdd::new(io_uring::types::Fd(channel_read_event), libc::POLLIN as u32).build();
+    eventfd_opcode = eventfd_opcode.user_data(CHANNEL_DATA_AVAILABLE);
+    unsafe{sqs.push(&eventfd_opcode)}.expect("Can't submit peek");
+    drop(sqs);
     //park
     loop {
-        event_queue.blocking_dispatch(&mut app).unwrap();
+
+        io_uring.submit_and_wait(1).expect("Can't submit and wait");
+        let mut entries = Vec::new();
+        for entry in io_uring.completion() {
+            entries.push(entry);
+        }
+        for entry in entries {
+            let result = entry.result();
+            if result < 0 {
+                panic!("Error in completion queue: {err}", err = result);
+            }
+            match entry.user_data() {
+                WAYLAND_DATA_AVAILABLE => todo!(),
+                CHANNEL_DATA_AVAILABLE => {
+                    let mut buf = [0u8; 8];
+                    let r = unsafe{libc::read(channel_read_event, buf.as_mut_ptr() as *mut c_void, 8)};
+                    assert_eq!(r, 8, "Failed to read from eventfd");
+                    let closure = receiver.recv_timeout(Duration::from_secs(0)).expect("Failed to receive closure");
+                    closure();
+                    //submit new peek
+                    let mut sqs = io_uring.submission();
+                    unsafe{sqs.push(&eventfd_opcode)}.expect("Can't submit peek");
+                    //return to submit_and_wait
+                }
+                other => {
+                    unimplemented!("Unknown user data: {other}", other = other);
+                }
+            }
+
+
+        }
     }
 }
 
-pub fn on_main_thread<F: FnOnce()>(_closure: F) {
-    todo!()
+pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
+    MAIN_THREAD_SENDER.get().expect("Main thread sender not set").send(Box::new(closure));
 }
 
 pub struct Window {
