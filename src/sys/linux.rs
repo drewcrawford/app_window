@@ -7,7 +7,7 @@ use libc::{getpid, pid_t, syscall, SYS_gettid};
 use memmap2::MmapMut;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
-use wayland_client::globals::{registry_queue_init, GlobalListContents};
+use wayland_client::globals::{registry_queue_init, GlobalList, GlobalListContents};
 use wayland_client::protocol::{wl_compositor, wl_registry, wl_shm};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
@@ -40,14 +40,27 @@ pub fn is_main_thread() -> bool {
 
 static MAIN_THREAD_SENDER: OnceLock<Sender<Box<dyn FnOnce() + Send>>> = OnceLock::new();
 
+struct MainThreadInfo {
+    globals: GlobalList,
+    queue_handle: QueueHandle<App>,
+}
+
+
+thread_local! {
+    static MAIN_THREAD_INFO: RefCell<Option<MainThreadInfo>> = RefCell::new(None);
+}
+
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
+    let connection = Connection::connect_to_env().expect("Failed to connect to wayland server");
+    let display = connection.display();
+    let (globals, mut event_queue) = registry_queue_init::<App>(&connection).expect("Can't initialize registry");
+    let qh = event_queue.handle();
+    let mut app = App;
+    MAIN_THREAD_INFO.replace(Some(MainThreadInfo{globals, queue_handle: qh}));
     closure();
     //park
-    let (sender,receiver) = channel();
-    MAIN_THREAD_SENDER.get_or_init(|| sender);
     loop {
-        let msg = receiver.recv().expect("Main thread receiver closed");
-        msg();
+        event_queue.blocking_dispatch(&mut app).unwrap();
     }
 }
 
@@ -171,43 +184,42 @@ impl Dispatch<WlBuffer, ()> for App {
 
 impl Window {
     pub async fn new(position: Position, size: Size, title: String) -> Self {
-        let connection = Connection::connect_to_env().expect("Failed to connect to wayland server");
-        let display = connection.display();
-        let (globals, mut event_queue) = registry_queue_init::<App>(&connection).expect("Can't initialize registry");
-        let qh = event_queue.handle();
-        let xdg_wm_base: XdgWmBase = globals.bind(&qh, 6..=6, ()).unwrap();
-        let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 6..=6, ()).unwrap();
-        let shm: WlShm = globals.bind(&qh, 2..=2, ()).unwrap();
-        let surface = compositor.create_surface(&qh, ());
-        // Create a toplevel surface
-        let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &qh, ());
-        xdg_surface.get_toplevel(&qh, ());
+        crate::application::on_main_thread(|| {
+            let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
+            let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
+            let compositor: wl_compositor::WlCompositor = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
+            let shm: WlShm = info.globals.bind(&info.queue_handle, 2..=2, ()).unwrap();
+            let surface = compositor.create_surface(&info.queue_handle, ());
+            // Create a toplevel surface
+            let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, ());
+            xdg_surface.get_toplevel(&info.queue_handle, ());
 
-        let (file, mmap) = create_shm_buffer(&shm, 200, 200);
-        let pool = shm.create_pool(file.as_fd(), mmap.len() as i32, &qh, ());
-        let buffer = pool.create_buffer(
-            0,
-            200,
-            200,
-            200 * 4,
-            Format::Argb8888,
-            &qh,
-            (),
-        );
-        surface.attach(Some(&buffer), 0, 0);
-        surface.commit();
+            let (file, mmap) = create_shm_buffer(&shm, 200, 200);
+            let pool = shm.create_pool(file.as_fd(), mmap.len() as i32, &info.queue_handle, ());
+            let buffer = pool.create_buffer(
+                0,
+                200,
+                200,
+                200 * 4,
+                Format::Argb8888,
+                &info.queue_handle,
+                (),
+            );
+            surface.attach(Some(&buffer), 0, 0);
+            surface.commit();
 
-        // let seat: WlSeat = globals.bind(&qh, 8..=9, ()).expect("Can't bind seat");
-        // let _pointer = seat.get_pointer(&qh, surface.id());
-        // let _keyboard = seat.get_keyboard(&qh, surface.id());
+            // let seat: WlSeat = globals.bind(&qh, 8..=9, ()).expect("Can't bind seat");
+            // let _pointer = seat.get_pointer(&qh, surface.id());
+            // let _keyboard = seat.get_keyboard(&qh, surface.id());
 
 
-        println!("Window should be displayed. Running event loop...");
+            MAIN_THREAD_INFO.replace(Some(info));
+        }).await;
+
+
 
         todo!();
-        // loop {
-        //     event_queue.blocking_dispatch(&mut app_data).unwrap();
-        // }
+
     }
 
     pub async fn default() -> Self {
