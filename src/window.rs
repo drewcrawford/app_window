@@ -9,6 +9,7 @@ A platform-appropriate surface.
 */
 pub struct Window {
     sys: crate::sys::Window,
+    created_surface: bool,
 }
 
 #[derive(thiserror::Error,Debug)]
@@ -25,17 +26,21 @@ impl Window {
         assert!(crate::application::is_main_thread_running(), "{}",CALL_MAIN);
         let sys = crate::sys::Window::fullscreen(title).await?;
         Ok(Window {
-            sys: sys
+            sys: sys,
+            created_surface: false,
         })
     }
     pub async fn new(position: Position, size: Size, title: String) -> Self {
         assert!(crate::application::is_main_thread_running(), "Call app_window::application::run_main_thread");
         Window {
-            sys: crate::sys::Window::new(position, size, title).await
+            sys: crate::sys::Window::new(position, size, title).await,
+            created_surface: false,
         }
     }
 
-    pub async fn surface(&self) -> Surface {
+    pub async fn surface(&mut self) -> Surface {
+        assert!(!self.created_surface, "Surface already created");
+        self.created_surface = true;
         self.sys.surface().await
     }
 
@@ -43,6 +48,7 @@ impl Window {
         assert!(crate::application::is_main_thread_running(), "Call app_window::application::run_main_thread");
         Window {
             sys: crate::sys::Window::default().await,
+            created_surface: false,
         }
     }
 

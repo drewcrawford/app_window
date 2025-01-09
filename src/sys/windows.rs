@@ -3,14 +3,13 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt::Display;
 use std::num::NonZero;
-use std::sync::Arc;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, Win32WindowHandle, WindowsDisplayHandle};
 use send_cells::send_cell::SendCell;
 use windows::core::{w, HSTRING, PCWSTR};
-use windows::Win32::Foundation::{GetLastError, HINSTANCE, HSTR, HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows::Win32::Graphics::Gdi::{COLOR_WINDOW, HBRUSH};
+use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::{HBRUSH};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{CloseWindow, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
+use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
 use crate::coordinates::{Position, Size};
 const WM_RUN_FUNCTION: u32 = WM_USER;
 

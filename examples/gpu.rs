@@ -1,13 +1,11 @@
 use std::borrow::Cow;
-use std::sync::{Arc};
 use some_executor::hint::Hint;
 use some_executor::observer::Observer;
 use some_executor::{Priority, SomeExecutor};
 use some_executor::task::Configuration;
-use wgpu::{Device, Instance, InstanceDescriptor, Queue};
-use wgpu::util::{backend_bits_from_env, dx12_shader_compiler_from_env, gles_minor_version_from_env};
+use wgpu::{Device, Queue};
 use app_window::application::{on_main_thread};
-use app_window::executor::{already_on_main_thread_submit, on_main_thread_async};
+use app_window::executor::{already_on_main_thread_submit};
 use app_window::window::Window;
 
 struct State<'window> {
@@ -56,7 +54,7 @@ fn render(state: &State) {
 }
 
 #[cfg(feature = "wgpu")]
-async fn main_run(window: Window) {
+async fn main_run(mut window: Window) {
     logwise::warn_sync!("main_run");
     let mut app_surface = window.surface().await;
     let ( sender,mut receiver) = ampsc::channel();
