@@ -2,8 +2,9 @@ use std::cell::RefCell;
 use std::ffi::{c_int, c_void};
 use std::fs::File;
 use std::os::fd::{AsFd, AsRawFd};
+use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use io_uring::cqueue::Entry;
 use libc::{eventfd, getpid, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE};
@@ -14,11 +15,13 @@ use wayland_client::globals::{registry_queue_init, GlobalList, GlobalListContent
 use wayland_client::protocol::{wl_compositor, wl_registry, wl_shm};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
+use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
+use wayland_cursor::CursorTheme;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::xdg_toplevel;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
@@ -60,6 +63,8 @@ static MAIN_THREAD_SENDER: OnceLock<MainThreadSender> = OnceLock::new();
 struct MainThreadInfo {
     globals: GlobalList,
     queue_handle: QueueHandle<App>,
+    connection: Connection,
+    app_state: Arc<AppState>,
 }
 
 
@@ -73,8 +78,8 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let display = connection.display();
     let (globals, mut event_queue) = registry_queue_init::<App>(&connection).expect("Can't initialize registry");
     let qh = event_queue.handle();
-    let mut app = App;
-    MAIN_THREAD_INFO.replace(Some(MainThreadInfo{globals, queue_handle: qh}));
+    let mut app = App(Arc::new(AppState::new()));
+    MAIN_THREAD_INFO.replace(Some(MainThreadInfo{globals, queue_handle: qh, connection, app_state: app.0.clone()}));
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
     let channel_read_event = unsafe{eventfd(0, EFD_SEMAPHORE)};
     assert_ne!(channel_read_event, -1, "Failed to create eventfd");
@@ -116,7 +121,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
                     read_guard.read().expect("Can't read wayland socket");
                     event_queue.dispatch_pending(&mut app).expect("Can't dispatch events");
                     //prepare next read
-                    //ensure writes go out
+                    //ensure writes queued during dispatch_pending go out (such as proxy replies, etc)
                     event_queue.flush().expect("Failed to flush event queue");
                     read_guard = event_queue.prepare_read().expect("Failed to prepare read");
                     let mut sqs = io_uring.submission();
@@ -162,7 +167,16 @@ pub struct Window {
 unsafe impl Send for Window {}
 unsafe impl Sync for Window {}
 
-struct App;
+struct App(Arc<AppState>);
+
+struct AppState {
+
+}
+impl AppState {
+    fn new() -> Self {
+        AppState{}
+    }
+}
 
 fn create_shm_buffer(
     _shm: &wl_shm::WlShm,
@@ -268,6 +282,17 @@ impl Dispatch<WlBuffer, ()> for App {
         println!("got WlBuffer event {:?}",event);
     }
 }
+impl Dispatch<WlSeat, ()> for App {
+    fn event(_state: &mut Self, _proxy: &WlSeat, event: <WlSeat as Proxy>::Event, _data: &(), _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+        println!("got WlSeat event {:?}",event);
+    }
+}
+
+impl<A: AsRef<AppState>> Dispatch<WlPointer, A> for App {
+    fn event(_state: &mut Self, _proxy: &WlPointer, event: <WlPointer as Proxy>::Event, _data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+        println!("got WlPointer event {:?}",event);
+    }
+}
 
 
 impl Window {
@@ -278,6 +303,8 @@ impl Window {
             let compositor: wl_compositor::WlCompositor = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
             let shm: WlShm = info.globals.bind(&info.queue_handle, 2..=2, ()).unwrap();
             let surface = compositor.create_surface(&info.queue_handle, ());
+
+            let cursor_surface = compositor.create_surface(&info.queue_handle, ());
             // Create a toplevel surface
             let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, ());
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, ());
@@ -296,8 +323,17 @@ impl Window {
             surface.attach(Some(&buffer), 0, 0);
             surface.commit();
 
-            // let seat: WlSeat = globals.bind(&qh, 8..=9, ()).expect("Can't bind seat");
-            // let _pointer = seat.get_pointer(&qh, surface.id());
+            //cursor stuff?
+            let mut cursor_theme = CursorTheme::load(&info.connection, shm, 32).expect("Can't load cursors");
+            let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
+            let frame_info = cursor.frame_and_duration(0); //todo: time
+            let buffer = &cursor[frame_info.frame_index];
+            cursor_surface.attach(Some(buffer), 0, 0);
+            cursor_surface.commit();
+
+            let seat: WlSeat = info.globals.bind(&info.queue_handle, 8..=9, ()).expect("Can't bind seat");
+            let pointer = seat.get_pointer(&info.queue_handle, info.app_state.clone());
+            pointer.set_cursor(0, Some(&cursor_surface), 0, 0);
             // let _keyboard = seat.get_keyboard(&qh, surface.id());
 
             MAIN_THREAD_INFO.replace(Some(info));

@@ -64,6 +64,7 @@ send_cells = "0.1.0"
 libc = "0.2.169"
 wayland-client = "0.31.7"
 wayland-protocols = {version = "0.32.5", features = ["client"]}
+wayland-cursor = "0.31.7"
 tempfile = "3.15.0"
 memmap2 = "0.9.5"
 io-uring = "0.7.3"
