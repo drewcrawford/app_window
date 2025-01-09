@@ -4,7 +4,7 @@ use std::fs::File;
 use std::os::fd::{AsFd, AsRawFd};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use io_uring::cqueue::Entry;
 use libc::{eventfd, getpid, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE};
@@ -16,14 +16,12 @@ use wayland_client::protocol::{wl_compositor, wl_registry, wl_shm};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_pointer::WlPointer;
-use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_cursor::CursorTheme;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
-use wayland_protocols::xdg::shell::client::xdg_toplevel;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use crate::coordinates::{Position, Size};
@@ -176,6 +174,7 @@ struct App(Arc<AppState>);
 struct AppState {
     compositor: WlCompositor,
     shm: WlShm,
+    wl_pointer_enter_serial: Mutex<Option<u32>>,
 }
 impl AppState {
     fn new(queue_handle: &QueueHandle<App>, compositor: WlCompositor, connection: &Connection, shm: WlShm) -> Self {
@@ -191,6 +190,7 @@ impl AppState {
         AppState{
             compositor: compositor.clone(),
             shm,
+            wl_pointer_enter_serial: Mutex::new(None),
         }
     }
 }
@@ -306,8 +306,16 @@ impl Dispatch<WlSeat, ()> for App {
 }
 
 impl<A: AsRef<AppState>> Dispatch<WlPointer, A> for App {
-    fn event(_state: &mut Self, _proxy: &WlPointer, event: <WlPointer as Proxy>::Event, _data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+    fn event(_state: &mut Self, _proxy: &WlPointer, event: <WlPointer as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         println!("got WlPointer event {:?}",event);
+        match event {
+            wayland_client::protocol::wl_pointer::Event::Enter {serial, surface, surface_x, surface_y} => {
+                *data.as_ref().wl_pointer_enter_serial.lock().expect("Can't lock serial") = Some(serial);
+            }
+            _ => {
+                //?
+            }
+        }
     }
 }
 
