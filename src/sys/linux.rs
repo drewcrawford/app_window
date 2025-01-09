@@ -84,8 +84,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     });
     closure();
     event_queue.flush().expect("Failed to flush event queue");
-    event_queue.dispatch_pending(&mut app).expect("Failed to dispatch pending events");
-    let read_guard = event_queue.prepare_read().expect("Failed to prepare read");
+    let mut read_guard = event_queue.prepare_read().expect("Failed to prepare read");
     const WAYLAND_DATA_AVAILABLE: u64 = 1;
     const CHANNEL_DATA_AVAILABLE: u64 = 2;
     let fd = read_guard.connection_fd();
@@ -100,7 +99,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     drop(sqs);
     //park
     loop {
-
+        println!("will submit_and_wait...");
         io_uring.submit_and_wait(1).expect("Can't submit and wait");
         let mut entries = Vec::new();
         for entry in io_uring.completion() {
@@ -112,17 +111,31 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
                 panic!("Error in completion queue: {err}", err = result);
             }
             match entry.user_data() {
-                WAYLAND_DATA_AVAILABLE => todo!(),
+                WAYLAND_DATA_AVAILABLE => {
+                    read_guard.read().expect("Can't read wayland socket");
+                    event_queue.dispatch_pending(&mut app).expect("Can't dispatch events");
+                    //prepare next read
+                    read_guard = event_queue.prepare_read().expect("Failed to prepare read");
+                    let mut sqs = io_uring.submission();
+                    wayland_entry = io_uring::opcode::PollAdd::new(io_uring_fd, libc::POLLIN as u32).build();
+                    wayland_entry = wayland_entry.user_data(WAYLAND_DATA_AVAILABLE);
+                    unsafe{sqs.push(&wayland_entry)}.expect("Can't submit peek");
+                    //return to submit_and_wait
+                },
                 CHANNEL_DATA_AVAILABLE => {
                     let mut buf = [0u8; 8];
                     let r = unsafe{libc::read(channel_read_event, buf.as_mut_ptr() as *mut c_void, 8)};
                     assert_eq!(r, 8, "Failed to read from eventfd");
                     let closure = receiver.recv_timeout(Duration::from_secs(0)).expect("Failed to receive closure");
                     closure();
+                    //let's ensure any writes went out to wayland
+                    event_queue.flush().expect("Failed to flush event queue");
+
                     //submit new peek
                     let mut sqs = io_uring.submission();
                     unsafe{sqs.push(&eventfd_opcode)}.expect("Can't submit peek");
                     //return to submit_and_wait
+
                 }
                 other => {
                     unimplemented!("Unknown user data: {other}", other = other);
@@ -135,6 +148,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
 }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
+    println!("sending on_main_thread...");
     MAIN_THREAD_SENDER.get().expect("Main thread sender not set").send(Box::new(closure));
 }
 
@@ -262,7 +276,7 @@ impl Window {
             let surface = compositor.create_surface(&info.queue_handle, ());
             // Create a toplevel surface
             let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, ());
-            xdg_surface.get_toplevel(&info.queue_handle, ());
+            let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, ());
 
             let (file, mmap) = create_shm_buffer(&shm, 200, 200);
             let pool = shm.create_pool(file.as_fd(), mmap.len() as i32, &info.queue_handle, ());
@@ -282,13 +296,12 @@ impl Window {
             // let _pointer = seat.get_pointer(&qh, surface.id());
             // let _keyboard = seat.get_keyboard(&qh, surface.id());
 
-
             MAIN_THREAD_INFO.replace(Some(info));
         }).await;
 
+        Window {
 
-
-        todo!();
+        }
 
     }
 
