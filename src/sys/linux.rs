@@ -20,6 +20,7 @@ use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
+use wayland_protocols::xdg::shell::client::xdg_toplevel;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use crate::coordinates::{Position, Size};
@@ -115,6 +116,8 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
                     read_guard.read().expect("Can't read wayland socket");
                     event_queue.dispatch_pending(&mut app).expect("Can't dispatch events");
                     //prepare next read
+                    //ensure writes go out
+                    event_queue.flush().expect("Failed to flush event queue");
                     read_guard = event_queue.prepare_read().expect("Failed to prepare read");
                     let mut sqs = io_uring.submission();
                     wayland_entry = io_uring::opcode::PollAdd::new(io_uring_fd, libc::POLLIN as u32).build();
@@ -209,7 +212,7 @@ impl Dispatch<XdgWmBase, ()> for App {
     fn event(_state: &mut Self, proxy: &XdgWmBase, event: <XdgWmBase as Proxy>::Event, _data: &(), _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         match event {
             wayland_protocols::xdg::shell::client::xdg_wm_base::Event::Ping {serial}  => {
-                proxy.pong(serial)
+                proxy.pong(serial);
             }
             _ => {
                 println!("Unknown XdgWmBase event: {:?}", event); // Add this line
@@ -243,6 +246,7 @@ impl Dispatch<XdgSurface, ()> for App {
 impl Dispatch<XdgToplevel, ()> for App {
     fn event(_state: &mut Self, _proxy: &XdgToplevel, event: <XdgToplevel as Proxy>::Event, _data: &(), _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         println!("got XdgToplevel event {:?}",event);
+
         // match event {
         //     xdg_toplevel::Event::Configure {  width, height, states: _ } => {
         //         xdg_toplevel_configure_event(width, height);
@@ -268,7 +272,7 @@ impl Dispatch<WlBuffer, ()> for App {
 
 impl Window {
     pub async fn new(position: Position, size: Size, title: String) -> Self {
-        crate::application::on_main_thread(|| {
+        crate::application::on_main_thread(move || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
             let compositor: wl_compositor::WlCompositor = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
@@ -278,12 +282,12 @@ impl Window {
             let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, ());
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, ());
 
-            let (file, mmap) = create_shm_buffer(&shm, 200, 200);
+            let (file, mmap) = create_shm_buffer(&shm, size.width() as u32, size.height() as u32);
             let pool = shm.create_pool(file.as_fd(), mmap.len() as i32, &info.queue_handle, ());
             let buffer = pool.create_buffer(
                 0,
-                200,
-                200,
+                size.width() as i32,
+                size.height() as i32,
                 200 * 4,
                 Format::Argb8888,
                 &info.queue_handle,
