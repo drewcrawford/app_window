@@ -78,8 +78,12 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let display = connection.display();
     let (globals, mut event_queue) = registry_queue_init::<App>(&connection).expect("Can't initialize registry");
     let qh = event_queue.handle();
-    let mut app = App(Arc::new(AppState::new()));
-    MAIN_THREAD_INFO.replace(Some(MainThreadInfo{globals, queue_handle: qh, connection, app_state: app.0.clone()}));
+    let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 6..=6, ()).unwrap();
+    let shm: WlShm = globals.bind(&qh, 2..=2, ()).unwrap();
+    let mut app = App(Arc::new(AppState::new(&qh, compositor, &connection, shm)));
+    let main_thread_info = MainThreadInfo{globals, queue_handle: qh, connection, app_state: app.0.clone()};
+
+    MAIN_THREAD_INFO.replace(Some(main_thread_info));
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
     let channel_read_event = unsafe{eventfd(0, EFD_SEMAPHORE)};
     assert_ne!(channel_read_event, -1, "Failed to create eventfd");
@@ -170,11 +174,24 @@ unsafe impl Sync for Window {}
 struct App(Arc<AppState>);
 
 struct AppState {
-
+    compositor: WlCompositor,
+    shm: WlShm,
 }
 impl AppState {
-    fn new() -> Self {
-        AppState{}
+    fn new(queue_handle: &QueueHandle<App>, compositor: WlCompositor, connection: &Connection, shm: WlShm) -> Self {
+        //cursor stuff?
+        let cursor_surface = compositor.create_surface(queue_handle, ());
+
+        let mut cursor_theme = CursorTheme::load(&connection, shm.clone(), 32).expect("Can't load cursors");
+        let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
+        let frame_info = cursor.frame_and_duration(0); //todo: time
+        let buffer = &cursor[frame_info.frame_index];
+        cursor_surface.attach(Some(buffer), 0, 0);
+        cursor_surface.commit();
+        AppState{
+            compositor: compositor.clone(),
+            shm,
+        }
     }
 }
 
@@ -300,17 +317,14 @@ impl Window {
         crate::application::on_main_thread(move || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
-            let compositor: wl_compositor::WlCompositor = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
-            let shm: WlShm = info.globals.bind(&info.queue_handle, 2..=2, ()).unwrap();
-            let surface = compositor.create_surface(&info.queue_handle, ());
+            let surface = info.app_state.compositor.create_surface(&info.queue_handle, ());
 
-            let cursor_surface = compositor.create_surface(&info.queue_handle, ());
             // Create a toplevel surface
             let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, ());
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, ());
 
-            let (file, mmap) = create_shm_buffer(&shm, size.width() as u32, size.height() as u32);
-            let pool = shm.create_pool(file.as_fd(), mmap.len() as i32, &info.queue_handle, ());
+            let (file, mmap) = create_shm_buffer(&info.app_state.shm, size.width() as u32, size.height() as u32);
+            let pool = info.app_state.shm.create_pool(file.as_fd(), mmap.len() as i32, &info.queue_handle, ());
             let buffer = pool.create_buffer(
                 0,
                 size.width() as i32,
@@ -323,17 +337,10 @@ impl Window {
             surface.attach(Some(&buffer), 0, 0);
             surface.commit();
 
-            //cursor stuff?
-            let mut cursor_theme = CursorTheme::load(&info.connection, shm, 32).expect("Can't load cursors");
-            let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
-            let frame_info = cursor.frame_and_duration(0); //todo: time
-            let buffer = &cursor[frame_info.frame_index];
-            cursor_surface.attach(Some(buffer), 0, 0);
-            cursor_surface.commit();
+
 
             let seat: WlSeat = info.globals.bind(&info.queue_handle, 8..=9, ()).expect("Can't bind seat");
             let pointer = seat.get_pointer(&info.queue_handle, info.app_state.clone());
-            pointer.set_cursor(0, Some(&cursor_surface), 0, 0);
             // let _keyboard = seat.get_keyboard(&qh, surface.id());
 
             MAIN_THREAD_INFO.replace(Some(info));
