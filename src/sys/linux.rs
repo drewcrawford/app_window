@@ -1,12 +1,16 @@
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_void, CString};
 use std::fs::File;
+use std::future::Future;
 use std::ops::Sub;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
+use atspi::events::object::ObjectEvents;
+use atspi::proxy::application::ApplicationProxy;
+use atspi::proxy::socket::SocketProxy;
 use io_uring::cqueue::Entry;
 use libc::{eventfd, getpid, memfd_create, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE, MFD_ALLOW_SEALING, MFD_CLOEXEC};
 use memmap2::MmapMut;
@@ -29,6 +33,56 @@ use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use zune_png::zune_core::result::DecodingResult;
 use crate::coordinates::{Position, Size};
+use crate::executor::already_on_main_thread_submit;
+
+mod ax {
+    use std::sync::Mutex;
+    use zbus::fdo;
+    use zbus::interface;
+
+    pub struct ApplicationInterface {
+        inner: Mutex<i32>,
+    }
+    impl ApplicationInterface {
+        pub fn new() -> Self {
+            ApplicationInterface {
+                inner: Mutex::new(0),
+            }
+        }
+    }
+    #[interface(name = "org.a11y.atspi.Application")]
+    impl ApplicationInterface {
+        #[zbus(property)]
+        fn toolkit_name(&self) -> fdo::Result<String> {
+            Ok("app_window".to_string())
+        }
+
+        #[zbus(property)]
+        fn version(&self) -> fdo::Result<String> {
+            todo!()
+        }
+
+        #[zbus(property)]
+        fn atspi_version(&self) -> &str {
+            "2.1"
+        }
+
+        #[zbus(property)]
+        fn id(&self) -> fdo::Result<i32> {
+            Ok(
+                *self.inner.lock().unwrap()
+            )
+        }
+
+        #[zbus(property)]
+        fn set_id(&mut self, id: i32) -> fdo::Result<()> {
+            //docs suggest this is unused
+            //but I guess we need to roundtrip it
+            *self.inner.lock().unwrap() = id;
+            Ok(())
+        }
+    }
+}
 
 const TITLEBAR_HEIGHT: u64 = 25;
 const BUTTON_WIDTH: u64 = 25;
@@ -78,6 +132,8 @@ thread_local! {
     static MAIN_THREAD_INFO: RefCell<Option<MainThreadInfo>> = RefCell::new(None);
 }
 
+const ROOT_PATH: &str = "/org/a11y/atspi/accessible/root";
+
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let (sender, receiver) = channel();
     let channel_read_event = unsafe{eventfd(0, EFD_SEMAPHORE)};
@@ -99,9 +155,40 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
 
+    already_on_main_thread_submit(async move {
+        let connection;
+        match atspi::AccessibilityConnection::new().await {
+            Ok(c) => {
+                connection = c;
+                println!("Connected to at-spi");
+            }
+            Err(e) => {
+                println!("Failed to connect to at-spi: {err}", err = e);
+                return
+            }
+        }
+        let application_interface = ax::ApplicationInterface::new();
+        connection.connection().object_server().at(ROOT_PATH, application_interface).await.expect("Failed to create object");
+        let socket = SocketProxy::new(&connection.connection()).await.expect("Failed to create socket proxy");
+        let unique_name = connection.connection().unique_name().expect("Failed to get unique name");
+        let object_path = zbus::zvariant::ObjectPath::from_static_str(ROOT_PATH).unwrap();
+        socket.embed(&(unique_name, object_path)).await.expect("Failed to embed socket");
+        // connection.register_event::<ObjectEvents>().await.expect("failed to register event");
+        // let mut stream = connection.event_stream();
+        // use futures_lite::stream::StreamExt;;
+        // loop {
+        //     let event = stream.next().await.expect("Failed to get next event");
+        //     println!("Got event: {:?}", event);
+        // }
+
+
+
+    });
+
 
     closure();
     event_queue.flush().expect("Failed to flush event queue");
+
     let mut read_guard = event_queue.prepare_read().expect("Failed to prepare read");
     const WAYLAND_DATA_AVAILABLE: u64 = 1;
     const CHANNEL_DATA_AVAILABLE: u64 = 2;
@@ -370,6 +457,7 @@ struct AppState {
     seat: Mutex<Option<WlSeat>>,
     decor: Vec<u8>,
     decor_dimensions: (usize, usize),
+
 
 }
 impl AppState {
@@ -727,7 +815,6 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                            }
                            MouseRegion::CloseButton => {
                                let toplevel = data.xdg_toplevel.as_ref().unwrap();
-
                                let app_state = data.app_state.upgrade().unwrap();
                                toplevel.destroy();
                            }

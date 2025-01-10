@@ -68,6 +68,10 @@ wayland-cursor = "0.31.7"
 memmap2 = "0.9.5"
 io-uring = "0.7.3"
 zune-png = "0.4.10"
+futures-lite = "2.5.0"
+atspi = { version = "0.24.0", features=["atspi-proxies","atspi-connection"] }
+zbus = "4.2.2"
+
 [patch.crates-io]
 send_cells = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/send_cells"}
 # on windows we need patched wgpu, hopefully it upstreams post v23.0.1...
