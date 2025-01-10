@@ -37,6 +37,7 @@ use crate::executor::already_on_main_thread_submit;
 
 mod ax {
     use std::sync::Mutex;
+    use atspi::{InterfaceSet, Role, StateSet};
     use zbus::fdo;
     use zbus::interface;
 
@@ -59,7 +60,7 @@ mod ax {
 
         #[zbus(property)]
         fn version(&self) -> fdo::Result<String> {
-            todo!()
+            Ok("todo".to_string())
         }
 
         #[zbus(property)]
@@ -80,6 +81,76 @@ mod ax {
             //but I guess we need to roundtrip it
             *self.inner.lock().unwrap() = id;
             Ok(())
+        }
+    }
+    pub struct RootAX {
+
+    }
+    impl RootAX {
+        pub fn new() -> Self {
+            RootAX {
+
+            }
+        }
+    }
+    #[interface(name = "org.a11y.atspi.Accessible")]
+    impl RootAX {
+        #[zbus(property)]
+        fn name(&self) -> fdo::Result<String> {
+            todo!()
+        }
+
+        #[zbus(property)]
+        fn description(&self) -> &str {
+            todo!()
+        }
+
+        #[zbus(property)]
+        fn parent(&self) -> String {
+            todo!()
+        }
+
+        #[zbus(property)]
+        fn child_count(&self) -> fdo::Result<i32> {
+            todo!()
+        }
+
+        #[zbus(property)]
+        fn locale(&self) -> &str {
+            todo!()
+        }
+
+        #[zbus(property)]
+        fn accessible_id(&self) -> &str {
+            todo!()
+        }
+
+        fn get_child_at_index(&self, index: i32) -> fdo::Result<(String,)> {
+            todo!()
+        }
+
+        fn get_children(&self) -> fdo::Result<Vec<u8>> {
+            todo!()
+        }
+
+        fn get_index_in_parent(&self) -> i32 {
+            -1
+        }
+
+        fn get_role(&self) -> Role {
+            todo!()
+        }
+
+        fn get_state(&self) -> StateSet {
+            todo!()
+        }
+
+        fn get_application(&self) -> (String,) {
+            todo!()
+        }
+
+        fn get_interfaces(&self) -> InterfaceSet {
+            todo!()
         }
     }
 }
@@ -169,10 +240,15 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
         }
         let application_interface = ax::ApplicationInterface::new();
         connection.connection().object_server().at(ROOT_PATH, application_interface).await.expect("Failed to create object");
+
+
         let socket = SocketProxy::new(&connection.connection()).await.expect("Failed to create socket proxy");
         let unique_name = connection.connection().unique_name().expect("Failed to get unique name");
         let object_path = zbus::zvariant::ObjectPath::from_static_str(ROOT_PATH).unwrap();
-        socket.embed(&(unique_name, object_path)).await.expect("Failed to embed socket");
+        let proposed_root = socket.embed(&(unique_name, object_path.clone())).await.expect("Failed to embed socket");
+        let root_ax = ax::RootAX::new();
+        connection.connection().object_server().at(object_path, root_ax).await.expect("Failed to create object");
+        connection.connection().executor().tick().await;
         // connection.register_event::<ObjectEvents>().await.expect("failed to register event");
         // let mut stream = connection.event_stream();
         // use futures_lite::stream::StreamExt;;
