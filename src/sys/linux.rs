@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::ffi::{c_int, c_void};
 use std::fs::File;
+use std::ops::Sub;
 use std::os::fd::{AsFd, AsRawFd};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
@@ -197,40 +198,82 @@ unsafe impl Sync for Window {}
 
 struct App(Arc<AppState>);
 
+struct ActiveCursor {
+    cursor_surface: Arc<WlSurface>,
+}
+impl ActiveCursor {
+    fn new(connection: &Connection, shm: WlShm, a: Weak<AppState>, compositor: &WlCompositor, queue_handle: &QueueHandle<App>) -> Self {
+        let mut cursor_theme = CursorTheme::load(&connection, shm, 32).expect("Can't load cursors");
+        cursor_theme.set_fallback(|name, size| {
+            Some(include_bytes!("../../linux_assets/left_ptr").into())
+        });
+        let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
+        let start_time = std::time::Instant::now();
+        //I guess we fake an internal window here?
+        let window_internal = WindowInternal::new(a);
+        let cursor_surface = compositor.create_surface(queue_handle, Box::new(window_internal));
+        let start_time = std::time::Instant::now();
+        let frame_info = cursor.frame_and_duration(start_time.elapsed().as_millis() as u32);
+        let buffer = &cursor[frame_info.frame_index];
+        cursor_surface.attach(Some(buffer), 0, 0);
+        cursor_surface.commit();
+        let cursor_surface = Arc::new(cursor_surface);
+        let move_cursor_surface = cursor_surface.clone();
+        let move_cursor_theme = Arc::new(Mutex::new(cursor_theme));
+        std::thread::spawn(move || {
+            loop {
+                let move_cursor_theme = move_cursor_theme.clone();
+                let move_cursor_surface = move_cursor_surface.clone();
+                let (sender,receiver) = std::sync::mpsc::channel();
+                on_main_thread(move || {
+                    let mut binding = move_cursor_theme.lock().unwrap();
+                    let cursor = binding.get_cursor("wait").expect("Can't get cursor");
+                    let present_time = start_time.elapsed();
+
+                    let frame_info = cursor.frame_and_duration(present_time.as_millis() as u32);
+                    println!("drawing frame {}", frame_info.frame_index);
+                    let buffer = &cursor[frame_info.frame_index];
+                    move_cursor_surface.attach(Some(buffer), 0, 0);
+                    move_cursor_surface.damage_buffer(0, 0, buffer.dimensions().0 as i32, buffer.dimensions().1 as i32);
+                    move_cursor_surface.commit();
+                    let next_present_time = present_time + Duration::from_millis(frame_info.frame_duration as u64);
+                    sender.send(next_present_time).expect("Can't send next present time");
+                });
+                let next_present_time = receiver.recv().expect("Can't receive next present time");
+                println!("next_present_time: {:?} start_time {:?} start_time_elased {:?}", next_present_time,start_time, start_time.elapsed());
+                let sleep_time = next_present_time.saturating_sub(start_time.elapsed());
+
+                std::thread::sleep(sleep_time);
+
+
+            }
+        });
+        ActiveCursor {
+            cursor_surface,
+        }
+    }
+}
+
 struct AppState {
     compositor: WlCompositor,
     shm: WlShm,
     //option for lazy-init purposes
-    cursor_surface: Mutex<Option<WlSurface>>,
+    active_cursor: Mutex<Option<ActiveCursor>>,
 
 }
 impl AppState {
     fn new(queue_handle: &QueueHandle<App>, compositor: WlCompositor, connection: &Connection, shm: WlShm) -> Arc<Self> {
         //cursor stuff?
-
-
-        let mut cursor_theme = CursorTheme::load(&connection, shm.clone(), 32).expect("Can't load cursors");
-        cursor_theme.set_fallback(|name, size| {
-            Some(include_bytes!("../../linux_assets/left_ptr").into())
-        });
-        let cursor = cursor_theme.get_cursor("does_not_exist").expect("Can't get cursor");
-        let frame_info = cursor.frame_and_duration(0); //todo: time
-        let buffer = &cursor[frame_info.frame_index];
-
         let mut a = Arc::new(AppState{
             compositor: compositor.clone(),
-            shm,
-            cursor_surface: Mutex::new(None),
+            shm: shm.clone(),
+            active_cursor: Mutex::new(None),
         });
-        //I guess we fake an internal window here?
-        let window_internal = WindowInternal::new(Arc::downgrade(&a));
-        let cursor_surface = compositor.create_surface(queue_handle, Box::new(window_internal));
-        cursor_surface.attach(Some(buffer), 0, 0);
-        cursor_surface.commit();
-        a.cursor_surface.lock().unwrap().replace(cursor_surface);
+        let active_cursor = ActiveCursor::new(connection, shm, Arc::downgrade(&a), &compositor, queue_handle);
+        a.active_cursor.lock().unwrap().replace(active_cursor);
         a
-
     }
+
 }
 
 fn create_shm_buffer(
@@ -372,7 +415,7 @@ impl<A: AsRef<WindowInternal>> Dispatch<WlPointer, A> for App {
                 *data.as_ref().wl_pointer_enter_serial.lock().expect("Can't lock serial") = Some(serial);
                 //set cursor?
                 let app = data.as_ref().app_state.upgrade().expect("App state gone");
-                proxy.set_cursor(serial, Some(app.cursor_surface.lock().unwrap().as_ref().unwrap()), 0, 0);
+                proxy.set_cursor(serial, Some(&app.active_cursor.lock().unwrap().as_ref().unwrap().cursor_surface), 0, 0);
             }
             wayland_client::protocol::wl_pointer::Event::Motion {
                 surface_x,
