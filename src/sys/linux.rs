@@ -1,14 +1,14 @@
 use std::cell::RefCell;
-use std::ffi::{c_int, c_void};
+use std::ffi::{c_char, c_int, c_void, CString};
 use std::fs::File;
 use std::ops::Sub;
-use std::os::fd::{AsFd, AsRawFd};
+use std::os::fd::{AsFd, AsRawFd, FromRawFd};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 use io_uring::cqueue::Entry;
-use libc::{eventfd, getpid, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE};
+use libc::{eventfd, getpid, memfd_create, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE, MFD_ALLOW_SEALING, MFD_CLOEXEC};
 use memmap2::MmapMut;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
@@ -27,9 +27,11 @@ use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
+use zune_png::zune_core::result::DecodingResult;
 use crate::coordinates::{Position, Size};
 
-const TITLEBAR_HEIGHT: u64 = 15;
+const TITLEBAR_HEIGHT: u64 = 25;
+const BUTTON_WIDTH: u64 = 25;
 
 #[derive(Debug)]
 pub struct FullscreenError;
@@ -90,11 +92,8 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let qh = event_queue.handle();
     let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 6..=6, ()).unwrap();
     let shm: WlShm = globals.bind(&qh, 2..=2, ()).unwrap();
-    let shm_size: i32 = 7680 * 4320 * 4; //8k
-    let (file,mmap) = create_shm_buffer(shm_size);
-    let pool = shm.create_pool(file.as_fd(), shm_size, &qh, ());
 
-    let mut app = App(AppState::new(&qh, compositor, &connection, shm, pool));
+    let mut app = App(AppState::new(&qh, compositor, &connection, shm));
     let main_thread_info = MainThreadInfo{globals, queue_handle: qh, connection, app_state: app.0.clone()};
 
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
@@ -206,19 +205,15 @@ struct WindowInternal {
     xdg_toplevel: Option<XdgToplevel>,
     wl_surface: Option<WlSurface>,
     buffer: WlBuffer,
+    file: File,
+    mmap: MmapMut,
+    requested_maximize: bool,
 }
 impl WindowInternal {
 
     fn new(app_state: &Arc<AppState>, size: Size, queue_handle: &QueueHandle<App>) -> Self {
-        let buffer = app_state.pool.create_buffer(
-            0,
-            size.width() as i32,
-            size.height() as i32,
-            size.width() as i32 * 4,
-            Format::Argb8888,
-            queue_handle,
-            (),
-        );
+        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, &app_state.decor, app_state.decor_dimensions);
+
         WindowInternal{
             app_state: Arc::downgrade(app_state),
             proposed_configure: None,
@@ -227,6 +222,9 @@ impl WindowInternal {
             wl_pointer_pos: None,
             xdg_toplevel: None,
             wl_surface: None,
+            requested_maximize: false,
+            file,
+            mmap,
             buffer,
         }
     }
@@ -236,16 +234,10 @@ impl WindowInternal {
     }
     fn resize_buffer(&mut self, queue_handle: &QueueHandle<App>) {
         let size = self.applied_size();
-        self.buffer.destroy();
-        let buffer = self.app_state.upgrade().unwrap().pool.create_buffer(
-            0,
-            size.width() as i32,
-            size.height() as i32,
-            size.width() as i32 * 4,
-            Format::Argb8888,
-            queue_handle,
-            (),
-        );
+        let app_state = self.app_state.upgrade().unwrap();
+        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, &queue_handle, &app_state.decor, app_state.decor_dimensions);
+        self.file = file;
+        self.mmap = mmap;
         self.buffer = buffer;
     }
 }
@@ -376,18 +368,31 @@ struct AppState {
     //option for lazy-init purposes
     active_cursor: Mutex<Option<ActiveCursor>>,
     seat: Mutex<Option<WlSeat>>,
-    pool: WlShmPool,
+    decor: Vec<u8>,
+    decor_dimensions: (usize, usize),
 
 }
 impl AppState {
-    fn new(queue_handle: &QueueHandle<App>, compositor: WlCompositor, connection: &Connection, shm: WlShm, pool: WlShmPool) -> Arc<Self> {
-        //cursor stuff?
+    fn new(queue_handle: &QueueHandle<App>, compositor: WlCompositor, connection: &Connection, shm: WlShm) -> Arc<Self> {
+        let decor = include_bytes!("../../linux_assets/decor.png");
+        let mut decode_decor = zune_png::PngDecoder::new(decor);
+        let decode = decode_decor.decode().expect("Can't decode decor");
+        let dimensions = decode_decor.get_dimensions().unwrap();
+        let decor;
+        match decode {
+            DecodingResult::U8(d) => {
+                decor = d;
+            }
+            _ => todo!()
+        }
+
         let mut a = Arc::new(AppState{
             compositor: compositor.clone(),
             shm: shm.clone(),
             active_cursor: Mutex::new(None),
             seat: Mutex::new(None),
-            pool,
+            decor,
+            decor_dimensions: dimensions
         });
         let active_cursor = ActiveCursor::new(connection, shm, &a, &compositor, queue_handle);
         a.active_cursor.lock().unwrap().replace(active_cursor);
@@ -396,19 +401,62 @@ impl AppState {
 
 }
 
+
+
 fn create_shm_buffer(
-    size: i32,
-) -> (File, MmapMut) {
-    let file = tempfile::tempfile().unwrap();
-    file.set_len(size as u64).unwrap();
+    width: i32,
+    height: i32,
+    shm: &WlShm,
+    queue_handle: &QueueHandle<App>,
+    decor: &[u8],
+    decor_dimensions: (usize, usize),
+
+) -> (File, MmapMut, WlBuffer) {
+    let file = unsafe{memfd_create(b"mem_fd\0" as *const c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC)};
+    if file < 0 {
+        panic!("Failed to create memfd: {err}", err = unsafe{*libc::__errno_location()});
+    }
+    let file = unsafe{File::from_raw_fd(file)};
+
+    let r = unsafe{libc::ftruncate(file.as_raw_fd(), (width * height * 4) as i64)};
+    if r < 0 {
+        panic!("Failed to truncate memfd: {err}", err = unsafe{*libc::__errno_location()});
+    }
 
     let mut mmap = unsafe{MmapMut::map_mut(&file)}.unwrap();
 
+    let mut x = 0;
+    let mut y = 0;
     for pixel in mmap.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0, 0, 0xFF, 0xFF]); //I guess due to endiannness we are actually BGRA?
-    }
+        if y < decor_dimensions.1 && x > width - decor_dimensions.0 as i32 {
+            let decor_x = x - (width - decor_dimensions.0 as i32);
+            let decor_y = y;
 
-    (file, mmap)
+            let decor_pixel = decor[(decor_y * decor_dimensions.0 + decor_x as usize) * 4..(decor_y * decor_dimensions.0 + decor_x as usize + 1) * 4].to_vec();
+            pixel.copy_from_slice(&decor_pixel);
+        }
+        else {
+            pixel.copy_from_slice(&[0, 0, 0xFF, 0xFF]); //I guess due to endiannness we are actually BGRA?
+        }
+        x+= 1;
+        if x == width {
+            x = 0;
+            y += 1;
+        }
+    }
+    let pool = shm.create_pool(file.as_fd(), width * height * 4, queue_handle, ());
+    let buffer = pool.create_buffer(
+        0,
+        width,
+        height,
+        width * 4,
+        Format::Argb8888,
+        queue_handle,
+        (),
+    );
+
+
+    (file, mmap,buffer)
 }
 
 
@@ -546,12 +594,27 @@ enum MouseRegion {
     Bottom,
     Right,
     Titlebar,
+    CloseButton,
+    MaximizeButton,
+    MinimizeButton,
     Client,
 }
 impl MouseRegion {
     fn from_position(size: Size, position: Position) -> Self {
         const EDGE_REGION: f64 = 10.0;
-        if size.width() - position.x() < EDGE_REGION {
+        if position.y() < TITLEBAR_HEIGHT as f64 && position.x() > size.width() - BUTTON_WIDTH as f64 {
+            MouseRegion::CloseButton
+        }
+        else if position.y() < TITLEBAR_HEIGHT as f64 && position.x() > size.width() - BUTTON_WIDTH as f64 * 2.0 {
+            MouseRegion::MaximizeButton
+        }
+        else if position.y() < TITLEBAR_HEIGHT as f64 && position.x() > size.width() - BUTTON_WIDTH as f64 * 3.0 {
+            MouseRegion::MinimizeButton
+        }
+        else if position.y() < TITLEBAR_HEIGHT as f64 {
+            MouseRegion::Titlebar
+        }
+        else if size.width() - position.x() < EDGE_REGION {
             if size.height() - position.y() < EDGE_REGION {
                 MouseRegion::BottomRight
             }
@@ -561,9 +624,6 @@ impl MouseRegion {
         }
         else if size.height() - position.y() < EDGE_REGION {
             MouseRegion::Bottom
-        }
-        else if position.y() < TITLEBAR_HEIGHT as f64 {
-            MouseRegion::Titlebar
         }
         else {
             MouseRegion::Client
@@ -607,7 +667,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                         let app = data.app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::right_side();
                     }
-                    MouseRegion::Client => {
+                    MouseRegion::Client | MouseRegion::MaximizeButton | MouseRegion::CloseButton | MouseRegion::MinimizeButton => {
                         let app = data.app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::left_ptr();
                     }
@@ -615,6 +675,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                         let app = data.app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::left_ptr();
                     }
+
                 }
                 let app_state = data.app_state.upgrade().unwrap();
                 let lock_a = app_state.active_cursor.lock().unwrap();
@@ -664,6 +725,29 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                                let seat = app_state.seat.lock().unwrap();
                                toplevel._move(seat.as_ref().unwrap(), serial);
                            }
+                           MouseRegion::CloseButton => {
+                               let toplevel = data.xdg_toplevel.as_ref().unwrap();
+
+                               let app_state = data.app_state.upgrade().unwrap();
+                               toplevel.destroy();
+                           }
+                           MouseRegion::MaximizeButton => {
+                               if data.requested_maximize {
+                                   data.requested_maximize = false;
+                                   let toplevel = data.xdg_toplevel.as_ref().unwrap();
+                                   toplevel.unset_maximized();
+                                 }
+                                 else {
+                                      data.requested_maximize = true;
+                                     let toplevel = data.xdg_toplevel.as_ref().unwrap();
+                                     toplevel.set_maximized();
+                               }
+                           }
+                            MouseRegion::MinimizeButton => {
+                                 let toplevel = data.xdg_toplevel.as_ref().unwrap();
+                                 toplevel.set_minimized();
+                            }
+
                        }
                    }
                 }
