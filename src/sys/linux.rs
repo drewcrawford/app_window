@@ -185,6 +185,10 @@ impl WindowInternal {
             wl_pointer_enter_serial: Mutex::new(None),
         }
     }
+    fn applied_size(&self) -> Size {
+        let applied = self.applied_configure.lock().unwrap().clone().expect("No configure event");
+        Size::new(applied.width as f64, applied.height as f64)
+    }
 }
 
 #[derive(Clone)]
@@ -460,6 +464,32 @@ impl Dispatch<WlSeat, ()> for App {
     }
 }
 
+enum MouseRegion {
+    BottomRight,
+    Bottom,
+    Right,
+    Client,
+}
+impl MouseRegion {
+    fn from_position(size: Size, position: Position) -> Self {
+        const EDGE_REGION: f64 = 10.0;
+        if size.width() - position.x() < EDGE_REGION {
+            if size.height() - position.y() < EDGE_REGION {
+                MouseRegion::BottomRight
+            }
+            else {
+                MouseRegion::Right
+            }
+        }
+        else if size.height() - position.y() < EDGE_REGION {
+            MouseRegion::Bottom
+        }
+        else {
+            MouseRegion::Client
+        }
+    }
+}
+
 impl<A: AsRef<WindowInternal>> Dispatch<WlPointer, A> for App {
     fn event(_state: &mut Self, proxy: &WlPointer, event: <WlPointer as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         println!("got WlPointer event {:?}",event);
@@ -480,22 +510,25 @@ impl<A: AsRef<WindowInternal>> Dispatch<WlPointer, A> for App {
 
             } => {
                 //get current size
-                let size = data.as_ref().applied_configure.lock().unwrap().clone().expect("No configure event");
-                const EDGE_REGION: i32 = 10;
+                let size = data.as_ref().applied_size();
                 let cursor_request;
-                if size.width - (surface_x as i32) < EDGE_REGION {
-                    if size.height - (surface_y as i32) < EDGE_REGION {
+                match MouseRegion::from_position(size, Position::new(surface_x as f64, surface_y as f64)) {
+                    MouseRegion::BottomRight => {
+                        let app = data.as_ref().app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::bottom_right_corner();
                     }
-                    else {
+                    MouseRegion::Bottom => {
+                        let app = data.as_ref().app_state.upgrade().expect("App state gone");
+                        cursor_request = CursorRequest::bottom_side();
+                    }
+                    MouseRegion::Right => {
+                        let app = data.as_ref().app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::right_side();
                     }
-                }
-                else if size.height - (surface_y as i32) < EDGE_REGION {
-                    cursor_request = CursorRequest::bottom_side();
-                }
-                else {
-                    cursor_request = CursorRequest::left_ptr();
+                    MouseRegion::Client => {
+                        let app = data.as_ref().app_state.upgrade().expect("App state gone");
+                        cursor_request = CursorRequest::left_ptr();
+                    }
                 }
                 let app_state = data.as_ref().app_state.upgrade().unwrap();
                 let lock_a = app_state.active_cursor.lock().unwrap();
