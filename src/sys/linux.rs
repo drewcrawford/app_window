@@ -4,7 +4,7 @@ use std::fs::File;
 use std::os::fd::{AsFd, AsRawFd};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
 use io_uring::cqueue::Entry;
 use libc::{eventfd, getpid, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE};
@@ -22,6 +22,7 @@ use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_cursor::CursorTheme;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
+use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use crate::coordinates::{Position, Size};
@@ -78,7 +79,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let qh = event_queue.handle();
     let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 6..=6, ()).unwrap();
     let shm: WlShm = globals.bind(&qh, 2..=2, ()).unwrap();
-    let mut app = App(Arc::new(AppState::new(&qh, compositor, &connection, shm)));
+    let mut app = App(AppState::new(&qh, compositor, &connection, shm));
     let main_thread_info = MainThreadInfo{globals, queue_handle: qh, connection, app_state: app.0.clone()};
 
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
@@ -166,6 +167,31 @@ pub struct Window {
 
 }
 
+struct WindowInternal {
+    app_state: Weak<AppState>,
+    proposed_configure: Mutex<Option<Configure>>,
+    applied_configure: Mutex<Option<Configure>>,
+    wl_pointer_enter_serial: Mutex<Option<u32>>,
+}
+impl WindowInternal {
+    fn new(app_state: Weak<AppState>) -> Self {
+        WindowInternal{
+            app_state,
+            proposed_configure: Mutex::new(None),
+            applied_configure: Mutex::new(None),
+            wl_pointer_enter_serial: Mutex::new(None),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Configure {
+    width: i32,
+    height: i32,
+    states: Vec<u8>,
+}
+
+
 unsafe impl Send for Window {}
 unsafe impl Sync for Window {}
 
@@ -174,24 +200,36 @@ struct App(Arc<AppState>);
 struct AppState {
     compositor: WlCompositor,
     shm: WlShm,
-    wl_pointer_enter_serial: Mutex<Option<u32>>,
+    //option for lazy-init purposes
+    cursor_surface: Mutex<Option<WlSurface>>,
+
 }
 impl AppState {
-    fn new(queue_handle: &QueueHandle<App>, compositor: WlCompositor, connection: &Connection, shm: WlShm) -> Self {
+    fn new(queue_handle: &QueueHandle<App>, compositor: WlCompositor, connection: &Connection, shm: WlShm) -> Arc<Self> {
         //cursor stuff?
-        let cursor_surface = compositor.create_surface(queue_handle, ());
+
 
         let mut cursor_theme = CursorTheme::load(&connection, shm.clone(), 32).expect("Can't load cursors");
-        let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
+        cursor_theme.set_fallback(|name, size| {
+            Some(include_bytes!("../../linux_assets/left_ptr").into())
+        });
+        let cursor = cursor_theme.get_cursor("does_not_exist").expect("Can't get cursor");
         let frame_info = cursor.frame_and_duration(0); //todo: time
         let buffer = &cursor[frame_info.frame_index];
-        cursor_surface.attach(Some(buffer), 0, 0);
-        cursor_surface.commit();
-        AppState{
+
+        let mut a = Arc::new(AppState{
             compositor: compositor.clone(),
             shm,
-            wl_pointer_enter_serial: Mutex::new(None),
-        }
+            cursor_surface: Mutex::new(None),
+        });
+        //I guess we fake an internal window here?
+        let window_internal = WindowInternal::new(Arc::downgrade(&a));
+        let cursor_surface = compositor.create_surface(queue_handle, Box::new(window_internal));
+        cursor_surface.attach(Some(buffer), 0, 0);
+        cursor_surface.commit();
+        a.cursor_surface.lock().unwrap().replace(cursor_surface);
+        a
+
     }
 }
 
@@ -264,19 +302,40 @@ impl Dispatch<WlShm, ()> for App {
         println!("Got shm event {:?}",event);
     }
 }
-impl Dispatch<WlSurface, ()> for App {
-    fn event(_state: &mut Self, _proxy: &WlSurface, event: <WlSurface as Proxy>::Event, _data: &(), _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+impl<A: AsRef<WindowInternal>> Dispatch<WlSurface, A> for App {
+    fn event(_state: &mut Self, _proxy: &WlSurface, event: <WlSurface as Proxy>::Event, _data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         println!("got WlSurface event {:?}",event);
     }
 }
-impl Dispatch<XdgSurface, ()> for App {
-    fn event(_state: &mut Self, _proxy: &XdgSurface, event: <XdgSurface as Proxy>::Event, _data: &(), _conn: &Connection, _qhandle: &QueueHandle<Self>) {
-        println!("got XdgSurface event {:?}",event);
+
+impl<A: AsRef<WindowInternal>> Dispatch<XdgSurface, A> for App {
+    fn event(_state: &mut Self, proxy: &XdgSurface, event: <XdgSurface as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+        match event {
+            xdg_surface::Event::Configure { serial } => {
+                let proposed = data.as_ref().proposed_configure.lock().unwrap().take();
+                if let Some(configure) = proposed {
+                    *data.as_ref().applied_configure.lock().unwrap() = Some(configure);
+                    proxy.ack_configure(serial);
+                    //todo: adjust buffer size?
+                }
+            }
+            _ => {
+                println!("got XdgSurface event {:?}",event);
+            }
+        }
     }
 }
-impl Dispatch<XdgToplevel, ()> for App {
-    fn event(_state: &mut Self, _proxy: &XdgToplevel, event: <XdgToplevel as Proxy>::Event, _data: &(), _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+impl<A: AsRef<WindowInternal>> Dispatch<XdgToplevel, A> for App {
+    fn event(_state: &mut Self, _proxy: &XdgToplevel, event: <XdgToplevel as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         println!("got XdgToplevel event {:?}",event);
+        match event {
+            xdg_toplevel::Event::Configure { width, height, states } => {
+                *data.as_ref().proposed_configure.lock().unwrap() = Some(Configure{width, height, states});
+            }
+            _ => {
+                //?
+            }
+        }
 
         // match event {
         //     xdg_toplevel::Event::Configure {  width, height, states: _ } => {
@@ -305,12 +364,30 @@ impl Dispatch<WlSeat, ()> for App {
     }
 }
 
-impl<A: AsRef<AppState>> Dispatch<WlPointer, A> for App {
-    fn event(_state: &mut Self, _proxy: &WlPointer, event: <WlPointer as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+impl<A: AsRef<WindowInternal>> Dispatch<WlPointer, A> for App {
+    fn event(_state: &mut Self, proxy: &WlPointer, event: <WlPointer as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         println!("got WlPointer event {:?}",event);
         match event {
             wayland_client::protocol::wl_pointer::Event::Enter {serial, surface, surface_x, surface_y} => {
                 *data.as_ref().wl_pointer_enter_serial.lock().expect("Can't lock serial") = Some(serial);
+                //set cursor?
+                let app = data.as_ref().app_state.upgrade().expect("App state gone");
+                proxy.set_cursor(serial, Some(app.cursor_surface.lock().unwrap().as_ref().unwrap()), 0, 0);
+            }
+            wayland_client::protocol::wl_pointer::Event::Motion {
+                surface_x,
+                surface_y,
+                time: _,
+
+
+            } => {
+                //get current size
+                let size = data.as_ref().applied_configure.lock().unwrap().clone().expect("No configure event");
+                const EDGE_REGION: i32 = 10;
+                if size.width - (surface_x as i32) < EDGE_REGION {
+                    todo!();
+                }
+
             }
             _ => {
                 //?
@@ -325,11 +402,13 @@ impl Window {
         crate::application::on_main_thread(move || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
-            let surface = info.app_state.compositor.create_surface(&info.queue_handle, ());
+            let window_internal = Arc::new(WindowInternal::new(Arc::downgrade(&info.app_state)));
+
+            let surface = info.app_state.compositor.create_surface(&info.queue_handle, window_internal.clone());
 
             // Create a toplevel surface
-            let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, ());
-            let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, ());
+            let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, window_internal.clone());
+            let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, window_internal.clone());
 
             let (file, mmap) = create_shm_buffer(&info.app_state.shm, size.width() as u32, size.height() as u32);
             let pool = info.app_state.shm.create_pool(file.as_fd(), mmap.len() as i32, &info.queue_handle, ());
@@ -348,7 +427,7 @@ impl Window {
 
 
             let seat: WlSeat = info.globals.bind(&info.queue_handle, 8..=9, ()).expect("Can't bind seat");
-            let pointer = seat.get_pointer(&info.queue_handle, info.app_state.clone());
+            let pointer = seat.get_pointer(&info.queue_handle, window_internal);
             // let _keyboard = seat.get_keyboard(&qh, surface.id());
 
             MAIN_THREAD_INFO.replace(Some(info));
