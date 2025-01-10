@@ -29,6 +29,8 @@ use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use crate::coordinates::{Position, Size};
 
+const TITLEBAR_HEIGHT: u64 = 15;
+
 #[derive(Debug)]
 pub struct FullscreenError;
 
@@ -285,7 +287,7 @@ impl CursorRequest {
         CursorRequest { name: "bottom_side", hot_x: 0, hot_y: CURSOR_SIZE/2}
     }
     fn left_ptr() -> Self {
-        CursorRequest { name: "left_ptr", hot_x: CURSOR_SIZE/2, hot_y: CURSOR_SIZE/2}
+        CursorRequest { name: "left_ptr", hot_x: CURSOR_SIZE/8, hot_y: CURSOR_SIZE/8}
     }
     fn bottom_right_corner() -> Self {
         CursorRequest { name: "bottom_right_corner", hot_x: CURSOR_SIZE/2, hot_y: CURSOR_SIZE/2}
@@ -543,6 +545,7 @@ enum MouseRegion {
     BottomRight,
     Bottom,
     Right,
+    Titlebar,
     Client,
 }
 impl MouseRegion {
@@ -558,6 +561,9 @@ impl MouseRegion {
         }
         else if size.height() - position.y() < EDGE_REGION {
             MouseRegion::Bottom
+        }
+        else if position.y() < TITLEBAR_HEIGHT as f64 {
+            MouseRegion::Titlebar
         }
         else {
             MouseRegion::Client
@@ -605,6 +611,10 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                         let app = data.app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::left_ptr();
                     }
+                    MouseRegion::Titlebar => {
+                        let app = data.app_state.upgrade().expect("App state gone");
+                        cursor_request = CursorRequest::left_ptr();
+                    }
                 }
                 let app_state = data.app_state.upgrade().unwrap();
                 let lock_a = app_state.active_cursor.lock().unwrap();
@@ -645,8 +655,14 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                                 let seat = app_state.seat.lock().unwrap();
                                 toplevel.resize(seat.as_ref().unwrap(), serial, xdg_toplevel::ResizeEdge::Right);
                             }
-                           _ => {
-                               //?
+                           MouseRegion::Client => {
+
+                           }
+                           MouseRegion::Titlebar => {
+                               let toplevel = data.xdg_toplevel.as_ref().unwrap();
+                               let app_state = data.app_state.upgrade().unwrap();
+                               let seat = app_state.seat.lock().unwrap();
+                               toplevel._move(seat.as_ref().unwrap(), serial);
                            }
                        }
                    }
