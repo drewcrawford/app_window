@@ -87,7 +87,11 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let qh = event_queue.handle();
     let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 6..=6, ()).unwrap();
     let shm: WlShm = globals.bind(&qh, 2..=2, ()).unwrap();
-    let mut app = App(AppState::new(&qh, compositor, &connection, shm));
+    let shm_size: i32 = 7680 * 4320 * 4; //8k
+    let (file,mmap) = create_shm_buffer(shm_size);
+    let pool = shm.create_pool(file.as_fd(), shm_size, &qh, ());
+
+    let mut app = App(AppState::new(&qh, compositor, &connection, shm, pool));
     let main_thread_info = MainThreadInfo{globals, queue_handle: qh, connection, app_state: app.0.clone()};
 
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
@@ -178,20 +182,18 @@ struct WindowInternal {
     wl_pointer_pos: Option<Position>,
     xdg_toplevel: Option<XdgToplevel>,
     wl_surface: Option<WlSurface>,
-    buf_file: File,
     buffer: WlBuffer,
 }
 impl WindowInternal {
+
     fn new(app_state: &Arc<AppState>, size: Size, queue_handle: &QueueHandle<App>) -> Self {
-        let (buf_file, mmap) = create_shm_buffer(&app_state.shm, size.width() as u32, size.height() as u32);
-        let pool = app_state.shm.create_pool(buf_file.as_fd(), mmap.len() as i32, queue_handle, ());
-        let buffer = pool.create_buffer(
+        let buffer = app_state.pool.create_buffer(
             0,
             size.width() as i32,
             size.height() as i32,
             size.width() as i32 * 4,
             Format::Argb8888,
-            &queue_handle,
+            queue_handle,
             (),
         );
         WindowInternal{
@@ -202,13 +204,26 @@ impl WindowInternal {
             wl_pointer_pos: None,
             xdg_toplevel: None,
             wl_surface: None,
-            buf_file,
             buffer,
         }
     }
     fn applied_size(&self) -> Size {
         let applied = self.applied_configure.clone().expect("No configure event");
         Size::new(applied.width as f64, applied.height as f64)
+    }
+    fn resize_buffer(&mut self, queue_handle: &QueueHandle<App>) {
+        let size = self.applied_size();
+        self.buffer.destroy();
+        let buffer = self.app_state.upgrade().unwrap().pool.create_buffer(
+            0,
+            size.width() as i32,
+            size.height() as i32,
+            size.width() as i32 * 4,
+            Format::Argb8888,
+            queue_handle,
+            (),
+        );
+        self.buffer = buffer;
     }
 }
 
@@ -338,16 +353,18 @@ struct AppState {
     //option for lazy-init purposes
     active_cursor: Mutex<Option<ActiveCursor>>,
     seat: Mutex<Option<WlSeat>>,
+    pool: WlShmPool,
 
 }
 impl AppState {
-    fn new(queue_handle: &QueueHandle<App>, compositor: WlCompositor, connection: &Connection, shm: WlShm) -> Arc<Self> {
+    fn new(queue_handle: &QueueHandle<App>, compositor: WlCompositor, connection: &Connection, shm: WlShm, pool: WlShmPool) -> Arc<Self> {
         //cursor stuff?
         let mut a = Arc::new(AppState{
             compositor: compositor.clone(),
             shm: shm.clone(),
             active_cursor: Mutex::new(None),
             seat: Mutex::new(None),
+            pool,
         });
         let active_cursor = ActiveCursor::new(connection, shm, &a, &compositor, queue_handle);
         a.active_cursor.lock().unwrap().replace(active_cursor);
@@ -357,12 +374,8 @@ impl AppState {
 }
 
 fn create_shm_buffer(
-    _shm: &wl_shm::WlShm,
-    width: u32,
-    height: u32,
+    size: i32,
 ) -> (File, MmapMut) {
-    let stride = width * 4;
-    let size = stride * height;
     let file = tempfile::tempfile().unwrap();
     file.set_len(size as u64).unwrap();
 
@@ -445,21 +458,17 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<XdgSurface, A> for App {
                         configure.width = 800;
                         configure.height = 600;
                     }
-                    let (file,mmap) = create_shm_buffer(&app_state.shm, configure.width as u32, configure.height as u32);
-                    let pool = app_state.shm.create_pool(file.as_fd(), mmap.len() as i32, qh, ());
-                    let buffer = pool.create_buffer(
-                        0,
-                        configure.width,
-                        configure.height,
-                        configure.width * 4,
-                        Format::Argb8888,
-                        &qh,
-                        (),
-                    );
-                    let surface = data.wl_surface.as_ref().unwrap();
-                    surface.attach(Some(&buffer), 0, 0);
-                    surface.commit();
-                    data.applied_configure = Some(configure);
+                    //check size
+                    if data.applied_configure.as_ref().map(|c| c.width != configure.width || c.height != configure.height).unwrap_or(true) {
+                        data.applied_configure = Some(configure);
+
+                        data.resize_buffer(qh);
+                        let surface = data.wl_surface.as_ref().unwrap();
+                        surface.attach(Some(&data.buffer), 0, 0);
+                        surface.commit();
+                    }
+
+
 
                     //todo: adjust buffer size?
                 }
