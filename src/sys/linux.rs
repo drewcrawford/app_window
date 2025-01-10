@@ -31,15 +31,20 @@ use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
+use zbus::zvariant::ObjectPath;
 use zune_png::zune_core::result::DecodingResult;
 use crate::coordinates::{Position, Size};
 use crate::executor::already_on_main_thread_submit;
 
 mod ax {
+    use std::collections::HashMap;
     use std::sync::Mutex;
-    use atspi::{InterfaceSet, Role, StateSet};
+    use atspi::{InterfaceSet, ObjectRef, Role, StateSet};
     use zbus::fdo;
     use zbus::interface;
+    use zbus::names::{OwnedUniqueName, UniqueName};
+    use zbus::zvariant::{ObjectPath, OwnedObjectPath};
+    use crate::sys::linux::TEST_PATH;
 
     pub struct ApplicationInterface {
         inner: Mutex<i32>,
@@ -69,6 +74,11 @@ mod ax {
         }
 
         #[zbus(property)]
+        fn root(&self) -> fdo::Result<String> {
+            todo!()
+        }
+
+        #[zbus(property)]
         fn id(&self) -> fdo::Result<i32> {
             Ok(
                 *self.inner.lock().unwrap()
@@ -84,75 +94,150 @@ mod ax {
         }
     }
     pub struct RootAX {
-
+        unique_name: OwnedUniqueName,
     }
     impl RootAX {
-        pub fn new() -> Self {
+        pub fn new(unique_name: OwnedUniqueName) -> Self {
             RootAX {
-
+                unique_name
             }
         }
     }
     #[interface(name = "org.a11y.atspi.Accessible")]
     impl RootAX {
         #[zbus(property)]
+        fn name(&self) -> String {
+            "app_window".to_string()
+        }
+        fn get_state(&self) -> StateSet {
+            StateSet::empty()
+        }
+
+        #[zbus(property)]
+        fn child_count(&self) -> i32 {
+            1 // ??
+        }
+
+        fn get_child_at_index(&self, index: i32) -> fdo::Result<(ObjectRef,)> {
+            if index == 0 {
+                Ok((atspi::ObjectRef {
+                    name: self.unique_name.clone(),
+                    path: ObjectPath::from_static_str(TEST_PATH).unwrap().into(),
+                },))
+            }
+            else {
+                panic!("Invalid index");
+            }
+        }
+
+        fn get_children(&self) -> Vec<atspi::ObjectRef> {
+            todo!()
+        }
+
+
+        fn get_role(&self) -> Role {
+            Role::Application
+        }
+
+
+
+
+    }
+
+    pub struct ButtonAX {
+
+    }
+    #[interface(name = "org.a11y.atspi.Accessible")]
+    impl ButtonAX {
+        #[zbus(property)]
         fn name(&self) -> fdo::Result<String> {
             todo!()
         }
 
         #[zbus(property)]
-        fn description(&self) -> &str {
+        fn description(&self) -> fdo::Result<String> {
             todo!()
+
         }
 
         #[zbus(property)]
-        fn parent(&self) -> String {
+        fn parent(&self) -> fdo::Result<OwnedObjectPath> {
             todo!()
+
         }
 
         #[zbus(property)]
         fn child_count(&self) -> fdo::Result<i32> {
             todo!()
+
         }
 
         #[zbus(property)]
         fn locale(&self) -> &str {
             todo!()
+
         }
 
         #[zbus(property)]
-        fn accessible_id(&self) -> &str {
+        fn accessible_id(&self) -> fdo::Result<String> {
             todo!()
+
         }
 
-        fn get_child_at_index(&self, index: i32) -> fdo::Result<(String,)> {
+        fn get_child_at_index(&self, index: i32) -> fdo::Result<(OwnedObjectPath,)> {
             todo!()
+
         }
 
-        fn get_children(&self) -> fdo::Result<Vec<u8>> {
+        fn get_children(&self) -> fdo::Result<Vec<OwnedObjectPath>> {
             todo!()
+
         }
 
-        fn get_index_in_parent(&self) -> i32 {
-            -1
+        fn get_index_in_parent(&self) -> fdo::Result<i32> {
+            todo!()
+
         }
 
-        fn get_role(&self) -> Role {
+        fn get_role(&self) -> fdo::Result<Role> {
             todo!()
+
+        }
+
+        fn get_localized_role_name(&self) -> fdo::Result<String> {
+            todo!()
+
         }
 
         fn get_state(&self) -> StateSet {
             todo!()
+
         }
 
-        fn get_application(&self) -> (String,) {
+        fn get_attributes(&self) -> fdo::Result<HashMap<&str, String>> {
             todo!()
+
         }
 
-        fn get_interfaces(&self) -> InterfaceSet {
+        fn get_application(&self) -> (OwnedObjectPath,) {
             todo!()
+
+        }
+
+        fn get_interfaces(&self) -> fdo::Result<InterfaceSet> {
+            todo!()
+
+        }
+
+
+    }
+
+    impl ButtonAX {
+        pub fn new() -> Self {
+            Self {}
         }
     }
+
 }
 
 const TITLEBAR_HEIGHT: u64 = 25;
@@ -204,6 +289,7 @@ thread_local! {
 }
 
 const ROOT_PATH: &str = "/org/a11y/atspi/accessible/root";
+const TEST_PATH: &str = "/org/a11y/atspi/accessible/0/0";
 
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let (sender, receiver) = channel();
@@ -245,10 +331,16 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
         let socket = SocketProxy::new(&connection.connection()).await.expect("Failed to create socket proxy");
         let unique_name = connection.connection().unique_name().expect("Failed to get unique name");
         let object_path = zbus::zvariant::ObjectPath::from_static_str(ROOT_PATH).unwrap();
+        let button_ax = ax::ButtonAX::new();
+        connection.connection().object_server().at(TEST_PATH, button_ax).await.expect("Failed to create object");
         let proposed_root = socket.embed(&(unique_name, object_path.clone())).await.expect("Failed to embed socket");
-        let root_ax = ax::RootAX::new();
-        connection.connection().object_server().at(object_path, root_ax).await.expect("Failed to create object");
-        connection.connection().executor().tick().await;
+        let root_ax = ax::RootAX::new(unique_name.clone().into());
+        connection.connection().object_server().at(ObjectPath::from_static_str(ROOT_PATH).unwrap(), root_ax).await.expect("Failed to create object");
+        println!("proposed_root: {:?}", proposed_root);
+        println!("unique_name: {:?}", unique_name);
+        loop {
+            connection.connection().executor().tick().await;
+        }
         // connection.register_event::<ObjectEvents>().await.expect("failed to register event");
         // let mut stream = connection.event_stream();
         // use futures_lite::stream::StreamExt;;
@@ -280,7 +372,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     drop(sqs);
     //park
     loop {
-        println!("will submit_and_wait...");
+        // println!("will submit_and_wait...");
         io_uring.submit_and_wait(1).expect("Can't submit and wait");
         let mut entries = Vec::new();
         for entry in io_uring.completion() {
@@ -351,7 +443,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
 }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
-    println!("sending on_main_thread...");
+    // println!("sending on_main_thread...");
     MAIN_THREAD_SENDER.get().expect("Main thread sender not set").send(Box::new(closure));
 }
 
@@ -483,7 +575,7 @@ impl ActiveCursor {
                     let cursor = binding.get_cursor(&mt_active_request.lock().unwrap().name).expect("Can't get cursor");
                     let present_time = start_time.elapsed();
                     let frame_info = cursor.frame_and_duration(present_time.as_millis() as u32);
-                    println!("frame_info: {:?}", frame_info);
+                    // println!("frame_info: {:?}", frame_info);
                     let buffer = &cursor[frame_info.frame_index];
                     move_cursor_surface.attach(Some(buffer), 0, 0);
                     move_cursor_surface.damage_buffer(0, 0, buffer.dimensions().0 as i32, buffer.dimensions().1 as i32);
@@ -493,7 +585,7 @@ impl ActiveCursor {
                 });
                 let next_present_time = receiver.recv().expect("Can't receive next present time");
                 let sleep_time = next_present_time.saturating_sub(start_time.elapsed());
-                println!("sleep_time {:?}", sleep_time);
+                // println!("sleep_time {:?}", sleep_time);
                 match cursor_request_receiver.recv_timeout(sleep_time) {
                     Ok(request) => {
                         *move_active_request.lock().unwrap() = request;
