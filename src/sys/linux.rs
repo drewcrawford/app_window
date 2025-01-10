@@ -202,11 +202,37 @@ struct App(Arc<AppState>);
 
 struct ActiveCursor {
     cursor_surface: Arc<WlSurface>,
-    cursor_sender: Sender<String>,
+    cursor_sender: Sender<CursorRequest>,
+    active_request: Arc<Mutex<CursorRequest>>,
+}
+
+const CURSOR_SIZE: i32 = 16;
+#[derive(Clone,PartialEq)]
+struct CursorRequest {
+    name: &'static str,
+    hot_x: i32,
+    hot_y: i32,
+}
+impl CursorRequest {
+    fn wait() -> Self {
+        CursorRequest { name: "wait", hot_x: 0, hot_y: 0}
+    }
+    fn right_side() -> Self {
+        CursorRequest { name: "right_side", hot_x: CURSOR_SIZE/2, hot_y: 0}
+    }
+    fn bottom_side() -> Self {
+        CursorRequest { name: "bottom_side", hot_x: 0, hot_y: CURSOR_SIZE/2}
+    }
+    fn left_ptr() -> Self {
+        CursorRequest { name: "left_ptr", hot_x: CURSOR_SIZE/2, hot_y: CURSOR_SIZE/2}
+    }
+    fn bottom_right_corner() -> Self {
+        CursorRequest { name: "bottom_right_corner", hot_x: CURSOR_SIZE/2, hot_y: CURSOR_SIZE/2}
+    }
 }
 impl ActiveCursor {
     fn new(connection: &Connection, shm: WlShm, a: Weak<AppState>, compositor: &WlCompositor, queue_handle: &QueueHandle<App>) -> Self {
-        let mut cursor_theme = CursorTheme::load(&connection, shm, 32).expect("Can't load cursors");
+        let mut cursor_theme = CursorTheme::load(&connection, shm, CURSOR_SIZE as u32).expect("Can't load cursors");
         cursor_theme.set_fallback(|name, size| {
             Some(include_bytes!("../../linux_assets/left_ptr").into())
         });
@@ -224,18 +250,19 @@ impl ActiveCursor {
         let move_cursor_surface = cursor_surface.clone();
         let move_cursor_theme = Arc::new(Mutex::new(cursor_theme));
         let (cursor_request_sender, cursor_request_receiver) = std::sync::mpsc::channel();
+        let active_request = Arc::new(Mutex::new(CursorRequest::wait()));
+        let move_active_request = active_request.clone();
 
         std::thread::spawn(move || {
-            let mut cursor_request = "wait".to_string();
             loop {
                 let move_cursor_theme = move_cursor_theme.clone();
                 let move_cursor_surface = move_cursor_surface.clone();
-                let move_cursor_request = cursor_request.clone();
+                let mt_active_request = move_active_request.clone();
                 let (sender,receiver) = std::sync::mpsc::channel();
 
                 on_main_thread(move || {
                     let mut binding = move_cursor_theme.lock().unwrap();
-                    let cursor = binding.get_cursor(&move_cursor_request).expect("Can't get cursor");
+                    let cursor = binding.get_cursor(&mt_active_request.lock().unwrap().name).expect("Can't get cursor");
                     let present_time = start_time.elapsed();
                     let frame_info = cursor.frame_and_duration(present_time.as_millis() as u32);
                     println!("frame_info: {:?}", frame_info);
@@ -251,7 +278,8 @@ impl ActiveCursor {
                 println!("sleep_time {:?}", sleep_time);
                 match cursor_request_receiver.recv_timeout(sleep_time) {
                     Ok(request) => {
-                        cursor_request = request;
+                        *move_active_request.lock().unwrap() = request;
+
                     }
                     Err(e) => {
                         match e {
@@ -270,10 +298,11 @@ impl ActiveCursor {
         });
         ActiveCursor {
             cursor_surface,
-            cursor_sender: cursor_request_sender
+            cursor_sender: cursor_request_sender,
+            active_request,
         }
     }
-    fn cursor_request(&self, request: String) {
+    fn cursor_request(&self, request: CursorRequest) {
         self.cursor_sender.send(request).expect("Can't send cursor request");
     }
 }
@@ -439,7 +468,9 @@ impl<A: AsRef<WindowInternal>> Dispatch<WlPointer, A> for App {
                 *data.as_ref().wl_pointer_enter_serial.lock().expect("Can't lock serial") = Some(serial);
                 //set cursor?
                 let app = data.as_ref().app_state.upgrade().expect("App state gone");
-                proxy.set_cursor(serial, Some(&app.active_cursor.lock().unwrap().as_ref().unwrap().cursor_surface), 0, 0);
+                let cursor_request = app.active_cursor.lock().unwrap().as_ref().unwrap().active_request.lock().unwrap().clone();
+
+                proxy.set_cursor(serial, Some(&app.active_cursor.lock().unwrap().as_ref().unwrap().cursor_surface), cursor_request.hot_x, cursor_request.hot_y);
             }
             wayland_client::protocol::wl_pointer::Event::Motion {
                 surface_x,
@@ -454,19 +485,27 @@ impl<A: AsRef<WindowInternal>> Dispatch<WlPointer, A> for App {
                 let cursor_request;
                 if size.width - (surface_x as i32) < EDGE_REGION {
                     if size.height - (surface_y as i32) < EDGE_REGION {
-                        cursor_request = "bottom_right_corner".to_string();
+                        cursor_request = CursorRequest::bottom_right_corner();
                     }
                     else {
-                        cursor_request = "right_side".to_string();
+                        cursor_request = CursorRequest::right_side();
                     }
                 }
                 else if size.height - (surface_y as i32) < EDGE_REGION {
-                    cursor_request = "bottom_side".to_string();
+                    cursor_request = CursorRequest::bottom_side();
                 }
                 else {
-                    cursor_request = "left_ptr".to_string();
+                    cursor_request = CursorRequest::left_ptr();
                 }
-                data.as_ref().app_state.upgrade().unwrap().active_cursor.lock().unwrap().as_ref().unwrap().cursor_request(cursor_request);
+                let app_state = data.as_ref().app_state.upgrade().unwrap();
+                let lock_a = app_state.active_cursor.lock().unwrap();
+                let active_cursor = lock_a.as_ref().expect("No active cursor");
+                let active_request = active_cursor.active_request.lock().unwrap();
+                let changed = *active_request != cursor_request;
+                if changed {
+                    proxy.set_cursor(data.as_ref().wl_pointer_enter_serial.lock().unwrap().expect("No serial"), Some(&active_cursor.cursor_surface), cursor_request.hot_x, cursor_request.hot_y);
+                    active_cursor.cursor_request(cursor_request);
+                }
 
             }
             _ => {
