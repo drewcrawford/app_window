@@ -178,17 +178,32 @@ struct WindowInternal {
     wl_pointer_pos: Option<Position>,
     xdg_toplevel: Option<XdgToplevel>,
     wl_surface: Option<WlSurface>,
+    buf_file: File,
+    buffer: WlBuffer,
 }
 impl WindowInternal {
-    fn new(app_state: Weak<AppState>) -> Self {
+    fn new(app_state: &Arc<AppState>, size: Size, queue_handle: &QueueHandle<App>) -> Self {
+        let (buf_file, mmap) = create_shm_buffer(&app_state.shm, size.width() as u32, size.height() as u32);
+        let pool = app_state.shm.create_pool(buf_file.as_fd(), mmap.len() as i32, queue_handle, ());
+        let buffer = pool.create_buffer(
+            0,
+            size.width() as i32,
+            size.height() as i32,
+            size.width() as i32 * 4,
+            Format::Argb8888,
+            &queue_handle,
+            (),
+        );
         WindowInternal{
-            app_state,
+            app_state: Arc::downgrade(app_state),
             proposed_configure: None,
             applied_configure: None,
             wl_pointer_enter_serial: None,
             wl_pointer_pos: None,
             xdg_toplevel: None,
             wl_surface: None,
+            buf_file,
+            buffer,
         }
     }
     fn applied_size(&self) -> Size {
@@ -241,7 +256,7 @@ impl CursorRequest {
     }
 }
 impl ActiveCursor {
-    fn new(connection: &Connection, shm: WlShm, a: Weak<AppState>, compositor: &WlCompositor, queue_handle: &QueueHandle<App>) -> Self {
+    fn new(connection: &Connection, shm: WlShm, a: &Arc<AppState>, compositor: &WlCompositor, queue_handle: &QueueHandle<App>) -> Self {
         let mut cursor_theme = CursorTheme::load(&connection, shm, CURSOR_SIZE as u32).expect("Can't load cursors");
         cursor_theme.set_fallback(|name, size| {
             Some(include_bytes!("../../linux_assets/left_ptr").into())
@@ -249,7 +264,7 @@ impl ActiveCursor {
         let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
         let start_time = std::time::Instant::now();
         //I guess we fake an internal window here?
-        let window_internal = WindowInternal::new(a);
+        let window_internal = WindowInternal::new(a, Size::new(CURSOR_SIZE as f64, CURSOR_SIZE as f64), queue_handle);
         let cursor_surface = compositor.create_surface(queue_handle, Box::new(Mutex::new(window_internal)));
         let start_time = std::time::Instant::now();
         let frame_info = cursor.frame_and_duration(start_time.elapsed().as_millis() as u32);
@@ -334,7 +349,7 @@ impl AppState {
             active_cursor: Mutex::new(None),
             seat: Mutex::new(None),
         });
-        let active_cursor = ActiveCursor::new(connection, shm, Arc::downgrade(&a), &compositor, queue_handle);
+        let active_cursor = ActiveCursor::new(connection, shm, &a, &compositor, queue_handle);
         a.active_cursor.lock().unwrap().replace(active_cursor);
         a
     }
@@ -605,9 +620,6 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                            }
                        }
                    }
-                    else {
-                        todo!()
-                    }
                 }
 
 
@@ -626,7 +638,7 @@ impl Window {
         crate::application::on_main_thread(move || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
-            let window_internal = Arc::new(Mutex::new(WindowInternal::new(Arc::downgrade(&info.app_state))));
+            let window_internal = Arc::new(Mutex::new(WindowInternal::new(&info.app_state, size, &info.queue_handle)));
 
             let surface = info.app_state.compositor.create_surface(&info.queue_handle, window_internal.clone());
             window_internal.lock().unwrap().wl_surface.replace(surface.clone());
@@ -635,18 +647,8 @@ impl Window {
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, window_internal.clone());
             window_internal.lock().unwrap().xdg_toplevel.replace(xdg_toplevel);
 
-            let (file, mmap) = create_shm_buffer(&info.app_state.shm, size.width() as u32, size.height() as u32);
-            let pool = info.app_state.shm.create_pool(file.as_fd(), mmap.len() as i32, &info.queue_handle, ());
-            let buffer = pool.create_buffer(
-                0,
-                size.width() as i32,
-                size.height() as i32,
-                size.width() as i32 * 4,
-                Format::Argb8888,
-                &info.queue_handle,
-                (),
-            );
-            surface.attach(Some(&buffer), 0, 0);
+
+            surface.attach(Some(&window_internal.lock().unwrap().buffer), 0, 0);
             surface.commit();
 
 
