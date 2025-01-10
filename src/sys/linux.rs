@@ -74,6 +74,13 @@ thread_local! {
 }
 
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
+    let (sender, receiver) = channel();
+    let channel_read_event = unsafe{eventfd(0, EFD_SEMAPHORE)};
+    assert_ne!(channel_read_event, -1, "Failed to create eventfd");
+    MAIN_THREAD_SENDER.get_or_init(|| {
+        MainThreadSender{sender, eventfd: channel_read_event}
+    });
+
     let connection = Connection::connect_to_env().expect("Failed to connect to wayland server");
     let display = connection.display();
     let (globals, mut event_queue) = registry_queue_init::<App>(&connection).expect("Can't initialize registry");
@@ -85,13 +92,8 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
 
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
-    let channel_read_event = unsafe{eventfd(0, EFD_SEMAPHORE)};
-    assert_ne!(channel_read_event, -1, "Failed to create eventfd");
-    let (sender, receiver) = channel();
 
-    MAIN_THREAD_SENDER.get_or_init(|| {
-        MainThreadSender{sender, eventfd: channel_read_event}
-    });
+
     closure();
     event_queue.flush().expect("Failed to flush event queue");
     let mut read_guard = event_queue.prepare_read().expect("Failed to prepare read");
@@ -200,6 +202,7 @@ struct App(Arc<AppState>);
 
 struct ActiveCursor {
     cursor_surface: Arc<WlSurface>,
+    cursor_sender: Sender<String>,
 }
 impl ActiveCursor {
     fn new(connection: &Connection, shm: WlShm, a: Weak<AppState>, compositor: &WlCompositor, queue_handle: &QueueHandle<App>) -> Self {
@@ -220,18 +223,22 @@ impl ActiveCursor {
         let cursor_surface = Arc::new(cursor_surface);
         let move_cursor_surface = cursor_surface.clone();
         let move_cursor_theme = Arc::new(Mutex::new(cursor_theme));
+        let (cursor_request_sender, cursor_request_receiver) = std::sync::mpsc::channel();
+
         std::thread::spawn(move || {
+            let mut cursor_request = "wait".to_string();
             loop {
                 let move_cursor_theme = move_cursor_theme.clone();
                 let move_cursor_surface = move_cursor_surface.clone();
+                let move_cursor_request = cursor_request.clone();
                 let (sender,receiver) = std::sync::mpsc::channel();
+
                 on_main_thread(move || {
                     let mut binding = move_cursor_theme.lock().unwrap();
-                    let cursor = binding.get_cursor("wait").expect("Can't get cursor");
+                    let cursor = binding.get_cursor(&move_cursor_request).expect("Can't get cursor");
                     let present_time = start_time.elapsed();
-
                     let frame_info = cursor.frame_and_duration(present_time.as_millis() as u32);
-                    println!("drawing frame {}", frame_info.frame_index);
+                    println!("frame_info: {:?}", frame_info);
                     let buffer = &cursor[frame_info.frame_index];
                     move_cursor_surface.attach(Some(buffer), 0, 0);
                     move_cursor_surface.damage_buffer(0, 0, buffer.dimensions().0 as i32, buffer.dimensions().1 as i32);
@@ -240,17 +247,34 @@ impl ActiveCursor {
                     sender.send(next_present_time).expect("Can't send next present time");
                 });
                 let next_present_time = receiver.recv().expect("Can't receive next present time");
-                println!("next_present_time: {:?} start_time {:?} start_time_elased {:?}", next_present_time,start_time, start_time.elapsed());
                 let sleep_time = next_present_time.saturating_sub(start_time.elapsed());
-
-                std::thread::sleep(sleep_time);
+                println!("sleep_time {:?}", sleep_time);
+                match cursor_request_receiver.recv_timeout(sleep_time) {
+                    Ok(request) => {
+                        cursor_request = request;
+                    }
+                    Err(e) => {
+                        match e {
+                            std::sync::mpsc::RecvTimeoutError::Timeout => {
+                                //continue
+                            }
+                            std::sync::mpsc::RecvTimeoutError::Disconnected => {
+                                panic!("Cursor request channel disconnected");
+                            }
+                        }
+                    }
+                }
 
 
             }
         });
         ActiveCursor {
             cursor_surface,
+            cursor_sender: cursor_request_sender
         }
+    }
+    fn cursor_request(&self, request: String) {
+        self.cursor_sender.send(request).expect("Can't send cursor request");
     }
 }
 
@@ -427,9 +451,22 @@ impl<A: AsRef<WindowInternal>> Dispatch<WlPointer, A> for App {
                 //get current size
                 let size = data.as_ref().applied_configure.lock().unwrap().clone().expect("No configure event");
                 const EDGE_REGION: i32 = 10;
+                let cursor_request;
                 if size.width - (surface_x as i32) < EDGE_REGION {
-                    todo!();
+                    if size.height - (surface_y as i32) < EDGE_REGION {
+                        cursor_request = "bottom_right_corner".to_string();
+                    }
+                    else {
+                        cursor_request = "right_side".to_string();
+                    }
                 }
+                else if size.height - (surface_y as i32) < EDGE_REGION {
+                    cursor_request = "bottom_side".to_string();
+                }
+                else {
+                    cursor_request = "left_ptr".to_string();
+                }
+                data.as_ref().app_state.upgrade().unwrap().active_cursor.lock().unwrap().as_ref().unwrap().cursor_request(cursor_request);
 
             }
             _ => {
