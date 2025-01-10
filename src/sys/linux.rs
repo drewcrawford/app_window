@@ -176,7 +176,8 @@ struct WindowInternal {
     applied_configure: Option<Configure>,
     wl_pointer_enter_serial: Option<u32>,
     wl_pointer_pos: Option<Position>,
-    active_drag_op: Option<MouseRegion>,
+    xdg_toplevel: Option<XdgToplevel>,
+    wl_surface: Option<WlSurface>,
 }
 impl WindowInternal {
     fn new(app_state: Weak<AppState>) -> Self {
@@ -186,7 +187,8 @@ impl WindowInternal {
             applied_configure: None,
             wl_pointer_enter_serial: None,
             wl_pointer_pos: None,
-            active_drag_op: None,
+            xdg_toplevel: None,
+            wl_surface: None,
         }
     }
     fn applied_size(&self) -> Size {
@@ -320,6 +322,7 @@ struct AppState {
     shm: WlShm,
     //option for lazy-init purposes
     active_cursor: Mutex<Option<ActiveCursor>>,
+    seat: Mutex<Option<WlSeat>>,
 
 }
 impl AppState {
@@ -329,6 +332,7 @@ impl AppState {
             compositor: compositor.clone(),
             shm: shm.clone(),
             active_cursor: Mutex::new(None),
+            seat: Mutex::new(None),
         });
         let active_cursor = ActiveCursor::new(connection, shm, Arc::downgrade(&a), &compositor, queue_handle);
         a.active_cursor.lock().unwrap().replace(active_cursor);
@@ -413,13 +417,35 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlSurface, A> for App {
 }
 
 impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<XdgSurface, A> for App {
-    fn event(_state: &mut Self, proxy: &XdgSurface, event: <XdgSurface as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+    fn event(_state: &mut Self, proxy: &XdgSurface, event: <XdgSurface as Proxy>::Event, data: &A, _conn: &Connection, qh: &QueueHandle<Self>) {
+        let mut data = data.as_ref().lock().unwrap();
         match event {
             xdg_surface::Event::Configure { serial } => {
-                let proposed = data.as_ref().lock().unwrap().proposed_configure.take();
-                if let Some(configure) = proposed {
-                    data.as_ref().lock().unwrap().applied_configure = Some(configure);
+                let proposed = data.proposed_configure.take();
+                if let Some(mut configure) = proposed {
                     proxy.ack_configure(serial);
+                    let app_state = data.app_state.upgrade().unwrap();
+                    if configure.width == 0 && configure.height == 0 {
+                        //pick our own size
+                        configure.width = 800;
+                        configure.height = 600;
+                    }
+                    let (file,mmap) = create_shm_buffer(&app_state.shm, configure.width as u32, configure.height as u32);
+                    let pool = app_state.shm.create_pool(file.as_fd(), mmap.len() as i32, qh, ());
+                    let buffer = pool.create_buffer(
+                        0,
+                        configure.width,
+                        configure.height,
+                        configure.width * 4,
+                        Format::Argb8888,
+                        &qh,
+                        (),
+                    );
+                    let surface = data.wl_surface.as_ref().unwrap();
+                    surface.attach(Some(&buffer), 0, 0);
+                    surface.commit();
+                    data.applied_configure = Some(configure);
+
                     //todo: adjust buffer size?
                 }
             }
@@ -544,24 +570,6 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                     proxy.set_cursor(data.wl_pointer_enter_serial.expect("No serial"), Some(&active_cursor.cursor_surface), cursor_request.hot_x, cursor_request.hot_y);
                     active_cursor.cursor_request(cursor_request);
                 }
-
-                //check resize op
-                if let Some(region) = data.active_drag_op.as_ref() {
-                    match region {
-                        MouseRegion::BottomRight => {
-                            //resize
-                        }
-                        MouseRegion::Bottom => {
-                            //resize
-                        }
-                        MouseRegion::Right => {
-                            //resize
-                        }
-                        _ => {
-                            //?
-                        }
-                    }
-                }
             },
             wayland_client::protocol::wl_pointer::Event::Button {
                 serial, time, button, state
@@ -575,13 +583,22 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                    if pressed == 1 {
                        match mouse_region {
                            MouseRegion::BottomRight => {
-                               data.active_drag_op.replace(MouseRegion::BottomRight);
+                               let toplevel = data.xdg_toplevel.as_ref().unwrap();
+                               let app_state = data.app_state.upgrade().unwrap();
+                               let seat = app_state.seat.lock().unwrap();
+                               toplevel.resize(seat.as_ref().unwrap(), serial, xdg_toplevel::ResizeEdge::BottomRight);
                            }
                            MouseRegion::Bottom => {
-                               data.active_drag_op.replace(MouseRegion::Bottom);
+                               let toplevel = data.xdg_toplevel.as_ref().unwrap();
+                               let app_state = data.app_state.upgrade().unwrap();
+                               let seat = app_state.seat.lock().unwrap();
+                               toplevel.resize(seat.as_ref().unwrap(), serial, xdg_toplevel::ResizeEdge::Bottom);
                            }
                             MouseRegion::Right => {
-                                 data.active_drag_op.replace(MouseRegion::Right);
+                                let toplevel = data.xdg_toplevel.as_ref().unwrap();
+                                let app_state = data.app_state.upgrade().unwrap();
+                                let seat = app_state.seat.lock().unwrap();
+                                toplevel.resize(seat.as_ref().unwrap(), serial, xdg_toplevel::ResizeEdge::Right);
                             }
                            _ => {
                                //?
@@ -612,10 +629,11 @@ impl Window {
             let window_internal = Arc::new(Mutex::new(WindowInternal::new(Arc::downgrade(&info.app_state))));
 
             let surface = info.app_state.compositor.create_surface(&info.queue_handle, window_internal.clone());
-
+            window_internal.lock().unwrap().wl_surface.replace(surface.clone());
             // Create a toplevel surface
             let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, window_internal.clone());
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, window_internal.clone());
+            window_internal.lock().unwrap().xdg_toplevel.replace(xdg_toplevel);
 
             let (file, mmap) = create_shm_buffer(&info.app_state.shm, size.width() as u32, size.height() as u32);
             let pool = info.app_state.shm.create_pool(file.as_fd(), mmap.len() as i32, &info.queue_handle, ());
@@ -623,7 +641,7 @@ impl Window {
                 0,
                 size.width() as i32,
                 size.height() as i32,
-                200 * 4,
+                size.width() as i32 * 4,
                 Format::Argb8888,
                 &info.queue_handle,
                 (),
@@ -634,6 +652,7 @@ impl Window {
 
 
             let seat: WlSeat = info.globals.bind(&info.queue_handle, 8..=9, ()).expect("Can't bind seat");
+            window_internal.lock().unwrap().app_state.upgrade().unwrap().seat.lock().unwrap().replace(seat.clone());
             let pointer = seat.get_pointer(&info.queue_handle, window_internal);
             // let _keyboard = seat.get_keyboard(&qh, surface.id());
 
