@@ -175,6 +175,8 @@ struct WindowInternal {
     proposed_configure: Mutex<Option<Configure>>,
     applied_configure: Mutex<Option<Configure>>,
     wl_pointer_enter_serial: Mutex<Option<u32>>,
+    wl_pointer_pos: Mutex<Option<Position>>,
+    active_drag_op: Mutex<Option<MouseRegion>>,
 }
 impl WindowInternal {
     fn new(app_state: Weak<AppState>) -> Self {
@@ -183,6 +185,8 @@ impl WindowInternal {
             proposed_configure: Mutex::new(None),
             applied_configure: Mutex::new(None),
             wl_pointer_enter_serial: Mutex::new(None),
+            wl_pointer_pos: Mutex::new(None),
+            active_drag_op: Mutex::new(None),
         }
     }
     fn applied_size(&self) -> Size {
@@ -506,13 +510,13 @@ impl<A: AsRef<WindowInternal>> Dispatch<WlPointer, A> for App {
                 surface_x,
                 surface_y,
                 time: _,
-
-
             } => {
                 //get current size
                 let size = data.as_ref().applied_size();
+                let position = Position::new(surface_x as f64, surface_y as f64);
+                data.as_ref().wl_pointer_pos.lock().unwrap().replace(position);
                 let cursor_request;
-                match MouseRegion::from_position(size, Position::new(surface_x as f64, surface_y as f64)) {
+                match MouseRegion::from_position(size, position) {
                     MouseRegion::BottomRight => {
                         let app = data.as_ref().app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::bottom_right_corner();
@@ -539,6 +543,56 @@ impl<A: AsRef<WindowInternal>> Dispatch<WlPointer, A> for App {
                     proxy.set_cursor(data.as_ref().wl_pointer_enter_serial.lock().unwrap().expect("No serial"), Some(&active_cursor.cursor_surface), cursor_request.hot_x, cursor_request.hot_y);
                     active_cursor.cursor_request(cursor_request);
                 }
+
+                //check resize op
+                if let Some(region) = data.as_ref().active_drag_op.lock().unwrap().as_ref() {
+                    match region {
+                        MouseRegion::BottomRight => {
+                            //resize
+                        }
+                        MouseRegion::Bottom => {
+                            //resize
+                        }
+                        MouseRegion::Right => {
+                            //resize
+                        }
+                        _ => {
+                            //?
+                        }
+                    }
+                }
+            },
+            wayland_client::protocol::wl_pointer::Event::Button {
+                serial, time, button, state
+            } => {
+                //get current size
+                let size = data.as_ref().applied_size();
+                let mouse_pos = data.as_ref().wl_pointer_pos.lock().unwrap().clone().expect("No pointer position");
+                let mouse_region = MouseRegion::from_position(size, mouse_pos);
+                let pressed: u32 = state.into();
+                if button == 0x110  {//BUTTON_LEFT
+                   if pressed == 1 {
+                       match mouse_region {
+                           MouseRegion::BottomRight => {
+                               data.as_ref().active_drag_op.lock().unwrap().replace(MouseRegion::BottomRight);
+                           }
+                           MouseRegion::Bottom => {
+                               data.as_ref().active_drag_op.lock().unwrap().replace(MouseRegion::Bottom);
+                           }
+                            MouseRegion::Right => {
+                                 data.as_ref().active_drag_op.lock().unwrap().replace(MouseRegion::Right);
+                            }
+                           _ => {
+                               //?
+                           }
+                       }
+                   }
+                    else {
+                        todo!()
+                    }
+                }
+
+
 
             }
             _ => {
