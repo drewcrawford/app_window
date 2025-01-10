@@ -12,6 +12,7 @@ use libc::{eventfd, getpid, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE};
 use memmap2::MmapMut;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
+use wayland_client::backend::WaylandError;
 use wayland_client::globals::{registry_queue_init, GlobalList, GlobalListContents};
 use wayland_client::protocol::{wl_compositor, wl_registry, wl_shm};
 use wayland_client::protocol::wl_buffer::WlBuffer;
@@ -128,7 +129,27 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
             }
             match entry.user_data() {
                 WAYLAND_DATA_AVAILABLE => {
-                    read_guard.read().expect("Can't read wayland socket");
+                    match read_guard.read() {
+                        Ok(_) => {
+
+                        }
+                        Err(e) => {
+                            match e {
+                                WaylandError::Io(e) => {
+                                    match e.kind() {
+                                        std::io::ErrorKind::WouldBlock => {
+                                            //continue
+                                        }
+                                        _ => {
+                                            panic!("Error reading from wayland: {err}", err = e);
+                                        }
+                                    }
+                                }
+                                WaylandError::Protocol(_) => {
+                                    panic!("Protocol error reading from wayland");}
+                                }
+                            }
+                        }
                     event_queue.dispatch_pending(&mut app).expect("Can't dispatch events");
                     //prepare next read
                     //ensure writes queued during dispatch_pending go out (such as proxy replies, etc)
