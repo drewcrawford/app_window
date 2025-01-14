@@ -8,9 +8,6 @@ use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
-use atspi::events::object::ObjectEvents;
-use atspi::proxy::application::ApplicationProxy;
-use atspi::proxy::socket::SocketProxy;
 use io_uring::cqueue::Entry;
 use libc::{eventfd, getpid, memfd_create, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE, MFD_ALLOW_SEALING, MFD_CLOEXEC};
 use memmap2::MmapMut;
@@ -31,213 +28,32 @@ use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel};
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
-use zbus::zvariant::ObjectPath;
 use zune_png::zune_core::result::DecodingResult;
 use crate::coordinates::{Position, Size};
-use crate::executor::already_on_main_thread_submit;
 
 mod ax {
-    use std::collections::HashMap;
-    use std::sync::Mutex;
-    use atspi::{InterfaceSet, ObjectRef, Role, StateSet};
-    use zbus::fdo;
-    use zbus::interface;
-    use zbus::names::{OwnedUniqueName, UniqueName};
-    use zbus::zvariant::{ObjectPath, OwnedObjectPath};
-    use crate::sys::linux::TEST_PATH;
+    use accesskit::{ActionRequest, TreeUpdate};
 
-    pub struct ApplicationInterface {
-        inner: Mutex<i32>,
-    }
-    impl ApplicationInterface {
-        pub fn new() -> Self {
-            ApplicationInterface {
-                inner: Mutex::new(0),
-            }
-        }
-    }
-    #[interface(name = "org.a11y.atspi.Application")]
-    impl ApplicationInterface {
-        #[zbus(property)]
-        fn toolkit_name(&self) -> fdo::Result<String> {
-            Ok("app_window".to_string())
-        }
-
-        #[zbus(property)]
-        fn version(&self) -> fdo::Result<String> {
-            Ok("todo".to_string())
-        }
-
-        #[zbus(property)]
-        fn atspi_version(&self) -> &str {
-            "2.1"
-        }
-
-        #[zbus(property)]
-        fn root(&self) -> fdo::Result<String> {
-            todo!()
-        }
-
-        #[zbus(property)]
-        fn id(&self) -> fdo::Result<i32> {
-            Ok(
-                *self.inner.lock().unwrap()
-            )
-        }
-
-        #[zbus(property)]
-        fn set_id(&mut self, id: i32) -> fdo::Result<()> {
-            //docs suggest this is unused
-            //but I guess we need to roundtrip it
-            *self.inner.lock().unwrap() = id;
-            Ok(())
-        }
-    }
-    pub struct RootAX {
-        unique_name: OwnedUniqueName,
-    }
-    impl RootAX {
-        pub fn new(unique_name: OwnedUniqueName) -> Self {
-            RootAX {
-                unique_name
-            }
-        }
-    }
-    #[interface(name = "org.a11y.atspi.Accessible")]
-    impl RootAX {
-        #[zbus(property)]
-        fn name(&self) -> String {
-            "app_window".to_string()
-        }
-        fn get_state(&self) -> StateSet {
-            StateSet::empty()
-        }
-
-        #[zbus(property)]
-        fn child_count(&self) -> i32 {
-            1 // ??
-        }
-
-        fn get_child_at_index(&self, index: i32) -> fdo::Result<(ObjectRef,)> {
-            if index == 0 {
-                Ok((atspi::ObjectRef {
-                    name: self.unique_name.clone(),
-                    path: ObjectPath::from_static_str(TEST_PATH).unwrap().into(),
-                },))
-            }
-            else {
-                panic!("Invalid index");
-            }
-        }
-
-        fn get_children(&self) -> Vec<atspi::ObjectRef> {
-            todo!()
-        }
-
-
-        fn get_role(&self) -> Role {
-            Role::Application
-        }
-
-
-
+    #[derive(Copy,Clone)]
+    pub struct AX {
 
     }
-
-    pub struct ButtonAX {
-
-    }
-    #[interface(name = "org.a11y.atspi.Accessible")]
-    impl ButtonAX {
-        #[zbus(property)]
-        fn name(&self) -> fdo::Result<String> {
+    impl accesskit::ActivationHandler for AX {
+        fn request_initial_tree(&mut self) -> Option<TreeUpdate> {
             todo!()
-        }
-
-        #[zbus(property)]
-        fn description(&self) -> fdo::Result<String> {
-            todo!()
-
-        }
-
-        #[zbus(property)]
-        fn parent(&self) -> fdo::Result<OwnedObjectPath> {
-            todo!()
-
-        }
-
-        #[zbus(property)]
-        fn child_count(&self) -> fdo::Result<i32> {
-            todo!()
-
-        }
-
-        #[zbus(property)]
-        fn locale(&self) -> &str {
-            todo!()
-
-        }
-
-        #[zbus(property)]
-        fn accessible_id(&self) -> fdo::Result<String> {
-            todo!()
-
-        }
-
-        fn get_child_at_index(&self, index: i32) -> fdo::Result<(OwnedObjectPath,)> {
-            todo!()
-
-        }
-
-        fn get_children(&self) -> fdo::Result<Vec<OwnedObjectPath>> {
-            todo!()
-
-        }
-
-        fn get_index_in_parent(&self) -> fdo::Result<i32> {
-            todo!()
-
-        }
-
-        fn get_role(&self) -> fdo::Result<Role> {
-            todo!()
-
-        }
-
-        fn get_localized_role_name(&self) -> fdo::Result<String> {
-            todo!()
-
-        }
-
-        fn get_state(&self) -> StateSet {
-            todo!()
-
-        }
-
-        fn get_attributes(&self) -> fdo::Result<HashMap<&str, String>> {
-            todo!()
-
-        }
-
-        fn get_application(&self) -> (OwnedObjectPath,) {
-            todo!()
-
-        }
-
-        fn get_interfaces(&self) -> fdo::Result<InterfaceSet> {
-            todo!()
-
-        }
-
-
-    }
-
-    impl ButtonAX {
-        pub fn new() -> Self {
-            Self {}
         }
     }
-
+    impl accesskit::ActionHandler for AX {
+        fn do_action(&mut self, request: ActionRequest) {
+            todo!()
+        }
+    }
+    impl accesskit::DeactivationHandler for AX {
+        fn deactivate_accessibility(&mut self) {
+            todo!()
+        }
+    }
+    
 }
 
 const TITLEBAR_HEIGHT: u64 = 25;
@@ -289,7 +105,6 @@ thread_local! {
 }
 
 const ROOT_PATH: &str = "/org/a11y/atspi/accessible/root";
-const TEST_PATH: &str = "/org/a11y/atspi/accessible/0/0";
 
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let (sender, receiver) = channel();
@@ -312,49 +127,12 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
 
-    already_on_main_thread_submit(async move {
-        let connection;
-        match atspi::AccessibilityConnection::new().await {
-            Ok(c) => {
-                connection = c;
-                println!("Connected to at-spi");
-            }
-            Err(e) => {
-                println!("Failed to connect to at-spi: {err}", err = e);
-                return
-            }
-        }
-        let application_interface = ax::ApplicationInterface::new();
-        connection.connection().object_server().at(ROOT_PATH, application_interface).await.expect("Failed to create object");
-
-
-        let socket = SocketProxy::new(&connection.connection()).await.expect("Failed to create socket proxy");
-        let unique_name = connection.connection().unique_name().expect("Failed to get unique name");
-        let object_path = zbus::zvariant::ObjectPath::from_static_str(ROOT_PATH).unwrap();
-        let button_ax = ax::ButtonAX::new();
-        connection.connection().object_server().at(TEST_PATH, button_ax).await.expect("Failed to create object");
-        let proposed_root = socket.embed(&(unique_name, object_path.clone())).await.expect("Failed to embed socket");
-        let root_ax = ax::RootAX::new(unique_name.clone().into());
-        connection.connection().object_server().at(ObjectPath::from_static_str(ROOT_PATH).unwrap(), root_ax).await.expect("Failed to create object");
-        println!("proposed_root: {:?}", proposed_root);
-        println!("unique_name: {:?}", unique_name);
-        loop {
-            connection.connection().executor().tick().await;
-        }
-        // connection.register_event::<ObjectEvents>().await.expect("failed to register event");
-        // let mut stream = connection.event_stream();
-        // use futures_lite::stream::StreamExt;;
-        // loop {
-        //     let event = stream.next().await.expect("Failed to get next event");
-        //     println!("Got event: {:?}", event);
-        // }
-
-
-
-    });
-
-
+    //ax example
+    let ax = ax::AX{};
+    let mut unix = accesskit_unix::Adapter::new(ax, ax, ax);
+    std::mem::forget(unix);
     closure();
+
     event_queue.flush().expect("Failed to flush event queue");
 
     let mut read_guard = event_queue.prepare_read().expect("Failed to prepare read");

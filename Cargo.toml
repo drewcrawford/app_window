@@ -19,6 +19,7 @@ wgpu = {version = "23.0.1", optional = true}
 thiserror = "2.0.9"
 some_executor = {version = "0.4.0", optional = true}
 continue = "0.1.0"
+serde = { version = "1.0.217", features = ["derive"] }
 
 [dev-dependencies]
 # needed for gpu example
@@ -68,9 +69,10 @@ wayland-cursor = "0.31.7"
 memmap2 = "0.9.5"
 io-uring = "0.7.3"
 zune-png = "0.4.10"
-futures-lite = "2.5.0"
-atspi = { version = "0.24.0", features=["atspi-proxies","atspi-connection"] }
-zbus = "4.2.2"
+# probably at some point this will be a global requirement,
+# for now we only NEED it to advertise decorations on linux
+accesskit = "0.17.1"
+accesskit_unix = "0.13.1"
 
 [patch.crates-io]
 send_cells = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/send_cells"}
