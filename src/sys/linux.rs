@@ -32,7 +32,8 @@ use zune_png::zune_core::result::DecodingResult;
 use crate::coordinates::{Position, Size};
 
 mod ax {
-    use accesskit::{ActionRequest, TreeUpdate};
+    use accesskit::{Action, ActionRequest, NodeId, Rect, Role, TreeUpdate};
+    use libc::access;
 
     #[derive(Copy,Clone)]
     pub struct AX {
@@ -40,7 +41,33 @@ mod ax {
     }
     impl accesskit::ActivationHandler for AX {
         fn request_initial_tree(&mut self) -> Option<TreeUpdate> {
-            todo!()
+            let mut window = accesskit::Node::new(Role::Window);
+            window.set_bounds(Rect::new(0.0, 0.0, 800.0, 600.0));
+            let mut push_button = accesskit::Node::new(Role::Button);
+            push_button.set_label("My first button");
+            push_button.set_bounds(Rect::new(10.0, 10.0, 100.0, 50.0));
+            push_button.add_action(Action::Focus);
+            push_button.add_action(Action::Click);
+
+            let mut push_button_2 = accesskit::Node::new(Role::Button);
+            push_button_2.set_label("My second button");
+            push_button_2.set_bounds(Rect::new(10.0, 10.0, 100.0, 50.0));
+            push_button_2.add_action(Action::Focus);
+            push_button_2.add_action(Action::Click);
+
+            window.set_children(vec![NodeId(2), NodeId(3)]);
+            let tree = accesskit::Tree {
+                root: NodeId(1),
+                app_name: Some("app_window".to_string()),
+                toolkit_name: Some("app_window".to_string()),
+                toolkit_version: Some("0.1.0".to_string()),
+            };
+            let mut update = accesskit::TreeUpdate {
+                nodes: vec![(NodeId(1),window), (NodeId(2), push_button), (NodeId(3), push_button_2)],
+                tree: Some(tree),
+                focus: NodeId(1),
+            };
+            Some(update)
         }
     }
     impl accesskit::ActionHandler for AX {
@@ -119,7 +146,8 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let (globals, mut event_queue) = registry_queue_init::<App>(&connection).expect("Can't initialize registry");
     let qh = event_queue.handle();
     let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 6..=6, ()).unwrap();
-    let shm: WlShm = globals.bind(&qh, 2..=2, ()).unwrap();
+    //fedora 41 KDE uses version 1?
+    let shm: WlShm = globals.bind(&qh, 1..=2, ()).unwrap();
 
     let mut app = App(AppState::new(&qh, compositor, &connection, shm));
     let main_thread_info = MainThreadInfo{globals, queue_handle: qh, connection, app_state: app.0.clone()};
