@@ -282,6 +282,7 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 }
 
 pub struct Window {
+    internal: Arc<Mutex<WindowInternal>>,
 }
 
 struct WindowInternal {
@@ -670,15 +671,6 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<XdgToplevel, A> for App {
             }
         }
 
-        // match event {
-        //     xdg_toplevel::Event::Configure {  width, height, states: _ } => {
-        //         xdg_toplevel_configure_event(width, height);
-        //     }
-        //     _ => {
-        //         println!("got XdgToplevel event {:?}",event);
-        //
-        //     }
-        // }
     }
 }
 impl Dispatch<WlShmPool, ()> for App {
@@ -905,7 +897,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
 
 impl Window {
     pub async fn new(position: Position, size: Size, title: String) -> Self {
-        crate::application::on_main_thread(move || {
+        let window_internal = crate::application::on_main_thread(move || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
             let window_internal = Arc::new(Mutex::new(WindowInternal::new(&info.app_state, size,title, &info.queue_handle, true)));
@@ -917,22 +909,20 @@ impl Window {
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, window_internal.clone());
             window_internal.lock().unwrap().xdg_toplevel.replace(xdg_toplevel);
 
-
             surface.attach(Some(&window_internal.lock().unwrap().buffer), 0, 0);
             surface.commit();
-
-
 
             let seat: WlSeat = info.globals.bind(&info.queue_handle, 8..=9, ()).expect("Can't bind seat");
             window_internal.lock().unwrap().app_state.upgrade().unwrap().seat.lock().unwrap().replace(seat.clone());
             let pointer = seat.get_pointer(&info.queue_handle, window_internal.clone());
-            let _keyboard = seat.get_keyboard(&info.queue_handle, window_internal);
+            let _keyboard = seat.get_keyboard(&info.queue_handle, window_internal.clone());
 
             MAIN_THREAD_INFO.replace(Some(info));
+            window_internal
         }).await;
 
         Window {
-
+            internal: window_internal
         }
 
     }
@@ -941,8 +931,10 @@ impl Window {
         Window::new(Position::new(0.0, 0.0), Size::new(800.0, 600.0), "app_window".to_string()).await
     }
 
-    pub async fn fullscreen(_title: String) -> Result<Self, FullscreenError> {
-        todo!()
+    pub async fn fullscreen(title: String) -> Result<Self, FullscreenError> {
+        let w = Self::new(Position::new(0.0, 0.0), Size::new(800.0, 600.0), title).await;
+        w.internal.lock().unwrap().xdg_toplevel.as_ref().expect("No xdg_toplevel").set_fullscreen(None);
+        Ok(w)
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
