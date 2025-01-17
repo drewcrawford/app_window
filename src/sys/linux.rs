@@ -18,6 +18,7 @@ use wayland_client::globals::{registry_queue_init, GlobalList, GlobalListContent
 use wayland_client::protocol::{wl_compositor, wl_registry, wl_shm};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
+use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::{Format, WlShm};
@@ -32,30 +33,60 @@ use zune_png::zune_core::result::DecodingResult;
 use crate::coordinates::{Position, Size};
 
 mod ax {
-    use accesskit::{Action, ActionRequest, NodeId, Rect, Role, TreeUpdate};
-    use libc::access;
+    use std::sync::{Arc, Mutex};
+    use accesskit::{Action, ActionRequest, CustomAction, NodeId, Rect, Role, TreeUpdate};
+    use libc::{access, close};
+    use crate::coordinates::Size;
+    use crate::sys::linux::{BUTTON_WIDTH, TITLEBAR_HEIGHT};
 
-    #[derive(Copy,Clone)]
+    pub struct Inner {
+        window_size: Size,
+        title: String,
+    }
+    #[derive(Clone)]
     pub struct AX {
-
+        inner: Arc<Inner>,
+    }
+    impl AX {
+        pub fn new(window_size: Size, title: String) -> Self {
+            AX {
+                inner: Arc::new(Inner{window_size, title})
+            }
+        }
     }
     impl accesskit::ActivationHandler for AX {
         fn request_initial_tree(&mut self) -> Option<TreeUpdate> {
             let mut window = accesskit::Node::new(Role::Window);
-            window.set_bounds(Rect::new(0.0, 0.0, 800.0, 600.0));
-            let mut push_button = accesskit::Node::new(Role::Button);
-            push_button.set_label("My first button");
-            push_button.set_bounds(Rect::new(10.0, 10.0, 100.0, 50.0));
-            push_button.add_action(Action::Focus);
-            push_button.add_action(Action::Click);
+            window.set_label(self.inner.title.clone());
+            let window_size = self.inner.window_size;
+            //accesskit rect is min and max, not origin and height!
+            window.set_bounds(Rect::new(0.0, 0.0, window_size.width(), window_size.height()));
+            let mut title_bar = accesskit::Node::new(Role::TitleBar);
+            title_bar.set_label("app_window");
+            title_bar.set_bounds(Rect::new(0.0, 0.0, window_size.width(), TITLEBAR_HEIGHT as f64));
+            let mut close_button = accesskit::Node::new(Role::Button);
+            close_button.add_action(Action::Click);
+            close_button.add_action(Action::Focus);
 
-            let mut push_button_2 = accesskit::Node::new(Role::Button);
-            push_button_2.set_label("My second button");
-            push_button_2.set_bounds(Rect::new(10.0, 10.0, 100.0, 50.0));
-            push_button_2.add_action(Action::Focus);
-            push_button_2.add_action(Action::Click);
+            close_button.set_bounds(Rect::new(window_size.width() - BUTTON_WIDTH as f64, 0.0, window_size.width() as f64, TITLEBAR_HEIGHT as f64));
+            close_button.set_label("Close");
 
-            window.set_children(vec![NodeId(2), NodeId(3)]);
+            let mut maximize_button = accesskit::Node::new(Role::Button);
+            maximize_button.add_action(Action::Click);
+            maximize_button.add_action(Action::Focus);
+            maximize_button.set_bounds(Rect::new(window_size.width() - BUTTON_WIDTH as f64 * 2.0, 0.0, window_size.width() as f64 - BUTTON_WIDTH as f64 * 1.0, TITLEBAR_HEIGHT as f64));
+            maximize_button.set_label("Maximize");
+
+            let mut minimize_button = accesskit::Node::new(Role::Button);
+            minimize_button.add_action(Action::Click);
+            minimize_button.add_action(Action::Focus);
+            minimize_button.set_bounds(Rect::new(window_size.width() - BUTTON_WIDTH as f64 * 3.0, 0.0, window_size.width() as f64 - BUTTON_WIDTH as f64 * 2.0, TITLEBAR_HEIGHT as f64));
+            minimize_button.set_label("Minimize");
+
+            //window.set_children(vec![NodeId(2)]);
+            //title_bar.set_children(vec![NodeId(3),NodeId(4), NodeId(5)]);
+            window.set_children(vec![NodeId(3), NodeId(4), NodeId(5)]);
+
             let tree = accesskit::Tree {
                 root: NodeId(1),
                 app_name: Some("app_window".to_string()),
@@ -63,9 +94,9 @@ mod ax {
                 toolkit_version: Some("0.1.0".to_string()),
             };
             let mut update = accesskit::TreeUpdate {
-                nodes: vec![(NodeId(1),window), (NodeId(2), push_button), (NodeId(3), push_button_2)],
+                nodes: vec![(NodeId(1),window), /*(NodeId(2), title_bar),*/ (NodeId(3), close_button), (NodeId(4), maximize_button), (NodeId(5), minimize_button)],
                 tree: Some(tree),
-                focus: NodeId(1),
+                focus: NodeId(3),
             };
             Some(update)
         }
@@ -156,9 +187,6 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
 
     //ax example
-    let ax = ax::AX{};
-    let mut unix = accesskit_unix::Adapter::new(ax, ax, ax);
-    std::mem::forget(unix);
     closure();
 
     event_queue.flush().expect("Failed to flush event queue");
@@ -254,7 +282,6 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 }
 
 pub struct Window {
-
 }
 
 struct WindowInternal {
@@ -269,12 +296,26 @@ struct WindowInternal {
     file: File,
     mmap: MmapMut,
     requested_maximize: bool,
+    adapter: Option<accesskit_unix::Adapter>,
+    ax: Option<ax::AX>,
 }
 impl WindowInternal {
 
-    fn new(app_state: &Arc<AppState>, size: Size, queue_handle: &QueueHandle<App>) -> Self {
-        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, &app_state.decor, app_state.decor_dimensions);
+    fn new(app_state: &Arc<AppState>, size: Size, title: String, queue_handle: &QueueHandle<App>, ax: bool) -> Self {
 
+        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, &app_state.decor, app_state.decor_dimensions);
+        let ax_impl;
+        let adapter;
+        if ax {
+            let _aximpl = ax::AX::new(size, title.clone());
+            adapter = Some(accesskit_unix::Adapter::new(_aximpl.clone(), _aximpl.clone(), _aximpl.clone()));
+            ax_impl = Some(_aximpl);
+        }
+        else {
+            adapter = None;
+            ax_impl = None;
+        }
+        let ax = ax::AX::new(size, title);
         WindowInternal{
             app_state: Arc::downgrade(app_state),
             proposed_configure: None,
@@ -287,6 +328,8 @@ impl WindowInternal {
             file,
             mmap,
             buffer,
+            adapter,
+            ax: ax_impl,
         }
     }
     fn applied_size(&self) -> Size {
@@ -355,7 +398,7 @@ impl ActiveCursor {
         let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
         let start_time = std::time::Instant::now();
         //I guess we fake an internal window here?
-        let window_internal = WindowInternal::new(a, Size::new(CURSOR_SIZE as f64, CURSOR_SIZE as f64), queue_handle);
+        let window_internal = WindowInternal::new(a, Size::new(CURSOR_SIZE as f64, CURSOR_SIZE as f64), "cursor".to_string(), queue_handle, false);
         let cursor_surface = compositor.create_surface(queue_handle, Box::new(Mutex::new(window_internal)));
         let start_time = std::time::Instant::now();
         let frame_info = cursor.frame_and_duration(start_time.elapsed().as_millis() as u32);
@@ -823,13 +866,35 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
     }
 }
 
+impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
+    fn event(_state: &mut Self, _proxy: &WlKeyboard, event: <WlKeyboard as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+        println!("got WlKeyboard event {:?}",event);
+
+        match event {
+            wayland_client::protocol::wl_keyboard::Event::Enter {
+                serial, surface, keys
+            } => {
+                data.as_ref().lock().unwrap().adapter.as_mut().map(|e| e.update_window_focus_state(true));
+            }
+            wayland_client::protocol::wl_keyboard::Event::Leave {
+                serial, surface
+            } => {
+                data.as_ref().lock().unwrap().adapter.as_mut().map(|e| e.update_window_focus_state(false));
+            }
+            _ => {
+            }
+        }
+    }
+}
+
+
 
 impl Window {
     pub async fn new(position: Position, size: Size, title: String) -> Self {
         crate::application::on_main_thread(move || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
-            let window_internal = Arc::new(Mutex::new(WindowInternal::new(&info.app_state, size, &info.queue_handle)));
+            let window_internal = Arc::new(Mutex::new(WindowInternal::new(&info.app_state, size,title, &info.queue_handle, true)));
 
             let surface = info.app_state.compositor.create_surface(&info.queue_handle, window_internal.clone());
             window_internal.lock().unwrap().wl_surface.replace(surface.clone());
@@ -846,8 +911,8 @@ impl Window {
 
             let seat: WlSeat = info.globals.bind(&info.queue_handle, 8..=9, ()).expect("Can't bind seat");
             window_internal.lock().unwrap().app_state.upgrade().unwrap().seat.lock().unwrap().replace(seat.clone());
-            let pointer = seat.get_pointer(&info.queue_handle, window_internal);
-            // let _keyboard = seat.get_keyboard(&qh, surface.id());
+            let pointer = seat.get_pointer(&info.queue_handle, window_internal.clone());
+            let _keyboard = seat.get_keyboard(&info.queue_handle, window_internal);
 
             MAIN_THREAD_INFO.replace(Some(info));
         }).await;
