@@ -660,6 +660,9 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<XdgToplevel, A> for App {
         println!("got XdgToplevel event {:?}",event);
         match event {
             xdg_toplevel::Event::Configure { width, height, states } => {
+                #[cfg(feature = "app_input")]
+                app_input::linux::xdg_toplevel_configure_event(width, height);
+
                 data.as_ref().lock().unwrap().proposed_configure = Some(Configure{width, height, states});
             }
             _ => {
@@ -752,8 +755,11 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
             wayland_client::protocol::wl_pointer::Event::Motion {
                 surface_x,
                 surface_y,
-                time: _,
+                time,
             } => {
+                #[cfg(feature="app_input")]
+                app_input::linux::motion_event(time, surface_x, surface_y);
+
                 //get current size
                 let size = data.applied_size();
                 let position = Position::new(surface_x as f64, surface_y as f64);
@@ -795,6 +801,9 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
             wayland_client::protocol::wl_pointer::Event::Button {
                 serial, time, button, state
             } => {
+                #[cfg(feature = "app_input")]
+                app_input::linux::button_event(time, button, state.into(), data.wl_surface.as_ref().unwrap().id());
+
                 //get current size
                 let size = data.applied_size();
                 let mouse_pos = data.wl_pointer_pos.clone().expect("No pointer position");
@@ -869,7 +878,6 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
 impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
     fn event(_state: &mut Self, _proxy: &WlKeyboard, event: <WlKeyboard as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         println!("got WlKeyboard event {:?}",event);
-
         match event {
             wayland_client::protocol::wl_keyboard::Event::Enter {
                 serial, surface, keys
@@ -880,6 +888,12 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
                 serial, surface
             } => {
                 data.as_ref().lock().unwrap().adapter.as_mut().map(|e| e.update_window_focus_state(false));
+            }
+            wayland_client::protocol::wl_keyboard::Event::Key {
+                serial, time, key, state
+            } => {
+                #[cfg(feature = "app_input")]
+                app_input::linux::wl_keyboard_event(serial, time, key, state.into(), data.as_ref().lock().unwrap().wl_surface.as_ref().unwrap().id());
             }
             _ => {
             }
