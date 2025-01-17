@@ -73,7 +73,6 @@ zune-png = "0.4.10"
 # for now we only NEED it to advertise decorations on linux
 accesskit = "0.17.1"
 accesskit_unix = "0.13.1"
-atspi = "0.24.0"
 
 [patch.crates-io]
 send_cells = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/send_cells"}

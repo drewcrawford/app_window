@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_void, CString};
 use std::fs::File;
@@ -9,18 +8,17 @@ use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
-use atspi::proxy::device_event_controller::KeySynthType;
 use io_uring::cqueue::Entry;
 use libc::{eventfd, getpid, memfd_create, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE, MFD_ALLOW_SEALING, MFD_CLOEXEC};
 use memmap2::MmapMut;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum};
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{registry_queue_init, GlobalList, GlobalListContents};
 use wayland_client::protocol::{wl_compositor, wl_registry, wl_shm};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
-use wayland_client::protocol::wl_keyboard::{KeyState, WlKeyboard};
+use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::{Format, WlShm};
@@ -33,7 +31,6 @@ use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use zune_png::zune_core::result::DecodingResult;
 use crate::coordinates::{Position, Size};
-use crate::executor::already_on_main_thread_submit;
 
 mod ax {
     use std::sync::{Arc, Mutex};
@@ -301,7 +298,6 @@ struct WindowInternal {
     requested_maximize: bool,
     adapter: Option<accesskit_unix::Adapter>,
     ax: Option<ax::AX>,
-    atspi_connection: Option<Arc<atspi::AccessibilityConnection>>,
 }
 impl WindowInternal {
 
@@ -320,7 +316,6 @@ impl WindowInternal {
             ax_impl = None;
         }
         let ax = ax::AX::new(size, title);
-
         WindowInternal{
             app_state: Arc::downgrade(app_state),
             proposed_configure: None,
@@ -335,7 +330,6 @@ impl WindowInternal {
             buffer,
             adapter,
             ax: ax_impl,
-            atspi_connection: None,
         }
     }
     fn applied_size(&self) -> Size {
@@ -887,32 +881,6 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
             } => {
                 data.as_ref().lock().unwrap().adapter.as_mut().map(|e| e.update_window_focus_state(false));
             }
-            wayland_client::protocol::wl_keyboard::Event::Key {
-                serial, time, key,state
-            } => {
-                let window_internal = data.as_ref().lock().unwrap();
-                if let Some(connection) = window_internal.atspi_connection.clone() {
-                    let mt_executor = crate::executor::already_on_main_thread_submit(async move {
-                        let proxy = atspi::proxy::device_event_controller::DeviceEventControllerProxy::new(&connection.connection()).await.expect("Can't create proxy");
-
-                        let synth_type = match state {
-                            WEnum::Value(e) => {
-                                match e {
-                                    KeyState::Pressed => KeySynthType::Press,
-                                    KeyState::Released => KeySynthType::Release,
-                                    _ => KeySynthType::Press
-                                }
-                            }
-                            WEnum::Unknown(_) => {KeySynthType::Press}
-                        };
-                        proxy.generate_keyboard_event(key as i32, "H", synth_type).await.expect("Can't generate keyboard event");
-                        connection.connection().executor().tick().await;
-                        println!("generated keyboard event {:?}", key);
-                        std::mem::forget(connection);
-                    });
-                }
-
-            }
             _ => {
             }
         }
@@ -930,15 +898,6 @@ impl Window {
 
             let surface = info.app_state.compositor.create_surface(&info.queue_handle, window_internal.clone());
             window_internal.lock().unwrap().wl_surface.replace(surface.clone());
-
-            //initialize atspi
-            let move_window_internal = window_internal.clone();
-            already_on_main_thread_submit(async move {
-               let atspi_connection = atspi::connection::AccessibilityConnection::new().await.expect("Can't connect");
-                atspi_connection.connection().executor().tick().await;
-                move_window_internal.lock().unwrap().atspi_connection = Some(Arc::new(atspi_connection));
-                println!("atspi initialized!");
-            });
             // Create a toplevel surface
             let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, window_internal.clone());
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, window_internal.clone());
