@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use r#continue::continuation;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use crate::coordinates::Size;
 use crate::sys;
@@ -25,16 +27,26 @@ impl Surface {
     }
 
     #[cfg(feature = "wgpu")]
-    pub fn create_wgpu_surface(&self, instance: &wgpu::Instance) -> Result<wgpu::Surface,wgpu::CreateSurfaceError> {
+    pub async fn create_wgpu_surface(&self, instance: &Arc<wgpu::Instance>) -> Result<wgpu::Surface,wgpu::CreateSurfaceError> {
         use wgpu::SurfaceTargetUnsafe;
 
         //on this wasm32 we can't send instance
-        Ok(unsafe{instance.create_surface_unsafe(
-            SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: self.raw_display_handle(),
-                raw_window_handle: self.raw_window_handle(),
-            }
-        )?})
+        //on linux can't run on main thread?
+        let (sender,fut) = continuation();
+
+        let display_handle = send_cells::unsafe_send_cell::UnsafeSendCell::new(self.raw_display_handle());
+        let window_handle = send_cells::unsafe_send_cell::UnsafeSendCell::new(self.raw_window_handle());
+        let move_instance = instance.clone();
+        std::thread::spawn(move ||{
+            let surface_target = SurfaceTargetUnsafe::RawHandle {
+                raw_display_handle: unsafe{*display_handle.get()},
+                raw_window_handle: unsafe{*window_handle.get()},
+            };
+            let r = unsafe{move_instance.create_surface_unsafe(surface_target)};
+            sender.send(r);
+        });
+        let r = fut.await;
+        Ok(r?)
     }
 }
 

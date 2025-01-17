@@ -32,3 +32,6 @@ mod surface;
 pub mod executor;
 #[cfg(feature = "some_executor")]
 pub mod some_executor;
+
+#[cfg(feature = "wgpu")]
+pub mod wgpu;

@@ -4,6 +4,7 @@ use std::fs::File;
 use std::future::Future;
 use std::ops::Sub;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd};
+use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
@@ -11,13 +12,14 @@ use std::time::Duration;
 use io_uring::cqueue::Entry;
 use libc::{eventfd, getpid, memfd_create, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE, MFD_ALLOW_SEALING, MFD_CLOEXEC};
 use memmap2::MmapMut;
-use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle};
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
-use wayland_client::backend::WaylandError;
+use wayland_client::backend::{ObjectId, WaylandError};
 use wayland_client::globals::{registry_queue_init, GlobalList, GlobalListContents};
 use wayland_client::protocol::{wl_compositor, wl_registry, wl_shm};
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
+use wayland_client::protocol::wl_display::WlDisplay;
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
 use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
@@ -31,6 +33,7 @@ use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use zune_png::zune_core::result::DecodingResult;
 use crate::coordinates::{Position, Size};
+use crate::executor::on_main_thread_async;
 
 mod ax {
     use std::sync::{Arc, Mutex};
@@ -186,8 +189,8 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
 
-    //ax example
     closure();
+
 
     event_queue.flush().expect("Failed to flush event queue");
 
@@ -207,7 +210,14 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     //park
     loop {
         // println!("will submit_and_wait...");
-        io_uring.submit_and_wait(1).expect("Can't submit and wait");
+        let r = io_uring.submit_and_wait(1);
+        match r {
+            Ok(_) => {}
+            Err(e) => {
+                logwise::error_sync!("Can't submit and wait: {err}", err = logwise::privacy::LogIt(e));
+                continue;
+            }
+        }
         let mut entries = Vec::new();
         for entry in io_uring.completion() {
             entries.push(entry);
@@ -412,8 +422,7 @@ impl ActiveCursor {
         let (cursor_request_sender, cursor_request_receiver) = std::sync::mpsc::channel();
         let active_request = Arc::new(Mutex::new(CursorRequest::wait()));
         let move_active_request = active_request.clone();
-
-        std::thread::spawn(move || {
+        let cursor_thread = std::thread::Builder::new().name("Cursor thread".to_string()).spawn(move || {
             loop {
                 let move_cursor_theme = move_cursor_theme.clone();
                 let move_cursor_surface = move_cursor_surface.clone();
@@ -938,7 +947,12 @@ impl Window {
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
-        todo!()
+        let display = on_main_thread_async(async {
+            let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
+            info.connection.display()
+        }).await;
+        let surface = self.internal.lock().unwrap().wl_surface.as_ref().expect("No surface").clone();
+        crate::surface::Surface{sys: Surface{wl_display: display,wl_surface: surface, window_internal: self.internal.clone() }}
     }
 }
 
@@ -949,6 +963,9 @@ impl Drop for Window {
 }
 
 pub struct Surface {
+    wl_display: WlDisplay,
+    wl_surface: WlSurface,
+    window_internal: Arc<Mutex<WindowInternal>>,
 }
 
 unsafe impl Send for Surface {}
@@ -956,19 +973,25 @@ unsafe impl Sync for Surface {}
 
 impl Surface {
     pub async fn size(&self) -> Size {
-        todo!()
+        self.window_internal.lock().unwrap().applied_size()
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {
-        todo!()
+        RawWindowHandle::Wayland(WaylandWindowHandle::new(NonNull::new(self.wl_surface.id().as_ptr() as *mut c_void).expect("Can't convert wayland surface to non-null")))
     }
 
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
-        todo!()
+        let ptr = self.wl_display.backend().upgrade().unwrap().display_id().as_ptr();
+
+        RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+            NonNull::new(ptr as *mut c_void).expect("Can't convert wayland display to non-null")
+        ))
+
     }
 
     pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, _update: F) {
-        todo!()
+        //not implemented yet!
+        std::mem::forget(_update)
     }
 }
 

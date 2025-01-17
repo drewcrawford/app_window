@@ -1,9 +1,10 @@
 use std::borrow::Cow;
+use std::sync::Arc;
 use some_executor::hint::Hint;
 use some_executor::observer::Observer;
 use some_executor::{Priority, SomeExecutor};
 use some_executor::task::Configuration;
-use wgpu::{Device, Queue};
+use wgpu::{Device, Queue, SurfaceTargetUnsafe};
 use app_window::application::{on_main_thread};
 use app_window::executor::{already_on_main_thread_submit};
 use app_window::window::Window;
@@ -54,7 +55,7 @@ fn render(state: &State) {
 }
 
 #[cfg(feature = "wgpu")]
-async fn main_run(mut window: Window) {
+async fn wgpu_run(mut window: Window) {
     logwise::warn_sync!("main_run");
     let mut app_surface = window.surface().await;
     let ( sender,mut receiver) = ampsc::channel();
@@ -68,18 +69,20 @@ async fn main_run(mut window: Window) {
         }),Configuration::new(Hint::CPU, Priority::UserInteractive, some_executor::Instant::now()),None);
         some_executor.spawn_objsafe(task).detach();
     });
-    let instance = wgpu::Instance::new(&wgpu::util::instance_descriptor_from_env());
+    let instance = Arc::new(wgpu::Instance::new(&wgpu::util::instance_descriptor_from_env()));
 
-    let surface = app_surface.create_wgpu_surface(&instance).expect("Can't create surface");
+    let surface = unsafe{instance.create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
+        raw_display_handle: app_surface.raw_display_handle(),
+        raw_window_handle: app_surface.raw_window_handle(),
+    })}.expect("Can't create surface");
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
             force_fallback_adapter: false,
             // Request an adapter which can render to our surface
             compatible_surface: Some(&surface),
-        })
-        .await
-        .expect("Failed to find an appropriate adapter");
+        }).await.expect("Can't create adapter");
+    // let surface = app_surface.create_wgpu_surface(&instance).await.expect("Can't create surface");
     let size = app_surface.size().await;
     // Create the logical device and command queue
     let (device, queue) = adapter
@@ -147,37 +150,32 @@ async fn main_run(mut window: Window) {
         queue,
         render_pipeline,
     };
-
     render(&state);
+
 
 
     enum Message {
         SizeChanged(app_window::coordinates::Size),
     }
 
-
-    while let Ok(msg) = receiver.receive().await {
+    loop {
+        let msg = receiver.receive().await;
         match msg {
-            Message::SizeChanged(new_size) => {
+            Ok(Message::SizeChanged(new_size)) => {
                 config.width = new_size.width() as u32;
                 config.height = new_size.height() as u32;
                 state.surface.configure(&state.device, &config);
                 render(&state);
             }
+            Err(e) => {
+                panic!("Error receiving message: {:?}", e);
+            },
         }
     }
+
 }
 
-async fn run(window: Window) {
 
-    //on wasm32, we primarily need to operate on the main thread
-    on_main_thread(|| {
-        #[cfg(feature = "wgpu")]
-        already_on_main_thread_submit(main_run(window));
-        #[cfg(not(feature = "wgpu"))]
-        panic!("wgpu feature not enabled");
-    }).await;
-}
 
 pub fn main() {
     #[cfg(target_arch = "wasm32")]
@@ -188,7 +186,9 @@ pub fn main() {
     app_window::application::main(|| {
         let task = some_executor::task::Task::without_notifications("run".into(), async {
             let window = Window::default().await;
-            run(window).await;
+            app_window::wgpu::wgpu_spawn(async move {
+                wgpu_run(window).await;
+            })
         }, Configuration::new(Hint::Unknown, Priority::UserInteractive, some_executor::Instant::now()));
         some_executor::current_executor::current_executor().spawn_objsafe(task.into_objsafe()).detach();
 

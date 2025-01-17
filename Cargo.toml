@@ -64,6 +64,7 @@ send_cells = "0.1.0"
 [target.'cfg(target_os="linux")'.dependencies]
 libc = "0.2.169"
 wayland-client = "0.31.7"
+wayland-backend = {version = "0.3.7", features=["client_system"]}
 wayland-protocols = {version = "0.32.5", features = ["client"]}
 wayland-cursor = "0.31.7"
 memmap2 = "0.9.5"
@@ -73,8 +74,11 @@ zune-png = "0.4.10"
 # for now we only NEED it to advertise decorations on linux
 accesskit = "0.17.1"
 accesskit_unix = "0.13.1"
+send_cells = "0.1.0"
+some_local_executor = "0.1.1"
 
 [patch.crates-io]
 send_cells = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/send_cells"}
 # on windows we need patched wgpu, hopefully it upstreams post v23.0.1...
 wgpu = {git = "https://github.com/drewcrawford/wgpu.git", branch="trunk"}
+some_local_executor = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_local_executor"}
