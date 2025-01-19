@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use some_executor::hint::Hint;
 use some_executor::observer::Observer;
 use some_executor::{Priority, SomeExecutor};
@@ -59,11 +59,16 @@ async fn wgpu_run(mut window: Window) {
     logwise::warn_sync!("main_run");
     let mut app_surface = window.surface().await;
     let ( sender,mut receiver) = ampsc::channel();
+    let size = app_surface.size().await;
+    let latest_size = Arc::new(Mutex::new(size));
+    let move_latest_size = latest_size.clone();
     app_surface.size_update(move |size| {
         let mut update_sender = sender.clone();
         let mut some_executor = some_executor::current_executor::current_executor();
+        //it's nice to do this inline so that if we get many size updates back-to-back the last one wins
+        *move_latest_size.lock().unwrap() = size;
         let task = some_executor::task::Task::new_objsafe("resize".into(), Box::new(async move {
-            update_sender.send(Message::SizeChanged(size)).await.unwrap();
+            update_sender.send(Message::SizeChanged).await.unwrap();
             update_sender.async_drop().await;
             Box::new(()) as Box<dyn std::any::Any + Send>
         }),Configuration::new(Hint::CPU, Priority::UserInteractive, some_executor::Instant::now()),None);
@@ -83,7 +88,6 @@ async fn wgpu_run(mut window: Window) {
             compatible_surface: Some(&surface),
         }).await.expect("Can't create adapter");
     // let surface = app_surface.create_wgpu_surface(&instance).await.expect("Can't create surface");
-    let size = app_surface.size().await;
     // Create the logical device and command queue
     let (device, queue) = adapter
         .request_device(
@@ -155,13 +159,14 @@ async fn wgpu_run(mut window: Window) {
 
 
     enum Message {
-        SizeChanged(app_window::coordinates::Size),
+        SizeChanged,
     }
 
     loop {
         let msg = receiver.receive().await;
         match msg {
-            Ok(Message::SizeChanged(new_size)) => {
+            Ok(Message::SizeChanged) => {
+                let new_size = *latest_size.lock().unwrap();
                 config.width = new_size.width() as u32;
                 config.height = new_size.height() as u32;
                 state.surface.configure(&state.device, &config);

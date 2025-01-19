@@ -258,7 +258,24 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
                     //prepare next read
                     //ensure writes queued during dispatch_pending go out (such as proxy replies, etc)
                     event_queue.flush().expect("Failed to flush event queue");
-                    read_guard = event_queue.prepare_read().expect("Failed to prepare read");
+
+                    loop {
+                        let _read_guard = event_queue.prepare_read();
+
+                        match _read_guard {
+                            Some(guard) => {
+                                read_guard = guard;
+                                break; //out of loop
+                            },
+                            None => {
+                                event_queue.dispatch_pending(&mut app).expect("Can't dispatch events");
+                                event_queue.flush().expect("Failed to flush event queue");
+                                //try again
+                                println!("retrying");
+                            }
+                        }
+                    }
+
                     let mut sqs = io_uring.submission();
                     wayland_entry = io_uring::opcode::PollAdd::new(io_uring_fd, libc::POLLIN as u32).build();
                     wayland_entry = wayland_entry.user_data(WAYLAND_DATA_AVAILABLE);
@@ -308,16 +325,16 @@ struct WindowInternal {
     wl_pointer_pos: Option<Position>,
     xdg_toplevel: Option<XdgToplevel>,
     wl_surface: Option<WlSurface>,
-    buffer: WlBuffer,
+    buffer: Option<WlBuffer>,
     requested_maximize: bool,
     adapter: Option<accesskit_unix::Adapter>,
     ax: Option<ax::AX>,
+    size_update_notify: Option<Box<dyn Fn(Size) + Send>>
 }
 impl WindowInternal {
 
-    fn new(app_state: &Arc<AppState>, size: Size, title: String, queue_handle: &QueueHandle<App>, ax: bool) -> Self {
+    fn new(app_state: &Arc<AppState>, size: Size, title: String, queue_handle: &QueueHandle<App>, ax: bool) -> Arc<Mutex<Self>> {
 
-        let buffer = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle);
         let ax_impl;
         let adapter;
         if ax {
@@ -330,7 +347,7 @@ impl WindowInternal {
             ax_impl = None;
         }
         let ax = ax::AX::new(size, title);
-        WindowInternal{
+        let mut window_internal = Arc::new(Mutex::new(WindowInternal{
             app_state: Arc::downgrade(app_state),
             proposed_configure: None,
             applied_configure: None,
@@ -340,21 +357,21 @@ impl WindowInternal {
             xdg_toplevel: None,
             wl_surface: None,
             requested_maximize: false,
-            buffer,
+            buffer: None,
             adapter,
             ax: ax_impl,
-        }
+            size_update_notify: None,
+        }));
+        let buffer =  create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, window_internal.clone());
+
+        window_internal.lock().unwrap().buffer = Some(buffer);
+        window_internal
     }
     fn applied_size(&self) -> Size {
         let applied = self.applied_configure.clone().expect("No configure event");
         Size::new(applied.width as f64, applied.height as f64)
     }
-    fn resize_buffer(&mut self, queue_handle: &QueueHandle<App>) {
-        let size = self.applied_size();
-        let app_state = self.app_state.upgrade().unwrap();
-        let buffer = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, &queue_handle);
-        self.buffer = buffer;
-    }
+
 }
 
 #[derive(Clone)]
@@ -526,11 +543,12 @@ struct BufferReleaseInfo {
 }
 struct ReleaseOpt {
     file: File,
-    mmap: MmapMut,
+    mmap: Arc<MmapMut>,
+    window_internal: Arc<Mutex<WindowInternal>>,
 }
 
 
-fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>) -> WlBuffer {
+fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>, window_internal: Arc<Mutex<WindowInternal>>) -> WlBuffer {
     let decor = include_bytes!("../../linux_assets/decor.png");
     let mut decode_decor = zune_png::PngDecoder::new(decor);
     let decode = decode_decor.decode().expect("Can't decode decor");
@@ -559,8 +577,9 @@ fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>) -> WlBu
     }
     let pool = shm.create_pool(file.as_fd(), dimensions.0 as i32 * dimensions.1 as i32 * 4, queue_handle, ());
     let release_info = BufferReleaseInfo{ opt: Mutex::new(Some(ReleaseOpt {
+        window_internal,
         file,
-        mmap,
+        mmap: Arc::new(mmap),
     }))};
     let buffer = pool.create_buffer(
         0,
@@ -574,11 +593,14 @@ fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>) -> WlBu
     buffer
 }
 
+
+
 fn create_shm_buffer(
     width: i32,
     height: i32,
     shm: &WlShm,
     queue_handle: &QueueHandle<App>,
+    window_internal: Arc<Mutex<WindowInternal>>,
 
 ) -> WlBuffer {
     let file = unsafe{memfd_create(b"mem_fd\0" as *const c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC)};
@@ -593,14 +615,18 @@ fn create_shm_buffer(
     }
 
     let mut mmap = unsafe{MmapMut::map_mut(&file)}.unwrap();
+    const DEFAULT_COLOR: [u8; 4] = [0, 0, 0xFF, 0xFF];
     for pixel in mmap.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&[0, 0, 0xFF, 0xFF]); //I guess due to endiannness we are actually BGRA?
+        pixel.copy_from_slice(&DEFAULT_COLOR); //I guess due to endiannness we are actually BGRA?
     }
+
     let pool = shm.create_pool(file.as_fd(), width * height * 4, queue_handle, ());
+    let mmap = Arc::new(mmap);
     let release_info = BufferReleaseInfo {
         opt: Mutex::new(Some(ReleaseOpt {
             file,
-            mmap,
+            mmap: mmap.clone(),
+            window_internal
         }))
     };
     let buffer = pool.create_buffer(
@@ -612,8 +638,6 @@ fn create_shm_buffer(
         queue_handle,
         release_info,
     );
-
-
     buffer
 }
 
@@ -673,31 +697,35 @@ impl Dispatch<WlSurface, SurfaceEvents> for App {
     }
 }
 
-impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<XdgSurface, A> for App {
-    fn event(_state: &mut Self, proxy: &XdgSurface, event: <XdgSurface as Proxy>::Event, data: &A, _conn: &Connection, qh: &QueueHandle<Self>) {
-        let mut data = data.as_ref().lock().unwrap();
+impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
+    fn event(_state: &mut Self, proxy: &XdgSurface, event: <XdgSurface as Proxy>::Event, data: &Arc<Mutex<WindowInternal>>, _conn: &Connection, qh: &QueueHandle<Self>) {
+        let mut locked_data = data.as_ref().lock().unwrap();
         match event {
             xdg_surface::Event::Configure { serial } => {
-                let proposed = data.proposed_configure.take();
+                let proposed = locked_data.proposed_configure.take();
                 if let Some(mut configure) = proposed {
                     proxy.ack_configure(serial);
-                    let app_state = data.app_state.upgrade().unwrap();
+                    let app_state = locked_data.app_state.upgrade().unwrap();
                     if configure.width == 0 && configure.height == 0 {
                         //pick our own size
                         configure.width = 800;
                         configure.height = 600;
                     }
                     //check size
-                    if data.applied_configure.as_ref().map(|c| c.width != configure.width || c.height != configure.height).unwrap_or(true) {
-                        data.applied_configure = Some(configure);
-
-                        data.resize_buffer(qh);
-                        let surface = data.wl_surface.as_ref().unwrap();
-                        surface.attach(Some(&data.buffer), 0, 0);
-                        surface.commit();
+                    if locked_data.applied_configure.as_ref().map(|c| c.width != configure.width || c.height != configure.height).unwrap_or(true) {
+                        locked_data.applied_configure = Some(configure);
+                        //are we managing the buffer?
+                        if locked_data.buffer.is_some() {
+                            let size = locked_data.applied_size();
+                            let app_state = locked_data.app_state.upgrade().unwrap();
+                            let buffer = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, &qh, data.clone());
+                            let surface = locked_data.wl_surface.as_ref().unwrap();
+                            surface.attach(Some(&buffer), 0, 0);
+                            surface.commit();
+                            locked_data.buffer = Some(buffer);
+                        }
+                        locked_data.size_update_notify.as_ref().map(|f| f(locked_data.applied_size()));
                     }
-
-
 
                     //todo: adjust buffer size?
                 }
@@ -735,6 +763,8 @@ impl Dispatch<WlBuffer, BufferReleaseInfo> for App {
         match event {
             Event::Release => {
                 let release = data.opt.lock().unwrap().take().expect("No release info");
+                //drop any existing buffer in there, we're done with it
+                release.window_internal.lock().unwrap().buffer.take();
                 proxy.destroy();
                 drop(release);
             }
@@ -981,13 +1011,13 @@ impl Window {
         let window_internal = crate::application::on_main_thread(move || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
-            let window_internal = Arc::new(Mutex::new(WindowInternal::new(&info.app_state, size,title, &info.queue_handle, true)));
+            let window_internal = WindowInternal::new(&info.app_state, size,title, &info.queue_handle, true);
 
             let surface = info.app_state.compositor.create_surface(&info.queue_handle, SurfaceEvents::Standard(window_internal.clone()));
 
             let decor_surface = info.app_state.compositor.create_surface(&info.queue_handle, SurfaceEvents::Decor);
             let decor_subsurface = info.subcompositor.get_subsurface(&decor_surface, &surface, &info.queue_handle, ());
-            let decor_buffer = create_shm_buffer_decor(&info.app_state.shm, &info.queue_handle);
+            let decor_buffer = create_shm_buffer_decor(&info.app_state.shm, &info.queue_handle, window_internal.clone());
             decor_surface.attach(Some(&decor_buffer), 0, 0);
             decor_surface.commit();
             decor_subsurface.set_position(size.width() as i32 - info.app_state.decor_dimensions.0 as i32, 0);
@@ -999,7 +1029,7 @@ impl Window {
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, window_internal.clone());
             window_internal.lock().unwrap().xdg_toplevel.replace(xdg_toplevel);
 
-            surface.attach(Some(&window_internal.lock().unwrap().buffer), 0, 0);
+            surface.attach(Some(&window_internal.lock().unwrap().buffer.as_ref().expect("No buffer")), 0, 0);
             surface.commit();
 
             let seat: WlSeat = info.globals.bind(&info.queue_handle, 8..=9, ()).expect("Can't bind seat");
@@ -1070,9 +1100,8 @@ impl Surface {
 
     }
 
-    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, _update: F) {
-        //not implemented yet!
-        std::mem::forget(_update)
+    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
+        self.window_internal.lock().unwrap().size_update_notify = Some(Box::new(update));
     }
 }
 
