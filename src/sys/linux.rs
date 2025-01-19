@@ -329,7 +329,8 @@ struct WindowInternal {
     requested_maximize: bool,
     adapter: Option<accesskit_unix::Adapter>,
     ax: Option<ax::AX>,
-    size_update_notify: Option<Box<dyn Fn(Size) + Send>>
+    size_update_notify: Option<Box<dyn Fn(Size) + Send>>,
+    decor_subsurface: Option<WlSubsurface>,
 }
 impl WindowInternal {
 
@@ -350,7 +351,8 @@ impl WindowInternal {
         let mut window_internal = Arc::new(Mutex::new(WindowInternal{
             app_state: Arc::downgrade(app_state),
             proposed_configure: None,
-            applied_configure: None,
+            //in case we are asked for size prior to configure?
+            applied_configure: Some(Configure{width: size.width() as i32, height: size.height() as i32, states: Vec::new()}),
             wl_pointer_enter_serial: None,
             wl_pointer_enter_surface: None,
             wl_pointer_pos: None,
@@ -361,6 +363,7 @@ impl WindowInternal {
             adapter,
             ax: ax_impl,
             size_update_notify: None,
+            decor_subsurface: None,
         }));
         let buffer =  create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, window_internal.clone());
 
@@ -713,7 +716,10 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                     }
                     //check size
                     if locked_data.applied_configure.as_ref().map(|c| c.width != configure.width || c.height != configure.height).unwrap_or(true) {
+                        //apply decor position
+                        locked_data.decor_subsurface.as_ref().unwrap().set_position(configure.width - app_state.decor_dimensions.0 as i32, 0);
                         locked_data.applied_configure = Some(configure);
+
                         //are we managing the buffer?
                         if locked_data.buffer.is_some() {
                             let size = locked_data.applied_size();
@@ -726,8 +732,6 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                         }
                         locked_data.size_update_notify.as_ref().map(|f| f(locked_data.applied_size()));
                     }
-
-                    //todo: adjust buffer size?
                 }
             }
             _ => {
@@ -1021,7 +1025,7 @@ impl Window {
             decor_surface.attach(Some(&decor_buffer), 0, 0);
             decor_surface.commit();
             decor_subsurface.set_position(size.width() as i32 - info.app_state.decor_dimensions.0 as i32, 0);
-
+            window_internal.lock().unwrap().decor_subsurface.replace(decor_subsurface);
             window_internal.lock().unwrap().wl_surface.replace(surface.clone());
 
             // Create a toplevel surface
