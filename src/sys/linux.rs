@@ -17,7 +17,7 @@ use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
 use wayland_client::backend::{ObjectId, WaylandError};
 use wayland_client::globals::{registry_queue_init, GlobalList, GlobalListContents};
 use wayland_client::protocol::{wl_compositor, wl_registry, wl_shm};
-use wayland_client::protocol::wl_buffer::WlBuffer;
+use wayland_client::protocol::wl_buffer::{Event, WlBuffer};
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_display::WlDisplay;
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
@@ -309,8 +309,6 @@ struct WindowInternal {
     xdg_toplevel: Option<XdgToplevel>,
     wl_surface: Option<WlSurface>,
     buffer: WlBuffer,
-    file: File,
-    mmap: MmapMut,
     requested_maximize: bool,
     adapter: Option<accesskit_unix::Adapter>,
     ax: Option<ax::AX>,
@@ -319,7 +317,7 @@ impl WindowInternal {
 
     fn new(app_state: &Arc<AppState>, size: Size, title: String, queue_handle: &QueueHandle<App>, ax: bool) -> Self {
 
-        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle);
+        let buffer = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle);
         let ax_impl;
         let adapter;
         if ax {
@@ -342,8 +340,6 @@ impl WindowInternal {
             xdg_toplevel: None,
             wl_surface: None,
             requested_maximize: false,
-            file,
-            mmap,
             buffer,
             adapter,
             ax: ax_impl,
@@ -356,9 +352,7 @@ impl WindowInternal {
     fn resize_buffer(&mut self, queue_handle: &QueueHandle<App>) {
         let size = self.applied_size();
         let app_state = self.app_state.upgrade().unwrap();
-        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, &queue_handle);
-        self.file = file;
-        self.mmap = mmap;
+        let buffer = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, &queue_handle);
         self.buffer = buffer;
     }
 }
@@ -527,8 +521,16 @@ impl AppState {
 
 }
 
+struct BufferReleaseInfo {
+    opt: Mutex<Option<ReleaseOpt>>,
+}
+struct ReleaseOpt {
+    file: File,
+    mmap: MmapMut,
+}
 
-fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>) -> (File, MmapMut, WlBuffer) {
+
+fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>) -> WlBuffer {
     let decor = include_bytes!("../../linux_assets/decor.png");
     let mut decode_decor = zune_png::PngDecoder::new(decor);
     let decode = decode_decor.decode().expect("Can't decode decor");
@@ -556,6 +558,10 @@ fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>) -> (Fil
         pixel.copy_from_slice(decor_pixel);
     }
     let pool = shm.create_pool(file.as_fd(), dimensions.0 as i32 * dimensions.1 as i32 * 4, queue_handle, ());
+    let release_info = BufferReleaseInfo{ opt: Mutex::new(Some(ReleaseOpt {
+        file,
+        mmap,
+    }))};
     let buffer = pool.create_buffer(
         0,
         dimensions.0 as i32,
@@ -563,9 +569,9 @@ fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>) -> (Fil
         dimensions.0 as i32 * 4,
         Format::Argb8888,
         queue_handle,
-        (),
+        release_info,
     );
-    (file, mmap, buffer)
+    buffer
 }
 
 fn create_shm_buffer(
@@ -574,7 +580,7 @@ fn create_shm_buffer(
     shm: &WlShm,
     queue_handle: &QueueHandle<App>,
 
-) -> (File, MmapMut, WlBuffer) {
+) -> WlBuffer {
     let file = unsafe{memfd_create(b"mem_fd\0" as *const c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC)};
     if file < 0 {
         panic!("Failed to create memfd: {err}", err = unsafe{*libc::__errno_location()});
@@ -591,6 +597,12 @@ fn create_shm_buffer(
         pixel.copy_from_slice(&[0, 0, 0xFF, 0xFF]); //I guess due to endiannness we are actually BGRA?
     }
     let pool = shm.create_pool(file.as_fd(), width * height * 4, queue_handle, ());
+    let release_info = BufferReleaseInfo {
+        opt: Mutex::new(Some(ReleaseOpt {
+            file,
+            mmap,
+        }))
+    };
     let buffer = pool.create_buffer(
         0,
         width,
@@ -598,11 +610,11 @@ fn create_shm_buffer(
         width * 4,
         Format::Argb8888,
         queue_handle,
-        (),
+        release_info,
     );
 
 
-    (file, mmap,buffer)
+    buffer
 }
 
 
@@ -718,8 +730,16 @@ impl Dispatch<WlShmPool, ()> for App {
         println!("got WlShmPool event {:?}",event);
     }
 }
-impl Dispatch<WlBuffer, ()> for App {
-    fn event(_state: &mut Self, _proxy: &WlBuffer, event: <WlBuffer as Proxy>::Event, _data: &(), _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+impl Dispatch<WlBuffer, BufferReleaseInfo> for App {
+    fn event(_state: &mut Self, proxy: &WlBuffer, event: <WlBuffer as Proxy>::Event, data: &BufferReleaseInfo, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+        match event {
+            Event::Release => {
+                let release = data.opt.lock().unwrap().take().expect("No release info");
+                proxy.destroy();
+                drop(release);
+            }
+            _ => {/* not implemented yet */}
+        }
         println!("got WlBuffer event {:?}",event);
     }
 }
@@ -920,9 +940,6 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                        }
                    }
                 }
-
-
-
             }
             _ => {
                 //?
@@ -971,7 +988,7 @@ impl Window {
             let decor_surface = info.app_state.compositor.create_surface(&info.queue_handle, SurfaceEvents::Decor);
             let decor_subsurface = info.subcompositor.get_subsurface(&decor_surface, &surface, &info.queue_handle, ());
             let decor_buffer = create_shm_buffer_decor(&info.app_state.shm, &info.queue_handle);
-            decor_surface.attach(Some(&decor_buffer.2), 0, 0);
+            decor_surface.attach(Some(&decor_buffer), 0, 0);
             decor_surface.commit();
             decor_subsurface.set_position(size.width() as i32 - info.app_state.decor_dimensions.0 as i32, 0);
 
