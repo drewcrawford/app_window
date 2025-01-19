@@ -25,6 +25,8 @@ use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
+use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
+use wayland_client::protocol::wl_subsurface::WlSubsurface;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_cursor::CursorTheme;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
@@ -157,6 +159,7 @@ struct MainThreadInfo {
     queue_handle: QueueHandle<App>,
     connection: Connection,
     app_state: Arc<AppState>,
+    subcompositor: WlSubcompositor,
 }
 
 
@@ -180,11 +183,12 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let (globals, mut event_queue) = registry_queue_init::<App>(&connection).expect("Can't initialize registry");
     let qh = event_queue.handle();
     let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 6..=6, ()).unwrap();
+    let subcompositor: WlSubcompositor = globals.bind(&qh, 1..=1, ()).unwrap();
     //fedora 41 KDE uses version 1?
     let shm: WlShm = globals.bind(&qh, 1..=2, ()).unwrap();
 
     let mut app = App(AppState::new(&qh, compositor, &connection, shm));
-    let main_thread_info = MainThreadInfo{globals, queue_handle: qh, connection, app_state: app.0.clone()};
+    let main_thread_info = MainThreadInfo{globals, queue_handle: qh, connection, app_state: app.0.clone(), subcompositor};
 
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
@@ -300,6 +304,7 @@ struct WindowInternal {
     proposed_configure: Option<Configure>,
     applied_configure: Option<Configure>,
     wl_pointer_enter_serial: Option<u32>,
+    wl_pointer_enter_surface: Option<WlSurface>,
     wl_pointer_pos: Option<Position>,
     xdg_toplevel: Option<XdgToplevel>,
     wl_surface: Option<WlSurface>,
@@ -314,7 +319,7 @@ impl WindowInternal {
 
     fn new(app_state: &Arc<AppState>, size: Size, title: String, queue_handle: &QueueHandle<App>, ax: bool) -> Self {
 
-        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, &app_state.decor, app_state.decor_dimensions);
+        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle);
         let ax_impl;
         let adapter;
         if ax {
@@ -332,6 +337,7 @@ impl WindowInternal {
             proposed_configure: None,
             applied_configure: None,
             wl_pointer_enter_serial: None,
+            wl_pointer_enter_surface: None,
             wl_pointer_pos: None,
             xdg_toplevel: None,
             wl_surface: None,
@@ -350,7 +356,7 @@ impl WindowInternal {
     fn resize_buffer(&mut self, queue_handle: &QueueHandle<App>) {
         let size = self.applied_size();
         let app_state = self.app_state.upgrade().unwrap();
-        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, &queue_handle, &app_state.decor, app_state.decor_dimensions);
+        let (file, mmap, buffer) = create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, &queue_handle);
         self.file = file;
         self.mmap = mmap;
         self.buffer = buffer;
@@ -369,6 +375,12 @@ unsafe impl Send for Window {}
 unsafe impl Sync for Window {}
 
 struct App(Arc<AppState>);
+
+enum SurfaceEvents {
+    Standard(Arc<Mutex<WindowInternal>>),
+    Cursor,
+    Decor,
+}
 
 struct ActiveCursor {
     cursor_surface: Arc<WlSurface>,
@@ -409,8 +421,7 @@ impl ActiveCursor {
         let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
         let start_time = std::time::Instant::now();
         //I guess we fake an internal window here?
-        let window_internal = WindowInternal::new(a, Size::new(CURSOR_SIZE as f64, CURSOR_SIZE as f64), "cursor".to_string(), queue_handle, false);
-        let cursor_surface = compositor.create_surface(queue_handle, Box::new(Mutex::new(window_internal)));
+        let cursor_surface = compositor.create_surface(queue_handle,SurfaceEvents::Cursor);
         let start_time = std::time::Instant::now();
         let frame_info = cursor.frame_and_duration(start_time.elapsed().as_millis() as u32);
         let buffer = &cursor[frame_info.frame_index];
@@ -517,14 +528,51 @@ impl AppState {
 }
 
 
+fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>) -> (File, MmapMut, WlBuffer) {
+    let decor = include_bytes!("../../linux_assets/decor.png");
+    let mut decode_decor = zune_png::PngDecoder::new(decor);
+    let decode = decode_decor.decode().expect("Can't decode decor");
+    let dimensions = decode_decor.get_dimensions().unwrap();
+    let decor;
+    match decode {
+        DecodingResult::U8(d) => {
+            decor = d;
+        }
+        _ => todo!()
+    }
+    let file = unsafe{memfd_create(b"decor\0" as *const c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC)};
+    if file < 0 {
+        panic!("Failed to create memfd: {err}", err = unsafe{*libc::__errno_location()});
+    }
+    let file = unsafe{File::from_raw_fd(file)};
+
+    let r = unsafe{libc::ftruncate(file.as_raw_fd(), (dimensions.0 * dimensions.1 * 4) as i64)};
+    if r < 0 {
+        panic!("Failed to truncate memfd: {err}", err = unsafe{*libc::__errno_location()});
+    }
+
+    let mut mmap = unsafe{MmapMut::map_mut(&file)}.unwrap();
+    for (pixel, decor_pixel) in mmap.chunks_exact_mut(4).zip(decor.chunks_exact(4)) {
+        pixel.copy_from_slice(decor_pixel);
+    }
+    let pool = shm.create_pool(file.as_fd(), dimensions.0 as i32 * dimensions.1 as i32 * 4, queue_handle, ());
+    let buffer = pool.create_buffer(
+        0,
+        dimensions.0 as i32,
+        dimensions.1 as i32,
+        dimensions.0 as i32 * 4,
+        Format::Argb8888,
+        queue_handle,
+        (),
+    );
+    (file, mmap, buffer)
+}
 
 fn create_shm_buffer(
     width: i32,
     height: i32,
     shm: &WlShm,
     queue_handle: &QueueHandle<App>,
-    decor: &[u8],
-    decor_dimensions: (usize, usize),
 
 ) -> (File, MmapMut, WlBuffer) {
     let file = unsafe{memfd_create(b"mem_fd\0" as *const c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC)};
@@ -539,25 +587,8 @@ fn create_shm_buffer(
     }
 
     let mut mmap = unsafe{MmapMut::map_mut(&file)}.unwrap();
-
-    let mut x = 0;
-    let mut y = 0;
     for pixel in mmap.chunks_exact_mut(4) {
-        if y < decor_dimensions.1 && x > width - decor_dimensions.0 as i32 {
-            let decor_x = x - (width - decor_dimensions.0 as i32);
-            let decor_y = y;
-
-            let decor_pixel = decor[(decor_y * decor_dimensions.0 + decor_x as usize) * 4..(decor_y * decor_dimensions.0 + decor_x as usize + 1) * 4].to_vec();
-            pixel.copy_from_slice(&decor_pixel);
-        }
-        else {
-            pixel.copy_from_slice(&[0, 0, 0xFF, 0xFF]); //I guess due to endiannness we are actually BGRA?
-        }
-        x+= 1;
-        if x == width {
-            x = 0;
-            y += 1;
-        }
+        pixel.copy_from_slice(&[0, 0, 0xFF, 0xFF]); //I guess due to endiannness we are actually BGRA?
     }
     let pool = shm.create_pool(file.as_fd(), width * height * 4, queue_handle, ());
     let buffer = pool.create_buffer(
@@ -624,8 +655,8 @@ impl Dispatch<WlShm, ()> for App {
         println!("Got shm event {:?}",event);
     }
 }
-impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlSurface, A> for App {
-    fn event(_state: &mut Self, _proxy: &WlSurface, event: <WlSurface as Proxy>::Event, _data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+impl Dispatch<WlSurface, SurfaceEvents> for App {
+    fn event(_state: &mut Self, _proxy: &WlSurface, event: <WlSurface as Proxy>::Event, _data: &SurfaceEvents, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         println!("got WlSurface event {:?}",event);
     }
 }
@@ -698,6 +729,17 @@ impl Dispatch<WlSeat, ()> for App {
     }
 }
 
+impl Dispatch<WlSubcompositor, ()> for App {
+    fn event(_state: &mut Self, _proxy: &WlSubcompositor, event: <WlSubcompositor as Proxy>::Event, _data: &(), _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+        println!("got WlSubcompositor event {:?}",event);
+    }
+}
+impl Dispatch<WlSubsurface, ()> for App {
+    fn event(_state: &mut Self, _proxy: &WlSubsurface, event: <WlSubsurface as Proxy>::Event, _data: &(), _conn: &Connection, _qhandle: &QueueHandle<Self>) {
+        println!("got WlSubsurface event {:?}", event);
+    }
+}
+
 enum MouseRegion {
     BottomRight,
     Bottom,
@@ -747,6 +789,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
         match event {
             wayland_client::protocol::wl_pointer::Event::Enter {serial, surface, surface_x, surface_y} => {
                 data.wl_pointer_enter_serial = Some(serial);
+                data.wl_pointer_enter_surface = Some(surface);
                 //set cursor?
                 let app = data.app_state.upgrade().expect("App state gone");
                 let cursor_request = app.active_cursor.lock().unwrap().as_ref().unwrap().active_request.lock().unwrap().clone();
@@ -758,12 +801,24 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                 surface_y,
                 time,
             } => {
+                let mut parent_surface_x;
+                let mut parent_surface_y;
+                if data.wl_pointer_enter_surface != data.wl_surface {
+                    //we're in the decor; slide by decor dimensions
+                    let surface_dimensions = data.applied_configure.clone().expect("No surface dimensions");
+                    parent_surface_x = surface_x +  surface_dimensions.width as f64 - data.app_state.upgrade().unwrap().decor_dimensions.0 as f64;
+                    parent_surface_y = surface_y;
+                }
+                else {
+                    parent_surface_x = surface_x;
+                    parent_surface_y = surface_y;
+                }
                 #[cfg(feature="app_input")]
-                app_input::linux::motion_event(time, surface_x, surface_y);
+                app_input::linux::motion_event(time, parent_surface_x, parent_surface_y);
 
                 //get current size
                 let size = data.applied_size();
-                let position = Position::new(surface_x as f64, surface_y as f64);
+                let position = Position::new(parent_surface_x as f64, parent_surface_y as f64);
                 data.wl_pointer_pos.replace(position);
                 let cursor_request;
                 match MouseRegion::from_position(size, position) {
@@ -911,8 +966,17 @@ impl Window {
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
             let window_internal = Arc::new(Mutex::new(WindowInternal::new(&info.app_state, size,title, &info.queue_handle, true)));
 
-            let surface = info.app_state.compositor.create_surface(&info.queue_handle, window_internal.clone());
+            let surface = info.app_state.compositor.create_surface(&info.queue_handle, SurfaceEvents::Standard(window_internal.clone()));
+
+            let decor_surface = info.app_state.compositor.create_surface(&info.queue_handle, SurfaceEvents::Decor);
+            let decor_subsurface = info.subcompositor.get_subsurface(&decor_surface, &surface, &info.queue_handle, ());
+            let decor_buffer = create_shm_buffer_decor(&info.app_state.shm, &info.queue_handle);
+            decor_surface.attach(Some(&decor_buffer.2), 0, 0);
+            decor_surface.commit();
+            decor_subsurface.set_position(size.width() as i32 - info.app_state.decor_dimensions.0 as i32, 0);
+
             window_internal.lock().unwrap().wl_surface.replace(surface.clone());
+
             // Create a toplevel surface
             let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, window_internal.clone());
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, window_internal.clone());
