@@ -328,6 +328,7 @@ struct WindowInternal {
     wl_pointer_pos: Option<Position>,
     xdg_toplevel: Option<XdgToplevel>,
     wl_surface: Option<WlSurface>,
+    xdg_surface: Option<XdgSurface>,
     buffer: Option<WlBuffer>,
     requested_maximize: bool,
     adapter: Option<accesskit_unix::Adapter>,
@@ -369,6 +370,7 @@ impl WindowInternal {
             ax: ax_impl,
             size_update_notify: None,
             decor_subsurface: None,
+            xdg_surface: None,
         }));
         let buffer =  create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, window_internal.clone());
 
@@ -1041,7 +1043,10 @@ impl Window {
             // Create a toplevel surface
             let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &info.queue_handle, window_internal.clone());
             let xdg_toplevel = xdg_surface.get_toplevel(&info.queue_handle, window_internal.clone());
+            window_internal.lock().unwrap().xdg_surface.replace(xdg_surface);
+
             window_internal.lock().unwrap().xdg_toplevel.replace(xdg_toplevel);
+
 
             surface.attach(Some(&window_internal.lock().unwrap().buffer.as_ref().expect("No buffer")), 0, 0);
             surface.commit();
@@ -1083,7 +1088,10 @@ impl Window {
 
 impl Drop for Window {
     fn drop(&mut self) {
-        todo!()
+        let internal = self.internal.lock().unwrap();
+        internal.xdg_toplevel.as_ref().map(|e| e.destroy());
+        internal.xdg_surface.as_ref().map(|s| s.destroy());
+        internal.wl_surface.as_ref().map(|s| s.destroy());
     }
 }
 
