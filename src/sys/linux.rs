@@ -1,15 +1,12 @@
 use std::cell::RefCell;
-use std::ffi::{c_char, c_int, c_void, CString};
+use std::ffi::{c_char, c_int, c_void};
 use std::fs::File;
-use std::future::Future;
-use std::ops::Sub;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd};
 use std::ptr::NonNull;
-use std::rc::Rc;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::Duration;
-use io_uring::cqueue::Entry;
+use accesskit::NodeId;
 use libc::{eventfd, getpid, memfd_create, pid_t, syscall, SYS_gettid, EFD_SEMAPHORE, MFD_ALLOW_SEALING, MFD_CLOEXEC};
 use memmap2::MmapMut;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle};
@@ -37,12 +34,16 @@ use zune_png::zune_core::result::DecodingResult;
 use crate::coordinates::{Position, Size};
 use crate::executor::on_main_thread_async;
 
+const CLOSE_ID: NodeId = NodeId(3);
+const MAXIMIZE_ID: NodeId = NodeId(4);
+const MINIMIZE_ID: NodeId = NodeId(5);
+
 mod ax {
     use std::sync::{Arc, Mutex};
     use accesskit::{Action, ActionRequest, CustomAction, NodeId, Rect, Role, TreeUpdate};
     use libc::{access, close};
     use crate::coordinates::Size;
-    use crate::sys::linux::{BUTTON_WIDTH, TITLEBAR_HEIGHT};
+    use crate::sys::linux::{BUTTON_WIDTH, CLOSE_ID, MAXIMIZE_ID, MINIMIZE_ID, TITLEBAR_HEIGHT};
     pub fn build_tree_update(title: String, window_size: Size) -> TreeUpdate {
         let mut window = accesskit::Node::new(Role::Window);
         window.set_label(title);
@@ -72,7 +73,7 @@ mod ax {
 
         //window.set_children(vec![NodeId(2)]);
         //title_bar.set_children(vec![NodeId(3),NodeId(4), NodeId(5)]);
-        window.set_children(vec![NodeId(3), NodeId(4), NodeId(5)]);
+        window.set_children(vec![CLOSE_ID, MINIMIZE_ID, MAXIMIZE_ID]);
 
         let tree = accesskit::Tree {
             root: NodeId(1),
@@ -81,9 +82,9 @@ mod ax {
             toolkit_version: Some("0.1.0".to_string()),
         };
         let update = accesskit::TreeUpdate {
-            nodes: vec![(NodeId(1),window), /*(NodeId(2), title_bar),*/ (NodeId(3), close_button), (NodeId(4), maximize_button), (NodeId(5), minimize_button)],
+            nodes: vec![(NodeId(1),window), /*(NodeId(2), title_bar),*/ (CLOSE_ID, close_button), (MAXIMIZE_ID, maximize_button), (MINIMIZE_ID, minimize_button)],
             tree: Some(tree),
-            focus: NodeId(3),
+            focus: NodeId(1),
         };
         update
     }
@@ -95,11 +96,13 @@ mod ax {
     #[derive(Clone)]
     pub struct AX {
         inner: Arc<Inner>,
+        window_internal: Arc<Mutex<super::WindowInternal>>,
     }
     impl AX {
-        pub fn new(window_size: Size, title: String) -> Self {
+        pub fn new(window_size: Size, title: String, window_internal: Arc<Mutex<super::WindowInternal>>) -> Self {
             AX {
-                inner: Arc::new(Inner{window_size, title})
+                inner: Arc::new(Inner{window_size, title}),
+                window_internal,
             }
         }
     }
@@ -111,7 +114,33 @@ mod ax {
     }
     impl accesskit::ActionHandler for AX {
         fn do_action(&mut self, request: ActionRequest) {
-            todo!()
+            if request.target == CLOSE_ID {
+                match request.action {
+                    Action::Click => {
+                        self.window_internal.lock().unwrap().close_window();
+                    }
+                    _ => unimplemented!()
+                }
+            }
+                else if request.target == MAXIMIZE_ID {
+                    match request.action {
+                        Action::Click => {
+                            self.window_internal.lock().unwrap().maximize();
+                        }
+                        _ => unimplemented!()
+                    }
+                }
+                else if request.target == MINIMIZE_ID {
+                    match request.action {
+                        Action::Click => {
+                            self.window_internal.lock().unwrap().minimize();
+                        }
+                        _ => unimplemented!()
+                    }
+                }
+            else {
+                unimplemented!("Unknown action target: {target:?}", target = request.target);
+            }
         }
     }
     impl accesskit::DeactivationHandler for AX {
@@ -131,8 +160,8 @@ pub struct FullscreenError;
 impl std::error::Error for FullscreenError {}
 
 impl std::fmt::Display for FullscreenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        unimplemented!()
     }
 }
 
@@ -171,7 +200,6 @@ thread_local! {
     static MAIN_THREAD_INFO: RefCell<Option<MainThreadInfo>> = RefCell::new(None);
 }
 
-const ROOT_PATH: &str = "/org/a11y/atspi/accessible/root";
 
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let (sender, receiver) = channel();
@@ -182,7 +210,6 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     });
 
     let connection = Connection::connect_to_env().expect("Failed to connect to wayland server");
-    let display = connection.display();
     let (globals, mut event_queue) = registry_queue_init::<App>(&connection).expect("Can't initialize registry");
     let qh = event_queue.handle();
     let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 6..=6, ()).unwrap();
@@ -332,7 +359,6 @@ struct WindowInternal {
     buffer: Option<WlBuffer>,
     requested_maximize: bool,
     adapter: Option<accesskit_unix::Adapter>,
-    ax: Option<ax::AX>,
     size_update_notify: Option<Box<dyn Fn(Size) + Send>>,
     decor_subsurface: Option<WlSubsurface>,
     title: String
@@ -341,24 +367,13 @@ impl WindowInternal {
 
     fn new(app_state: &Arc<AppState>, size: Size, title: String, queue_handle: &QueueHandle<App>, ax: bool) -> Arc<Mutex<Self>> {
 
-        let ax_impl;
-        let adapter;
-        if ax {
-            let _aximpl = ax::AX::new(size, title.clone());
-            adapter = Some(accesskit_unix::Adapter::new(_aximpl.clone(), _aximpl.clone(), _aximpl.clone()));
-            ax_impl = Some(_aximpl);
-        }
-        else {
-            adapter = None;
-            ax_impl = None;
-        }
-        let ax = ax::AX::new(size, title.clone());
-        let mut window_internal = Arc::new(Mutex::new(WindowInternal{
-            title,
+
+        let window_internal = Arc::new(Mutex::new(WindowInternal{
+            title: title.clone(),
             app_state: Arc::downgrade(app_state),
             proposed_configure: None,
             //in case we are asked for size prior to configure?
-            applied_configure: Some(Configure{width: size.width() as i32, height: size.height() as i32, states: Vec::new()}),
+            applied_configure: Some(Configure{width: size.width() as i32, height: size.height() as i32}),
             wl_pointer_enter_serial: None,
             wl_pointer_enter_surface: None,
             wl_pointer_pos: None,
@@ -366,20 +381,45 @@ impl WindowInternal {
             wl_surface: None,
             requested_maximize: false,
             buffer: None,
-            adapter,
-            ax: ax_impl,
+            adapter: None,
             size_update_notify: None,
             decor_subsurface: None,
             xdg_surface: None,
         }));
-        let buffer =  create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, window_internal.clone());
-
-        window_internal.lock().unwrap().buffer = Some(buffer);
+        if ax {
+            let _aximpl = ax::AX::new(size, title.clone(), window_internal.clone());
+            let adapter = Some(accesskit_unix::Adapter::new(_aximpl.clone(), _aximpl.clone(), _aximpl.clone()));
+            let buffer =  create_shm_buffer(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, window_internal.clone());
+            window_internal.lock().unwrap().buffer = Some(buffer);
+            window_internal.lock().unwrap().adapter = adapter;
+        }
         window_internal
     }
     fn applied_size(&self) -> Size {
         let applied = self.applied_configure.clone().expect("No configure event");
         Size::new(applied.width as f64, applied.height as f64)
+    }
+
+    fn close_window(&self) {
+        self.xdg_toplevel.as_ref().map(|e| e.destroy());
+        self.xdg_surface.as_ref().map(|s| s.destroy());
+        self.wl_surface.as_ref().map(|s| s.destroy());
+    }
+    fn maximize(&mut self) {
+        if self.requested_maximize {
+            self.requested_maximize = false;
+            let toplevel = self.xdg_toplevel.as_ref().unwrap();
+            toplevel.unset_maximized();
+        }
+        else {
+            self.requested_maximize = true;
+            let toplevel = self.xdg_toplevel.as_ref().unwrap();
+            toplevel.set_maximized();
+        }
+    }
+    fn minimize(&self) {
+        let toplevel = self.xdg_toplevel.as_ref().unwrap();
+        toplevel.set_minimized();
     }
 
 }
@@ -388,7 +428,6 @@ impl WindowInternal {
 struct Configure {
     width: i32,
     height: i32,
-    states: Vec<u8>,
 }
 
 
@@ -398,7 +437,7 @@ unsafe impl Sync for Window {}
 struct App(Arc<AppState>);
 
 enum SurfaceEvents {
-    Standard(Arc<Mutex<WindowInternal>>),
+    Standard(()),
     Cursor,
     Decor,
 }
@@ -434,13 +473,12 @@ impl CursorRequest {
     }
 }
 impl ActiveCursor {
-    fn new(connection: &Connection, shm: WlShm, a: &Arc<AppState>, compositor: &WlCompositor, queue_handle: &QueueHandle<App>) -> Self {
+    fn new(connection: &Connection, shm: WlShm, _a: &Arc<AppState>, compositor: &WlCompositor, queue_handle: &QueueHandle<App>) -> Self {
         let mut cursor_theme = CursorTheme::load(&connection, shm, CURSOR_SIZE as u32).expect("Can't load cursors");
-        cursor_theme.set_fallback(|name, size| {
+        cursor_theme.set_fallback(|_, _| {
             Some(include_bytes!("../../linux_assets/left_ptr").into())
         });
         let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
-        let start_time = std::time::Instant::now();
         //I guess we fake an internal window here?
         let cursor_surface = compositor.create_surface(queue_handle,SurfaceEvents::Cursor);
         let start_time = std::time::Instant::now();
@@ -454,7 +492,7 @@ impl ActiveCursor {
         let (cursor_request_sender, cursor_request_receiver) = std::sync::mpsc::channel();
         let active_request = Arc::new(Mutex::new(CursorRequest::wait()));
         let move_active_request = active_request.clone();
-        let cursor_thread = std::thread::Builder::new().name("Cursor thread".to_string()).spawn(move || {
+        std::thread::Builder::new().name("Cursor thread".to_string()).spawn(move || {
             loop {
                 let move_cursor_theme = move_cursor_theme.clone();
                 let move_cursor_surface = move_cursor_surface.clone();
@@ -496,7 +534,8 @@ impl ActiveCursor {
 
 
             }
-        });
+        }).expect("Can't launch cursor thread");
+
         ActiveCursor {
             cursor_surface,
             cursor_sender: cursor_request_sender,
@@ -514,7 +553,7 @@ struct AppState {
     //option for lazy-init purposes
     active_cursor: Mutex<Option<ActiveCursor>>,
     seat: Mutex<Option<WlSeat>>,
-    decor: Vec<u8>,
+    _decor: Vec<u8>,
     decor_dimensions: (usize, usize),
 
 
@@ -533,12 +572,12 @@ impl AppState {
             _ => todo!()
         }
 
-        let mut a = Arc::new(AppState{
+        let a = Arc::new(AppState{
             compositor: compositor.clone(),
             shm: shm.clone(),
             active_cursor: Mutex::new(None),
             seat: Mutex::new(None),
-            decor,
+            _decor: decor,
             decor_dimensions: dimensions
         });
         let active_cursor = ActiveCursor::new(connection, shm, &a, &compositor, queue_handle);
@@ -552,8 +591,8 @@ struct BufferReleaseInfo {
     opt: Mutex<Option<ReleaseOpt>>,
 }
 struct ReleaseOpt {
-    file: File,
-    mmap: Arc<MmapMut>,
+    _file: File,
+    _mmap: Arc<MmapMut>,
     window_internal: Arc<Mutex<WindowInternal>>,
 }
 
@@ -588,8 +627,8 @@ fn create_shm_buffer_decor(shm: &WlShm, queue_handle: &QueueHandle<App>, window_
     let pool = shm.create_pool(file.as_fd(), dimensions.0 as i32 * dimensions.1 as i32 * 4, queue_handle, ());
     let release_info = BufferReleaseInfo{ opt: Mutex::new(Some(ReleaseOpt {
         window_internal,
-        file,
-        mmap: Arc::new(mmap),
+        _file: file,
+        _mmap: Arc::new(mmap),
     }))};
     let buffer = pool.create_buffer(
         0,
@@ -634,8 +673,8 @@ fn create_shm_buffer(
     let mmap = Arc::new(mmap);
     let release_info = BufferReleaseInfo {
         opt: Mutex::new(Some(ReleaseOpt {
-            file,
-            mmap: mmap.clone(),
+            _file: file,
+            _mmap: mmap.clone(),
             window_internal
         }))
     };
@@ -756,11 +795,11 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<XdgToplevel, A> for App {
     fn event(_state: &mut Self, _proxy: &XdgToplevel, event: <XdgToplevel as Proxy>::Event, data: &A, _conn: &Connection, _qhandle: &QueueHandle<Self>) {
         println!("got XdgToplevel event {:?}",event);
         match event {
-            xdg_toplevel::Event::Configure { width, height, states } => {
+            xdg_toplevel::Event::Configure { width, height, states: _ } => {
                 #[cfg(feature = "app_input")]
                 app_input::linux::xdg_toplevel_configure_event(width, height);
 
-                data.as_ref().lock().unwrap().proposed_configure = Some(Configure{width, height, states});
+                data.as_ref().lock().unwrap().proposed_configure = Some(Configure{width, height});
             }
             _ => {
                 //?
@@ -853,7 +892,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
         println!("got WlPointer event {:?}",event);
         let mut data = data.as_ref().lock().unwrap();
         match event {
-            wayland_client::protocol::wl_pointer::Event::Enter {serial, surface, surface_x, surface_y} => {
+            wayland_client::protocol::wl_pointer::Event::Enter {serial, surface, surface_x: _, surface_y: _} => {
                 data.wl_pointer_enter_serial = Some(serial);
                 data.wl_pointer_enter_surface = Some(surface);
                 //set cursor?
@@ -865,10 +904,10 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
             wayland_client::protocol::wl_pointer::Event::Motion {
                 surface_x,
                 surface_y,
-                time,
+                time: _time,
             } => {
-                let mut parent_surface_x;
-                let mut parent_surface_y;
+                let parent_surface_x;
+                let parent_surface_y;
                 if data.wl_pointer_enter_surface != data.wl_surface {
                     //we're in the decor; slide by decor dimensions
                     let surface_dimensions = data.applied_configure.clone().expect("No surface dimensions");
@@ -880,7 +919,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                     parent_surface_y = surface_y;
                 }
                 #[cfg(feature="app_input")]
-                app_input::linux::motion_event(time, parent_surface_x, parent_surface_y);
+                app_input::linux::motion_event(_time, parent_surface_x, parent_surface_y);
 
                 //get current size
                 let size = data.applied_size();
@@ -889,23 +928,18 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                 let cursor_request;
                 match MouseRegion::from_position(size, position) {
                     MouseRegion::BottomRight => {
-                        let app = data.app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::bottom_right_corner();
                     }
                     MouseRegion::Bottom => {
-                        let app = data.app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::bottom_side();
                     }
                     MouseRegion::Right => {
-                        let app = data.app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::right_side();
                     }
                     MouseRegion::Client | MouseRegion::MaximizeButton | MouseRegion::CloseButton | MouseRegion::MinimizeButton => {
-                        let app = data.app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::left_ptr();
                     }
                     MouseRegion::Titlebar => {
-                        let app = data.app_state.upgrade().expect("App state gone");
                         cursor_request = CursorRequest::left_ptr();
                     }
 
@@ -921,10 +955,10 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                 }
             },
             wayland_client::protocol::wl_pointer::Event::Button {
-                serial, time, button, state
+                serial, time: _time, button, state
             } => {
                 #[cfg(feature = "app_input")]
-                app_input::linux::button_event(time, button, state.into(), data.wl_surface.as_ref().unwrap().id());
+                app_input::linux::button_event(_time, button, state.into(), data.wl_surface.as_ref().unwrap().id());
 
                 //get current size
                 let size = data.applied_size();
@@ -962,25 +996,13 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                                toplevel._move(seat.as_ref().unwrap(), serial);
                            }
                            MouseRegion::CloseButton => {
-                               let toplevel = data.xdg_toplevel.as_ref().unwrap();
-                               let app_state = data.app_state.upgrade().unwrap();
-                               toplevel.destroy();
+                               data.close_window();
                            }
                            MouseRegion::MaximizeButton => {
-                               if data.requested_maximize {
-                                   data.requested_maximize = false;
-                                   let toplevel = data.xdg_toplevel.as_ref().unwrap();
-                                   toplevel.unset_maximized();
-                                 }
-                                 else {
-                                      data.requested_maximize = true;
-                                     let toplevel = data.xdg_toplevel.as_ref().unwrap();
-                                     toplevel.set_maximized();
-                               }
+                               data.maximize()
                            }
                             MouseRegion::MinimizeButton => {
-                                 let toplevel = data.xdg_toplevel.as_ref().unwrap();
-                                 toplevel.set_minimized();
+                                 data.minimize();
                             }
 
                        }
@@ -999,20 +1021,20 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
         println!("got WlKeyboard event {:?}",event);
         match event {
             wayland_client::protocol::wl_keyboard::Event::Enter {
-                serial, surface, keys
+                serial: _, surface: _, keys: _
             } => {
                 data.as_ref().lock().unwrap().adapter.as_mut().map(|e| e.update_window_focus_state(true));
             }
             wayland_client::protocol::wl_keyboard::Event::Leave {
-                serial, surface
+                serial: _, surface: _
             } => {
                 data.as_ref().lock().unwrap().adapter.as_mut().map(|e| e.update_window_focus_state(false));
             }
             wayland_client::protocol::wl_keyboard::Event::Key {
-                serial, time, key, state
+                serial: _serial, time: _time, key: _key, state: _state
             } => {
                 #[cfg(feature = "app_input")]
-                app_input::linux::wl_keyboard_event(serial, time, key, state.into(), data.as_ref().lock().unwrap().wl_surface.as_ref().unwrap().id());
+                app_input::linux::wl_keyboard_event(_serial, _time, _key, _state.into(), data.as_ref().lock().unwrap().wl_surface.as_ref().unwrap().id());
             }
             _ => {
             }
@@ -1029,7 +1051,7 @@ impl Window {
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
             let window_internal = WindowInternal::new(&info.app_state, size,title, &info.queue_handle, true);
 
-            let surface = info.app_state.compositor.create_surface(&info.queue_handle, SurfaceEvents::Standard(window_internal.clone()));
+            let surface = info.app_state.compositor.create_surface(&info.queue_handle, SurfaceEvents::Standard(()));
 
             let decor_surface = info.app_state.compositor.create_surface(&info.queue_handle, SurfaceEvents::Decor);
             let decor_subsurface = info.subcompositor.get_subsurface(&decor_surface, &surface, &info.queue_handle, ());
@@ -1088,10 +1110,7 @@ impl Window {
 
 impl Drop for Window {
     fn drop(&mut self) {
-        let internal = self.internal.lock().unwrap();
-        internal.xdg_toplevel.as_ref().map(|e| e.destroy());
-        internal.xdg_surface.as_ref().map(|s| s.destroy());
-        internal.wl_surface.as_ref().map(|s| s.destroy());
+        self.internal.lock().unwrap().close_window();
     }
 }
 
