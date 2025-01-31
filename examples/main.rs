@@ -6,6 +6,7 @@ pub fn main() {
     console_error_panic_hook::set_once();
     #[cfg(target_arch="wasm32")]
     use wasm_thread as thread;
+    #[cfg(feature = "app_input")]
     #[cfg(not(target_arch="wasm32"))]
     use std::thread as thread;
 

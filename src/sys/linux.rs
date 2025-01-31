@@ -11,9 +11,9 @@ use libc::{eventfd, getpid, memfd_create, pid_t, syscall, SYS_gettid, EFD_SEMAPH
 use memmap2::MmapMut;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle};
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
-use wayland_client::backend::{ObjectId, WaylandError};
+use wayland_client::backend::{WaylandError};
 use wayland_client::globals::{registry_queue_init, GlobalList, GlobalListContents};
-use wayland_client::protocol::{wl_compositor, wl_registry, wl_shm};
+use wayland_client::protocol::{wl_compositor, wl_registry};
 use wayland_client::protocol::wl_buffer::{Event, WlBuffer};
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_display::WlDisplay;
@@ -40,8 +40,7 @@ const MINIMIZE_ID: NodeId = NodeId(5);
 
 mod ax {
     use std::sync::{Arc, Mutex};
-    use accesskit::{Action, ActionRequest, CustomAction, NodeId, Rect, Role, TreeUpdate};
-    use libc::{access, close};
+    use accesskit::{Action, ActionRequest, NodeId, Rect, Role, TreeUpdate};
     use crate::coordinates::Size;
     use crate::sys::linux::{BUTTON_WIDTH, CLOSE_ID, MAXIMIZE_ID, MINIMIZE_ID, TITLEBAR_HEIGHT};
     pub fn build_tree_update(title: String, window_size: Size) -> TreeUpdate {
@@ -1045,7 +1044,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
 
 
 impl Window {
-    pub async fn new(position: Position, size: Size, title: String) -> Self {
+    pub async fn new(_position: Position, size: Size, title: String) -> Self {
         let window_internal = crate::application::on_main_thread(move || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
@@ -1075,7 +1074,7 @@ impl Window {
 
             let seat: WlSeat = info.globals.bind(&info.queue_handle, 8..=9, ()).expect("Can't bind seat");
             window_internal.lock().unwrap().app_state.upgrade().unwrap().seat.lock().unwrap().replace(seat.clone());
-            let pointer = seat.get_pointer(&info.queue_handle, window_internal.clone());
+            let _pointer = seat.get_pointer(&info.queue_handle, window_internal.clone());
             let _keyboard = seat.get_keyboard(&info.queue_handle, window_internal.clone());
 
             MAIN_THREAD_INFO.replace(Some(info));

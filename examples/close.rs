@@ -4,10 +4,6 @@ use some_executor::SomeExecutor;
 pub fn main() {
     #[cfg(target_arch="wasm32")]
     console_error_panic_hook::set_once();
-    #[cfg(target_arch="wasm32")]
-    use wasm_thread as thread;
-    #[cfg(not(target_arch="wasm32"))]
-    use std::thread as thread;
 
 
     app_window::application::main(|| {

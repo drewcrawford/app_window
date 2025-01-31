@@ -1,5 +1,5 @@
 use std::future::Future;
-use some_local_executor::some_executor::SomeLocalExecutor;
+
 
 #[non_exhaustive] pub enum WGPUStrategy {
     MainThread,
@@ -17,7 +17,6 @@ pub fn wgpu_spawn<F: Future<Output=()> + Send + 'static>(f: F) {
             let mut exec = some_local_executor::Executor::new();
             let task = some_local_executor::Task::without_notifications("wgpu_spawn".into(), f,some_local_executor::Configuration::default());
             use some_local_executor::some_executor::SomeLocalExecutor;
-            use some_local_executor::some_executor::observer::Observer;
             let o = exec.spawn_local(task);
             std::mem::forget(o);
             exec.drain();
@@ -28,7 +27,6 @@ pub fn wgpu_spawn<F: Future<Output=()> + Send + 'static>(f: F) {
         let mut exec = some_local_executor::Executor::new();
         let task = some_local_executor::Task::without_notifications("wgpu_spawn".into(), f,some_local_executor::Configuration::default());
         use some_local_executor::some_executor::SomeLocalExecutor;
-        use some_local_executor::some_executor::observer::Observer;
         let o = exec.spawn_local(task);
         std::mem::forget(o);
         exec.drain();

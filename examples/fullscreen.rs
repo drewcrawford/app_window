@@ -1,4 +1,3 @@
-use some_executor::hint::Hint;
 use some_executor::observer::Observer;
 use some_executor::SomeExecutor;
 use some_executor::task::{Configuration, Task};

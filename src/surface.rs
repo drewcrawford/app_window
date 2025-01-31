@@ -1,5 +1,3 @@
-use std::sync::Arc;
-use r#continue::continuation;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use crate::coordinates::Size;
 use crate::sys;
@@ -27,12 +25,12 @@ impl Surface {
     }
 
     #[cfg(feature = "wgpu")]
-    pub async fn create_wgpu_surface(&self, instance: &Arc<wgpu::Instance>) -> Result<wgpu::Surface,wgpu::CreateSurfaceError> {
+    pub async fn create_wgpu_surface(&self, instance: &std::sync::Arc<wgpu::Instance>) -> Result<wgpu::Surface,wgpu::CreateSurfaceError> {
         use wgpu::SurfaceTargetUnsafe;
 
         //on this wasm32 we can't send instance
         //on linux can't run on main thread?
-        let (sender,fut) = continuation();
+        let (sender,fut) = r#continue::continuation();
 
         let display_handle = send_cells::unsafe_send_cell::UnsafeSendCell::new(self.raw_display_handle());
         let window_handle = send_cells::unsafe_send_cell::UnsafeSendCell::new(self.raw_window_handle());
