@@ -120,8 +120,8 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: L
 
     match msg {
         m if m == WM_SIZE => {
-            let width = l_param.0 as i32;
-            let height = (l_param.0 >> 16) as i32;
+            let width = (l_param.0 as u32 & 0xFFFF) as i32;  // LOWORD(lParam)
+            let height = ((l_param.0 as u32 >> 16) & 0xFFFF) as i32; // HIWORD(lParam)
             let size = Size::new(width as f64, height as f64);
             HWND_IMPS.with_borrow_mut(|c|  {
                 let entry = c.entry(hwnd.0).or_insert(HwndImp::default());
@@ -215,6 +215,7 @@ impl Drop for Window {
     fn drop(&mut self) {
         let unsafe_hwnd = unsafe{*self.hwnd.get_unchecked()};
         let unsafe_port_hwnd = send_cells::unsafe_send_cell::UnsafeSendCell::new(unsafe_hwnd);
+        println!("destroy window!");
         on_main_thread(move || {
             unsafe { DestroyWindow(*unsafe_port_hwnd.get()) }.expect("Can't close window");
         });

@@ -14,7 +14,7 @@ impl Position {
 
 }
 
-#[derive(Copy,Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Size {
     width: f64,
     height: f64,

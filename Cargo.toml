@@ -9,7 +9,7 @@ edition = "2021"
 [features]
 app_input = ["dep:app_input"]
 some_executor = ["dep:some_executor"]
-wgpu = ["dep:wgpu"]
+wgpu = ["dep:wgpu","dep:some_executor"]
 
 [dependencies]
 app_input = {version = "0.1.0", optional = true}
@@ -57,8 +57,12 @@ wasm_thread = "0.3.3"
 windows = { version = "0.58.0", features=[
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
 ] }
 send_cells = "0.1.0"
+# we use to submit wgpu to local executor
+some_executor = { version = "0.4.0", optional=true }
 
 # linux
 [target.'cfg(target_os="linux")'.dependencies]
@@ -82,3 +86,4 @@ send_cells = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/send_cell
 # on windows we need patched wgpu, hopefully it upstreams post v23.0.1...
 wgpu = {git = "https://github.com/drewcrawford/wgpu.git", branch="trunk"}
 some_local_executor = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_local_executor"}
+some_executor = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_executor"}

@@ -67,6 +67,7 @@ mod gpu {
             let mut some_executor = some_executor::current_executor::current_executor();
             //it's nice to do this inline so that if we get many size updates back-to-back the last one wins
             *move_latest_size.lock().unwrap() = size;
+            println!("got size update {:?}", size);
             let task = some_executor::task::Task::new_objsafe("resize".into(), Box::new(async move {
                 update_sender.send(Message::SizeChanged).await.unwrap();
                 update_sender.async_drop().await;
