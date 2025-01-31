@@ -75,7 +75,7 @@ mod gpu {
             }),Configuration::new(Hint::CPU, Priority::UserInteractive, some_executor::Instant::now()),None);
             some_executor.spawn_objsafe(task).detach();
         });
-        let instance = Arc::new(wgpu::Instance::new(&wgpu::util::instance_descriptor_from_env()));
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
 
         let surface = unsafe{instance.create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
             raw_display_handle: app_surface.raw_display_handle(),

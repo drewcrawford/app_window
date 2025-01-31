@@ -15,7 +15,7 @@ wgpu = ["dep:wgpu","dep:some_executor"]
 app_input = {version = "0.1.0", optional = true}
 raw-window-handle = "0.6.2"
 logwise = "0.2.3"
-wgpu = {version = "23.0.1", optional = true}
+wgpu = {version = "24.0.1", optional = true}
 thiserror = "2.0.9"
 some_executor = {version = "0.4.0", optional = true}
 continue = "0.1.0"
@@ -23,7 +23,7 @@ serde = { version = "1.0.217", features = ["derive"] }
 
 [dev-dependencies]
 # needed for gpu example
-wgpu = "23.0.1"
+wgpu = "24.0.1"
 ampsc = "0.2.0"
 some_executor = "0.4.0"
 
@@ -83,7 +83,5 @@ some_local_executor = "0.1.1"
 
 [patch.crates-io]
 send_cells = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/send_cells"}
-# on windows we need patched wgpu, hopefully it upstreams post v23.0.1...
-wgpu = {git = "https://github.com/drewcrawford/wgpu.git", branch="trunk"}
 some_local_executor = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_local_executor"}
 some_executor = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_executor"}
