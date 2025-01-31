@@ -43,7 +43,7 @@ wasm-bindgen = "0.2.99"
 wasm_thread = "0.3.3"
 wasm-bindgen-futures = "0.4.49"
 ampsc = "0.2.0"
-send_cells = "0.1.0"
+send_cells = "0.1.1"
 #wasm32 requries some_executor to spawn tasks
 some_executor = "0.4.0"
 
@@ -82,6 +82,5 @@ send_cells = "0.1.0"
 some_local_executor = "0.1.1"
 
 [patch.crates-io]
-send_cells = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/send_cells"}
 some_local_executor = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_local_executor"}
 some_executor = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_executor"}
