@@ -88,7 +88,6 @@ mod gpu {
                 // Request an adapter which can render to our surface
                 compatible_surface: Some(&surface),
             }).await.expect("Can't create adapter");
-        // let surface = app_surface.create_wgpu_surface(&instance).await.expect("Can't create surface");
         // Create the logical device and command queue
         let (device, queue) = adapter
             .request_device(
