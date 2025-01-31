@@ -185,9 +185,12 @@ mod gpu {
             let task = some_executor::task::Task::without_notifications("run".into(), async {
                 let window = Window::default().await;
                 #[cfg(feature = "wgpu")] {
-                    app_window::wgpu::wgpu_spawn(async move {
-                        wgpu_run(window).await;
-                    })
+                    app_window::application::on_main_thread(|| {
+                        app_window::wgpu::wgpu_spawn(async move {
+                            wgpu_run(window).await;
+                        })
+                    }).await;
+
                 }
 
                 #[cfg(not(feature = "wgpu"))]
