@@ -2,28 +2,45 @@ use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use crate::coordinates::Size;
 use crate::sys;
 
+/**
+A type that can be drawn on, e.g. by wgpu.
+
+Generally, one Surface can be created from an underlying window.
+*/
 pub struct Surface {
     pub(super) sys: sys::Surface,
 }
 
 impl Surface {
+    /**
+    Returns the size of the surface.
+    */
     pub async fn size(&self) -> Size {
         self.sys.size().await
     }
 
+    /**
+    Returns the raw window handle.
+    */
     pub fn raw_window_handle(&self) -> RawWindowHandle {
         self.sys.raw_window_handle()
     }
+    /**
+    Returns the raw display handle.
+*/
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
         self.sys.raw_display_handle()
     }
     /**
-    Run the attached callback when size changes.
+    Cause the provided callback to run on resize.
     */
     pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
         self.sys.size_update(update)
     }
 
+    /**
+    Create a wgpu surface in a platform-appropriate way.
+*/
     #[cfg(feature = "wgpu")]
     pub async fn create_wgpu_surface(&self, instance: &std::sync::Arc<wgpu::Instance>) -> Result<wgpu::Surface,wgpu::CreateSurfaceError> {
         use wgpu::SurfaceTargetUnsafe;
