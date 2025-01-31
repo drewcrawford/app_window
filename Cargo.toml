@@ -17,7 +17,7 @@ raw-window-handle = "0.6.2"
 logwise = "0.2.3"
 wgpu = {version = "24.0.1", optional = true}
 thiserror = "2.0.9"
-some_executor = {version = "0.4.0", optional = true}
+some_executor = {version = "0.4.1", optional = true}
 continue = "0.1.0"
 serde = { version = "1.0.217", features = ["derive"] }
 
@@ -25,7 +25,7 @@ serde = { version = "1.0.217", features = ["derive"] }
 # needed for gpu example
 wgpu = "24.0.1"
 ampsc = "0.2.0"
-some_executor = "0.4.0"
+some_executor = "0.4.1"
 
 
 # macos
@@ -45,7 +45,7 @@ wasm-bindgen-futures = "0.4.49"
 ampsc = "0.2.0"
 send_cells = "0.1.1"
 #wasm32 requries some_executor to spawn tasks
-some_executor = "0.4.0"
+some_executor = "0.4.1"
 
 [target.'cfg(target_arch="wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.7"
@@ -62,7 +62,7 @@ windows = { version = "0.58.0", features=[
 ] }
 send_cells = "0.1.0"
 # we use to submit wgpu to local executor
-some_executor = { version = "0.4.0", optional=true }
+some_executor = { version = "0.4.1", optional=true }
 
 # linux
 [target.'cfg(target_os="linux")'.dependencies]
@@ -79,8 +79,5 @@ zune-png = "0.4.10"
 accesskit = "0.17.1"
 accesskit_unix = "0.13.1"
 send_cells = "0.1.0"
-some_local_executor = "0.1.1"
+some_local_executor = "0.1.2"
 
-[patch.crates-io]
-some_local_executor = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_local_executor"}
-some_executor = {git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_executor"}
