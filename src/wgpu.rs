@@ -38,13 +38,13 @@ pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::NotMainThread;
 /**
 Describes the preferred strategy for interacting with wgpu on this platform.
 */
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows"))]
 pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
 
 /**
 Describes the preferred strategy for interacting with wgpu on this platform.
 */
-#[cfg(target_arch="wasm32")]
+#[cfg(any(target_arch="wasm32",target_os = "macos"))]
 pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 
 
@@ -76,7 +76,7 @@ This function will panic if not executed on the main thread.
 The details of this vary per platform, as does the platform signature.  On most platforms we require
 that the future be Send and 'static, but on MainThread platforms we do not.
 */
-#[cfg(target_arch="wasm32")]
+#[cfg(any(target_arch="wasm32",target_os = "macos"))]
 pub fn wgpu_spawn<F: Future<Output=()> + 'static>(f: F) {
     //MainThread implementation
     assert!(sys::is_main_thread(), "call wgpu_spawn from the main thread");
