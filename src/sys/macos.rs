@@ -2,7 +2,7 @@
 
 use std::error::Error;
 use std::ffi::c_void;
-use std::fmt::Display;
+use std::fmt::{Debug, Display, Formatter};
 use std::ptr::NonNull;
 use std::sync::{Arc, Weak};
 use r#continue::Sender;
@@ -79,7 +79,7 @@ extern "C" fn recv_size(ctx: *mut Sender<Size>, size_w: f64, size_h: f64) {
 }
 
 
-
+#[derive(Debug)]
 pub struct Window {
     imp: *mut c_void,
 }
@@ -134,10 +134,12 @@ extern "C" fn notify_size<F: Fn(Size) -> ()>(ctx: *const F, width: f64, height: 
     std::mem::forget(as_weak);
 
 }
+
 pub struct Surface {
     imp: *mut c_void,
     update_size: Option<Arc<dyn Fn(Size)>>,
 }
+
 //sendable in swift!
 unsafe impl Send for Surface {}
 unsafe impl Sync for Surface {}
@@ -178,10 +180,19 @@ impl Surface {
     }
 }
 
+
+
 impl Drop for Window {
     fn drop(&mut self) {
         unsafe {
             SwiftAppWindow_WindowFree(self.imp);
         }
+    }
+}
+
+//boilerplate
+impl Debug for Surface {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.imp)
     }
 }

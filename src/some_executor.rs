@@ -9,9 +9,10 @@ use std::pin::Pin;
 use some_executor::observer::{FinishedObservation, Observer, ObserverNotified};
 use some_executor::{DynExecutor, LocalExecutorExt, SomeExecutor, SomeExecutorExt, SomeLocalExecutor};
 use some_executor::task::Task;
-use crate::executor::{on_main_thread_submit};
+use crate::executor::{already_on_main_thread_submit};
+use crate::application::submit_to_main_thread;
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub struct MainThreadExecutor {
 
 }
@@ -29,7 +30,7 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
         <F as Future>::Output: 'static
     {
         let (s,o) = task.spawn_local(self);
-        on_main_thread_submit(async { s.into_future().await;});
+        already_on_main_thread_submit(async { s.into_future().await;});
         o
     }
 
@@ -41,7 +42,7 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
         <F as Future>::Output: 'static,
     {   let (s,o) = task.spawn_local(self);
         async move {
-            on_main_thread_submit(async{s.into_future().await;});
+            already_on_main_thread_submit(async { s.into_future().await;});
             o
         }
 
@@ -49,14 +50,14 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
 
     fn spawn_local_objsafe(&mut self, task: Task<Pin<Box<dyn Future<Output=Box<dyn Any>>>>, Box<dyn ObserverNotified<(dyn Any + 'static)>>>) -> Box<(dyn Observer<Output = FinishedObservation<Box<(dyn Any + 'static)>>, Value = Box<(dyn Any + 'static)>> + 'static)> {
         let (s,o) = task.spawn_local_objsafe(self);
-        on_main_thread_submit(async { s.into_future().await;});
+        already_on_main_thread_submit(async { s.into_future().await;});
         Box::new(o)
     }
 
     fn spawn_local_objsafe_async<'s>(&'s mut self, task: Task<Pin<Box<dyn Future<Output=Box<dyn Any>>>>, Box<dyn ObserverNotified<(dyn Any + 'static)>>>) -> Box<(dyn std::future::Future<Output = Box<(dyn Observer<Output = FinishedObservation<Box<(dyn Any + 'static)>>, Value = Box<(dyn Any + 'static)>> + 'static)>> + 's)> {
         Box::new(async {
             let (s,o) = task.spawn_local_objsafe(self);
-            on_main_thread_submit(async { s.into_future().await;});
+            already_on_main_thread_submit(async { s.into_future().await;});
             Box::new(o) as Box<dyn Observer<Output = FinishedObservation<Box<dyn Any>>, Value = Box<dyn Any>>>
         })
     }
@@ -79,7 +80,7 @@ impl SomeExecutor for MainThreadExecutor {
         F::Output: Send + Unpin
     {
         let (s,o) = task.spawn(self);
-        on_main_thread_submit(async { s.into_future().await;});
+        submit_to_main_thread(||{already_on_main_thread_submit(async { s.into_future().await;});});
         o
     }
 
@@ -90,21 +91,21 @@ impl SomeExecutor for MainThreadExecutor {
     {
         async move {
             let (s,o) = task.spawn(self);
-            on_main_thread_submit(async { s.into_future().await;});
+            submit_to_main_thread(||{already_on_main_thread_submit(async { s.into_future().await;});});
             o
         }
     }
 
     fn spawn_objsafe(&mut self, task: Task<Pin<Box<dyn Future<Output=Box<dyn Any + 'static + Send>> + 'static + Send>>, Box<dyn ObserverNotified<dyn Any + Send> + Send>>) -> Box<dyn Observer<Value=Box<dyn Any + Send>, Output=FinishedObservation<Box<dyn Any + Send>>>> {
         let (s,o) = task.spawn_objsafe(self);
-        on_main_thread_submit(async { s.into_future().await;});
+        submit_to_main_thread(||{already_on_main_thread_submit(async { s.into_future().await;});});
         Box::new(o)
     }
 
     fn spawn_objsafe_async<'s>(&'s mut self, task: Task<Pin<Box<dyn Future<Output=Box<dyn Any + 'static + Send>> + 'static + Send>>, Box<dyn ObserverNotified<dyn Any + Send> + Send>>) -> Box<dyn Future<Output=Box<dyn Observer<Value=Box<dyn Any + Send>, Output=FinishedObservation<Box<dyn Any + Send>>>>> + 's> {
         Box::new(async {
             let (s,o) = task.spawn_objsafe(self);
-            on_main_thread_submit(async { s.into_future().await;});
+            submit_to_main_thread(||{already_on_main_thread_submit(async { s.into_future().await;});});
             Box::new(o) as Box<dyn Observer<Value=Box<dyn Any + Send>, Output=FinishedObservation<Box<dyn Any + Send>>>>
         })
     }

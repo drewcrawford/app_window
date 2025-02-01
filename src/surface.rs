@@ -16,6 +16,8 @@ You may well ask, why have a separate Surface type?  The answer is:
 3.  On most platforms, drawing decorations (title bar, etc) requires some type of compositing with the surface, perhaps by the OS but perhaps by us.
 
 */
+#[derive(Debug)]
+#[must_use = "Dropping a surface may release resources"]
 pub struct Surface {
     pub(super) sys: sys::Surface,
 }

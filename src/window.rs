@@ -9,6 +9,8 @@ A platform-appropriate window.
 
 See the crate documentation for more information on what backend this will use.
 */
+#[derive(Debug)]
+#[must_use = "Dropping a window will close it!"]
 pub struct Window {
     sys: crate::sys::Window,
     created_surface: bool,

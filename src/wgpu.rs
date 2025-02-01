@@ -13,6 +13,7 @@ use crate::sys;
 /**
 Describes the preferred strategy for interacting with wgpu on this platform.
 */
+#[derive(Debug,Copy,Clone,PartialEq,Eq,Hash)]
 #[non_exhaustive] pub enum WGPUStrategy {
     /**
     The main thread should be used to access wgpu.
