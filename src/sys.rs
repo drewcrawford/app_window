@@ -1,3 +1,6 @@
+/*!
+Platform-specific backends
+*/
 #[cfg(target_os="macos")]
 mod macos;
 

@@ -6,6 +6,8 @@ use crate::sys;
 
 /**
 A platform-appropriate window.
+
+See the crate documentation for more information on what backend this will use.
 */
 pub struct Window {
     sys: crate::sys::Window,

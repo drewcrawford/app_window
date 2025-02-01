@@ -1,3 +1,5 @@
+/*! An example for wgpu.
+*/
 #[cfg(feature = "wgpu")]
 mod gpu {
     use std::borrow::Cow;

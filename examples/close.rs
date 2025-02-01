@@ -1,3 +1,6 @@
+/*!
+An example that closes a window.
+*/
 use some_executor::observer::Observer;
 use some_executor::SomeExecutor;
 
