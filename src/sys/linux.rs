@@ -341,6 +341,7 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     MAIN_THREAD_SENDER.get().expect("Main thread sender not set").send(Box::new(closure));
 }
 
+#[derive(Debug)]
 pub struct Window {
     internal: Arc<Mutex<WindowInternal>>,
 }
@@ -1113,6 +1114,7 @@ impl Drop for Window {
     }
 }
 
+#[derive(Debug)]
 pub struct Surface {
     wl_display: WlDisplay,
     wl_surface: WlSurface,
