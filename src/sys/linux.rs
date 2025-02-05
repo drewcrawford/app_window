@@ -346,6 +346,7 @@ pub struct Window {
     internal: Arc<Mutex<WindowInternal>>,
 }
 
+#[derive(Debug)]
 struct WindowInternal {
     app_state: Weak<AppState>,
     proposed_configure: Option<Configure>,
@@ -424,7 +425,7 @@ impl WindowInternal {
 
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 struct Configure {
     width: i32,
     height: i32,
