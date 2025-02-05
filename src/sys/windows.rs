@@ -103,6 +103,7 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     unsafe { PostThreadMessageW(main_thread_id(), WM_RUN_FUNCTION, WPARAM(as_usize), LPARAM(0)) }.expect("PostThreadMessageW failed");
 }
 
+#[derive(Debug)]
 pub struct Window {
     hwnd: SendCell<HWND>,
 }
