@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install libwayland-client
-        run: sudo apt-get install libwayland-client0
+        run: sudo apt-get install libwayland-dev
         if: matrix.os == 'ubuntu-latest'
 
 
