@@ -223,6 +223,7 @@ impl Drop for Window {
     }
 }
 
+#[derive(Debug)]
 pub struct Surface {
     imp: SendCell<HWND>,
 }
