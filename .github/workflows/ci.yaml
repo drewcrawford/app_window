@@ -11,6 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install libwayland-client
+        run: sudo apt-get install libwayland-client0
+        if: matrix.os == 'ubuntu-latest'
+
 
       - name: Test
         run: cargo test
