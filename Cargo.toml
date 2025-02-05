@@ -2,6 +2,16 @@
 name = "app_window"
 version = "0.1.0"
 edition = "2021"
+authors = ["Drew Crawford <drew@sealedabstract.com>"]
+description = "Cross-platform window library"
+repository = "https://github.com/drewcrawford/app_window"
+homepage = "https://sealedabstract.com/code/app_window"
+license = "MPL-2.0"
+keywords = ["window", "windowing"]
+categories = ["gui", "os", "wasm"]
+exclude = [".*"]
+rust-version = "1.78.0"
+
 
 [lib]
 
