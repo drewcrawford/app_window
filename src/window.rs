@@ -1,3 +1,5 @@
+//SPDX-License-Identifier: MPL-2.0
+
 use std::fmt::Display;
 use crate::application::CALL_MAIN;
 use crate::coordinates::{Position, Size};

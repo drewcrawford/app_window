@@ -1,3 +1,5 @@
+//SPDX-License-Identifier: MPL-2.0
+
 /*!a mini-executor for the main thread
 */
 use std::cell::Cell;

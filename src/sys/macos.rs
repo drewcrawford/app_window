@@ -1,6 +1,9 @@
+//SPDX-License-Identifier: MPL-2.0
+
 #![allow(non_snake_case)]
 
 use std::error::Error;
+
 use std::ffi::c_void;
 use std::fmt::{Debug, Display, Formatter};
 use std::ptr::NonNull;

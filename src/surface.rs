@@ -1,3 +1,5 @@
+//SPDX-License-Identifier: MPL-2.0
+
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use crate::coordinates::Size;
 use crate::sys;
