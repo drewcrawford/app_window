@@ -17,6 +17,10 @@ public func IsMainThread() -> Bool {
 @_cdecl("SwiftAppWindowRunMainThread")
 public func RunMainThread() {
     MainActor.assumeIsolated {
+        guard !NSApplication.shared.isRunning else {
+            //Perhaps we already have a runloop going.  For example, we got here from inside a swiftui application.
+            return
+        }
         NSApplication.shared.run()
     }
 }
