@@ -12,7 +12,8 @@ final class SurfaceView: NSView {
     var sizeNotify: ((CGFloat, CGFloat) -> ())?
     override func layout() {
         super.layout()
-        sizeNotify?(frame.width, frame.height)
+        let scale = window?.backingScaleFactor ?? 1.0
+        sizeNotify?(frame.width * scale, frame.height * scale)
     }
 }
 
@@ -25,7 +26,8 @@ public final class Surface: Sendable {
     
     func size() async -> CGSize {
         await MainActor.run {
-            view.frame.size
+            let scale = view.window?.backingScaleFactor ?? 1.0
+            return CGSize(width: view.frame.width * scale, height: view.frame.height * scale)
         }
     }
     var rawHandle: UnsafeMutableRawPointer {
