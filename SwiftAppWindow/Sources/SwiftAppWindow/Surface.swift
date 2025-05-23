@@ -24,10 +24,11 @@ public final class Surface: Sendable {
         self.view = view
     }
     
-    func size() async -> CGSize {
+    ///Returns the size, along with the backing scale.
+    func size() async -> (CGSize,CGFloat) {
         await MainActor.run {
             let scale = view.window?.backingScaleFactor ?? 1.0
-            return CGSize(width: view.frame.width * scale, height: view.frame.height * scale)
+            return (CGSize(width: view.frame.width, height: view.frame.height), scale)
         }
     }
     var rawHandle: UnsafeMutableRawPointer {
@@ -43,11 +44,11 @@ public final class Surface: Sendable {
     
 }
 
-@_cdecl("SwiftAppWindow_SurfaceSize") public func SurfaceSize(context: UInt64, surface: UnsafeMutableRawPointer, ret: @convention(c) @Sendable (UInt64, Double, Double) -> ()) {
+@_cdecl("SwiftAppWindow_SurfaceSize") public func SurfaceSize(context: UInt64, surface: UnsafeMutableRawPointer, ret: @convention(c) @Sendable (UInt64, Double, Double, Double) -> ()) {
     let surface = Unmanaged<Surface>.fromOpaque(surface).takeUnretainedValue()
     Task {
-        let size = await surface.size()
-        ret(context, size.width, size.height)
+        let (size,scale) = await surface.size()
+        ret(context, size.width, size.height, scale)
     }
 }
 

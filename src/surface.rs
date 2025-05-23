@@ -26,10 +26,10 @@ pub struct Surface {
 
 impl Surface {
     /**
-    Returns the size of the surface.
+    Returns the size and scale factor of the surface.
     */
-    pub async fn size(&self) -> Size {
-        self.sys.size().await
+    pub async fn size_scale(&self) -> (Size,f64) {
+        self.sys.size_scale().await
     }
 
     /**

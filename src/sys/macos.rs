@@ -75,10 +75,10 @@ extern "C" fn recv_surface(ctx: *mut Sender<Surface>, surface: *mut c_void) {
     c.send(Surface { imp: surface, update_size: None })
 }
 
-extern "C" fn recv_size(ctx: *mut Sender<Size>, size_w: f64, size_h: f64) {
+extern "C" fn recv_size(ctx: *mut Sender<(Size,f64)>, size_w: f64, size_h: f64, scale_factor: f64) {
     let s = Size::new(size_w, size_h);
-    let c: Sender<Size> = *unsafe{Box::from_raw(ctx)};
-    c.send(s);
+    let c: Sender<(Size, f64)> = *unsafe{Box::from_raw(ctx)};
+    c.send((s,scale_factor));
 }
 
 
@@ -153,7 +153,10 @@ impl Drop for Surface {
 }
 
 impl Surface {
-    pub async fn size(&self) -> Size {
+    /**
+    Returns the size and scale factor of the surface.
+    */
+    pub async fn size_scale(&self) -> (Size,f64) {
         let (sender,fut) = r#continue::continuation();
         let boxed_sender = Box::into_raw(Box::new(sender));
         unsafe{
