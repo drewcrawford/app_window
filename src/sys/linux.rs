@@ -88,7 +88,7 @@ mod ax {
         close_button.set_bounds(Rect::new(
             window_size.width() - BUTTON_WIDTH as f64,
             0.0,
-            window_size.width() as f64,
+            window_size.width(),
             TITLEBAR_HEIGHT as f64,
         ));
         close_button.set_label("Close");
@@ -99,7 +99,7 @@ mod ax {
         maximize_button.set_bounds(Rect::new(
             window_size.width() - BUTTON_WIDTH as f64 * 2.0,
             0.0,
-            window_size.width() as f64 - BUTTON_WIDTH as f64 * 1.0,
+            window_size.width() - BUTTON_WIDTH as f64 * 1.0,
             TITLEBAR_HEIGHT as f64,
         ));
         maximize_button.set_label("Maximize");
@@ -110,7 +110,7 @@ mod ax {
         minimize_button.set_bounds(Rect::new(
             window_size.width() - BUTTON_WIDTH as f64 * 3.0,
             0.0,
-            window_size.width() as f64 - BUTTON_WIDTH as f64 * 2.0,
+            window_size.width() - BUTTON_WIDTH as f64 * 2.0,
             TITLEBAR_HEIGHT as f64,
         ));
         minimize_button.set_label("Minimize");
@@ -124,7 +124,8 @@ mod ax {
             toolkit_name: Some("app_window".to_string()),
             toolkit_version: Some("0.1.0".to_string()),
         };
-        let update = accesskit::TreeUpdate {
+        
+        accesskit::TreeUpdate {
             nodes: vec![
                 (NodeId(1), window),
                 /*(NodeId(2), title_bar),*/ (CLOSE_ID, close_button),
@@ -133,8 +134,7 @@ mod ax {
             ],
             tree: Some(tree),
             focus: NodeId(1),
-        };
-        update
+        }
     }
 
     pub struct Inner {
@@ -228,7 +228,7 @@ struct MainThreadSender {
 impl MainThreadSender {
     fn send(&self, closure: Box<dyn FnOnce() + Send>) {
         self.sender.send(closure).expect("Can't send closure");
-        let val = 1 as u64;
+        let val = 1_u64;
         let w = unsafe {
             libc::write(
                 self.eventfd,
@@ -256,10 +256,10 @@ struct MainThreadInfo {
 }
 
 thread_local! {
-    static MAIN_THREAD_INFO: RefCell<Option<MainThreadInfo>> = RefCell::new(None);
+    static MAIN_THREAD_INFO: RefCell<Option<MainThreadInfo>> = const { RefCell::new(None) };
 }
 
-pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
+pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let (sender, receiver) = channel();
     let channel_read_event = unsafe { eventfd(0, EFD_SEMAPHORE) };
     assert_ne!(channel_read_event, -1, "Failed to create eventfd");
@@ -516,9 +516,9 @@ impl WindowInternal {
     }
 
     fn close_window(&self) {
-        self.xdg_toplevel.as_ref().map(|e| e.destroy());
-        self.xdg_surface.as_ref().map(|s| s.destroy());
-        self.wl_surface.as_ref().map(|s| s.destroy());
+        if let Some(e) = self.xdg_toplevel.as_ref() { e.destroy() }
+        if let Some(s) = self.xdg_surface.as_ref() { s.destroy() }
+        if let Some(s) = self.wl_surface.as_ref() { s.destroy() }
     }
     fn maximize(&mut self) {
         if self.requested_maximize {
@@ -613,7 +613,7 @@ impl ActiveCursor {
         queue_handle: &QueueHandle<App>,
     ) -> Self {
         let mut cursor_theme =
-            CursorTheme::load(&connection, shm, CURSOR_SIZE as u32).expect("Can't load cursors");
+            CursorTheme::load(connection, shm, CURSOR_SIZE as u32).expect("Can't load cursors");
         cursor_theme
             .set_fallback(|_, _| Some(include_bytes!("../../linux_assets/left_ptr").into()));
         let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
@@ -642,7 +642,7 @@ impl ActiveCursor {
                     on_main_thread(move || {
                         let mut binding = move_cursor_theme.lock().unwrap();
                         let cursor = binding
-                            .get_cursor(&mt_active_request.lock().unwrap().name)
+                            .get_cursor(mt_active_request.lock().unwrap().name)
                             .expect("Can't get cursor");
                         let present_time = start_time.elapsed();
                         let frame_info = cursor.frame_and_duration(present_time.as_millis() as u32);
@@ -802,7 +802,8 @@ fn create_shm_buffer_decor(
             _mmap: Arc::new(mmap),
         })),
     };
-    let buffer = pool.create_buffer(
+    
+    pool.create_buffer(
         0,
         dimensions.0 as i32,
         dimensions.1 as i32,
@@ -810,8 +811,7 @@ fn create_shm_buffer_decor(
         Format::Argb8888,
         queue_handle,
         release_info,
-    );
-    buffer
+    )
 }
 
 fn create_shm_buffer(
@@ -858,7 +858,8 @@ fn create_shm_buffer(
             window_internal,
         })),
     };
-    let buffer = pool.create_buffer(
+    
+    pool.create_buffer(
         0,
         width,
         height,
@@ -866,8 +867,7 @@ fn create_shm_buffer(
         Format::Argb8888,
         queue_handle,
         release_info,
-    );
-    buffer
+    )
 }
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for App {
@@ -1012,7 +1012,7 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                                 size.width() as i32,
                                 size.height() as i32,
                                 &app_state.shm,
-                                &qh,
+                                qh,
                                 data.clone(),
                             );
                             let surface = locked_data.wl_surface.as_ref().unwrap();
@@ -1022,13 +1022,10 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                         }
                         let title = locked_data.title.clone();
                         let applied_size = locked_data.applied_size();
-                        locked_data.adapter.as_mut().map(|a| {
-                            a.update_if_active(|| ax::build_tree_update(title, applied_size))
-                        });
-                        locked_data
+                        if let Some(a) = locked_data.adapter.as_mut() { a.update_if_active(|| ax::build_tree_update(title, applied_size)) }
+                        if let Some(f) = locked_data
                             .size_update_notify
-                            .as_ref()
-                            .map(|f| f.0(locked_data.applied_size()));
+                            .as_ref() { f.0(locked_data.applied_size()) }
                     }
                 }
             }
@@ -1279,7 +1276,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
 
                 //get current size
                 let size = data.applied_size();
-                let position = Position::new(parent_surface_x as f64, parent_surface_y as f64);
+                let position = Position::new(parent_surface_x, parent_surface_y);
                 data.wl_pointer_pos.replace(position);
                 let cursor_request;
                 match MouseRegion::from_position(size, position) {
@@ -1333,7 +1330,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
 
                 //get current size
                 let size = data.applied_size();
-                let mouse_pos = data.wl_pointer_pos.clone().expect("No pointer position");
+                let mouse_pos = data.wl_pointer_pos.expect("No pointer position");
                 let mouse_region = MouseRegion::from_position(size, mouse_pos);
                 let pressed: u32 = state.into();
                 if button == 0x110 {
@@ -1411,23 +1408,21 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
                 surface: _,
                 keys: _,
             } => {
-                data.as_ref()
+                if let Some(e) = data.as_ref()
                     .lock()
                     .unwrap()
                     .adapter
-                    .as_mut()
-                    .map(|e| e.update_window_focus_state(true));
+                    .as_mut() { e.update_window_focus_state(true) }
             }
             wayland_client::protocol::wl_keyboard::Event::Leave {
                 serial: _,
                 surface: _,
             } => {
-                data.as_ref()
+                if let Some(e) = data.as_ref()
                     .lock()
                     .unwrap()
                     .adapter
-                    .as_mut()
-                    .map(|e| e.update_window_focus_state(false));
+                    .as_mut() { e.update_window_focus_state(false) }
             }
             wayland_client::protocol::wl_keyboard::Event::Key {
                 serial: _serial,
@@ -1516,7 +1511,7 @@ impl Window {
 
             surface.attach(
                 Some(
-                    &window_internal
+                    window_internal
                         .lock()
                         .unwrap()
                         .buffer
@@ -1666,7 +1661,7 @@ impl Surface {
         ))
     }
 
-    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
+    pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, update: F) {
         self.window_internal.lock().unwrap().size_update_notify = Some(DebugWrapper(Box::new(update)));
     }
 }
