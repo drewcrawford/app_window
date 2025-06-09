@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::js_sys::{Promise};
+use wasm_bindgen_futures::js_sys::Promise;
 use web_sys::js_sys::TypeError;
 use web_sys::{HtmlCanvasElement, window};
 
@@ -119,7 +119,6 @@ extern "C" {
     #[wasm_bindgen::prelude::wasm_bindgen(method,js_class="Element",js_name=requestFullscreen)]
     fn request_fullscreen_2(this: &Element2) -> Promise;
 }
-
 
 impl Window {
     pub async fn fullscreen(title: String) -> Result<Self, FullscreenError> {
@@ -297,7 +296,7 @@ impl Surface {
                 .expect("No height?");
             let px = w.device_pixel_ratio();
 
-            (Size::new(width, height),px)
+            (Size::new(width, height), px)
         })
         .await
     }
