@@ -103,7 +103,7 @@ struct Task {
 thread_local! {
     // Thread-local storage for the task queue.
     // This stores all pending tasks that need to be executed on the main thread.
-    static FUTURES: Cell<Vec<Task> >= Cell::new(Vec::new());
+    static FUTURES: Cell<Vec<Task> >= const { Cell::new(Vec::new()) };
 }
 
 /// Runs the specified future on the main thread and returns its result.

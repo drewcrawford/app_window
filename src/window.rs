@@ -139,7 +139,7 @@ impl Window {
         assert!(crate::application::is_main_thread_running(), "{}",CALL_MAIN);
         let sys = crate::sys::Window::fullscreen(title).await?;
         Ok(Window {
-            sys: sys,
+            sys,
             created_surface: false,
         })
     }

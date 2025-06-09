@@ -29,7 +29,7 @@ use crate::sys;
 
 static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
 
-pub(crate) const CALL_MAIN: &'static str = "Call app_window::application::run_main_thread";
+pub(crate) const CALL_MAIN: &str = "Call app_window::application::run_main_thread";
 
 
 /// Initializes and runs the application event loop.
@@ -88,7 +88,7 @@ pub(crate) const CALL_MAIN: &'static str = "Call app_window::application::run_ma
 ///     # }
 /// });
 /// ```
-pub fn main<F: FnOnce() -> () + Send + 'static>(closure: F) {
+pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
     assert!(sys::is_main_thread(), "Call main from the first thread");
     let old = IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Release);
 
@@ -188,7 +188,7 @@ pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>
 ///
 /// This function handles platform-specific details of main thread execution and may
 /// install a main thread executor if necessary for the current platform.
-pub(crate) fn submit_to_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
+pub(crate) fn submit_to_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     sys::on_main_thread(closure);
 }
 

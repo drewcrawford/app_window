@@ -172,7 +172,7 @@ impl Surface {
     /// - **All platforms**: The callback is invoked after the resize has occurred
     /// - **macOS**: May be called multiple times during a resize drag operation
     /// - **Windows/Linux**: Typically called at the end of a resize operation
-    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
+    pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, update: F) {
         self.sys.size_update(update)
     }
 

@@ -45,7 +45,7 @@ pub fn is_main_thread() -> bool {
     unsafe{SwiftAppWindowIsMainThread()}
 }
 
-pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
+pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     std::thread::spawn(|| {
         closure()
     });
@@ -114,10 +114,10 @@ impl Window {
         unsafe{SwiftAppWindow_WindowSurface(sender_box as *mut c_void, self.imp,  recv_surface as *mut c_void)};
 
         let sys_surface = fut.await;
-        let crate_surface = crate::surface::Surface {
+        
+        crate::surface::Surface {
             sys: sys_surface
-        };
-        crate_surface
+        }
     }
 }
 
@@ -128,7 +128,7 @@ swift!(fn SwiftAppWindow_SurfaceRawHandle(surface: *mut c_void)  -> *mut c_void)
 swift!(fn SwiftAppWindow_SurfaceFree(surface: *mut c_void) -> ());
 swift!(fn SwiftAppWindow_SurfaceSizeUpdate(ctx: *mut c_void, surface: *mut c_void, notify: *mut c_void) -> ());
 
-extern "C" fn notify_size<F: Fn(Size) -> ()>(ctx: *const F, width: f64, height: f64) {
+extern "C" fn notify_size<F: Fn(Size)>(ctx: *const F, width: f64, height: f64) {
     let as_weak = unsafe{Weak::from_raw(ctx)};
     if let Some(upgrade) = as_weak.upgrade() {
         (upgrade)(Size::new(width, height));
@@ -177,7 +177,7 @@ impl Surface {
     /**
     Run the attached callback when size changes.
     */
-    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
+    pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, update: F) {
         let strong_update = Arc::new(update);
         let weak = Weak::into_raw(Arc::downgrade(&strong_update));
         self.update_size = Some(strong_update);
