@@ -10,16 +10,17 @@ use some_executor::observer::Observer;
 use some_executor::task::Configuration;
 use std::cell::RefCell;
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::js_sys::{Function, Promise};
+use wasm_bindgen_futures::js_sys::{Promise};
 use web_sys::js_sys::TypeError;
 use web_sys::{HtmlCanvasElement, window};
 
+#[derive(Debug)]
 pub struct Window {}
 
 thread_local! {
@@ -34,7 +35,7 @@ static MAIN_THREAD_SENDER: OnceLock<ampsc::ChannelProducer<MainThreadEvent>> = O
 
 struct CanvasHolder {
     handle: WebWindowHandle,
-    closure: Closure<dyn FnMut()>,
+    _closure: Closure<dyn FnMut()>,
     canvas: Rc<HtmlCanvasElement>,
     closure_box: Arc<Mutex<Option<Box<dyn Fn(Size) + Send>>>>,
 }
@@ -44,8 +45,6 @@ impl CanvasHolder {
         let closure_box = Arc::new(Mutex::new(None));
         let move_closure_box = closure_box.clone();
 
-        struct SendMe(*const Function);
-        unsafe impl Send for SendMe {}
         let window = window().expect("Can't get window");
 
         let document = window.document().expect("Can't get document");
@@ -97,7 +96,7 @@ impl CanvasHolder {
             .expect("Can't append canvas to body");
         CanvasHolder {
             handle: WebWindowHandle::new(1),
-            closure,
+            _closure: closure,
             canvas: canvas_rc,
             closure_box,
         }
@@ -121,7 +120,6 @@ extern "C" {
     fn request_fullscreen_2(this: &Element2) -> Promise;
 }
 
-fn build_canvas_if_needed() {}
 
 impl Window {
     pub async fn fullscreen(title: String) -> Result<Self, FullscreenError> {
@@ -129,12 +127,12 @@ impl Window {
         let sender_mutex = Arc::new(Mutex::new(Some(sender)));
         let sender_mutex_error = sender_mutex.clone();
         let main_thread_job = crate::application::on_main_thread(move || {
-            let strong_closure = Closure::once(move |a| {
-                let mut lock = sender_mutex.lock().unwrap().take().expect("already sent?");
+            let strong_closure = Closure::once(move |_| {
+                let lock = sender_mutex.lock().unwrap().take().expect("already sent?");
                 lock.send(Ok(()));
             });
             let error_closure = Closure::once(move |a: JsValue| {
-                let mut lock = sender_mutex_error
+                let lock = sender_mutex_error
                     .lock()
                     .unwrap()
                     .take()
@@ -184,7 +182,7 @@ impl Window {
                 let canvas = canvas.as_ref().expect("no canvas");
                 Surface {
                     display_handle: canvas.handle,
-                    closure_box: canvas.closure_box.clone(),
+                    closure_box: DebugWrapper(canvas.closure_box.clone()),
                 }
             });
             surface
@@ -215,7 +213,6 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     });
     assert!(sent, "Don't call run_main_thread more than once");
 
-    let mut event_id = 0;
     let push_context = Context::current();
     let push_context_2 = push_context.clone();
 
@@ -225,7 +222,6 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
         async move {
             loop {
                 let event = receiver.receive().await.expect("Can't receive event");
-                event_id += 1;
                 match event {
                     MainThreadEvent::Execute(f) => f(),
                 }
@@ -272,12 +268,21 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     }
 }
 
+#[derive(Clone)]
+struct DebugWrapper<T>(T);
+
+impl<T> Debug for DebugWrapper<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DebugWrapper")
+    }
+}
+#[derive(Debug)]
 pub struct Surface {
     display_handle: WebWindowHandle,
-    closure_box: Arc<Mutex<Option<Box<dyn Fn(Size) -> () + Send + 'static>>>>,
+    closure_box: DebugWrapper<Arc<Mutex<Option<Box<dyn Fn(Size) -> () + Send + 'static>>>>>,
 }
 impl Surface {
-    pub async fn size(&self) -> Size {
+    pub async fn size_scale(&self) -> (Size, f64) {
         crate::application::on_main_thread(|| {
             let w = window().expect("No window?");
             let width = w
@@ -290,7 +295,9 @@ impl Surface {
                 .expect("No height?")
                 .as_f64()
                 .expect("No height?");
-            Size::new(width, height)
+            let px = w.device_pixel_ratio();
+
+            (Size::new(width, height),px)
         })
         .await
     }
@@ -305,6 +312,6 @@ impl Surface {
     Run the attached callback when size changes.
     */
     pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
-        self.closure_box.lock().unwrap().replace(Box::new(update));
+        self.closure_box.0.lock().unwrap().replace(Box::new(update));
     }
 }
