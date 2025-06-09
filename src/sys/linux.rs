@@ -769,9 +769,10 @@ fn create_shm_buffer_decor(
         DecodingResult::U8(d) => d,
         _ => todo!(),
     };
+    const DECOR: &[u8] = b"decor\0";
     let file = unsafe {
         memfd_create(
-            b"decor\0" as *const libc::c_char,
+            DECOR.as_ptr(),
             MFD_ALLOW_SEALING | MFD_CLOEXEC,
         )
     };
@@ -827,9 +828,10 @@ fn create_shm_buffer(
     queue_handle: &QueueHandle<App>,
     window_internal: Arc<Mutex<WindowInternal>>,
 ) -> WlBuffer {
+    let mem_fd = b"mem_fd\0";
     let file = unsafe {
         memfd_create(
-            b"mem_fd\0" as *const libc::c_char,
+            mem_fd.as_ptr(),
             MFD_ALLOW_SEALING | MFD_CLOEXEC,
         )
     };
