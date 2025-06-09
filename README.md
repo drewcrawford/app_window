@@ -17,6 +17,69 @@ This crate distinguishes itself from winit in a few ways:
     * Optionally provides a 'wgpu executor' that can spawn tasks for using wgpu.  Notably, on platforms that require wgpu to be accessed from the main thread,
       it does that, and on platforms that need it NOT to be on the main thread, it does that too!
 
+# Quick Start
+
+```rust
+use app_window::{application, window::Window, coordinates::{Position, Size}};
+
+#[tokio::main]
+async fn main() {
+    // Initialize the application
+    application::main(|| async {
+        // Create a window
+        let window = Window::new(
+            Position::new(100.0, 100.0),
+            Size::new(800.0, 600.0),
+            "My Window".to_string()
+        ).await;
+
+        // Window stays open as long as the instance exists
+    });
+}
+```
+
+# Threading Model
+
+This crate is designed to work across platforms with very different threading requirements:
+
+- **macOS**: UI operations must happen on the main thread
+- **Windows**: Most UI operations can happen on any thread
+- **Linux (Wayland)**: Thread requirements vary by compositor
+- **Web**: Single-threaded environment
+
+To handle this, we provide:
+1. An async-first API that works from any thread
+2. A built-in main thread executor for UI operations
+3. Platform-specific handling for graphics APIs like wgpu
+
+# Examples
+
+## Creating a fullscreen window
+
+```rust
+use app_window::{application, window::Window};
+
+match Window::fullscreen("Fullscreen App".to_string()).await {
+    Ok(window) => {
+        // Window created successfully
+    }
+    Err(e) => eprintln!("Failed to create fullscreen window: {:?}", e),
+}
+```
+
+## Running code on the main thread
+
+```rust
+use app_window::application;
+
+// From any thread:
+let result = application::on_main_thread(|| {
+    // This runs on the main thread
+    42
+}).await;
+assert_eq!(result, 42);
+```
+
 
 # Cargo features
 * `some_executor` - Provides interop with the `some-executor` crate.
