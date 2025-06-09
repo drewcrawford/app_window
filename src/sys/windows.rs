@@ -92,8 +92,8 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
                 unsafe {
                     //ms code seems to ignore this return value in practice
                     //see https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessage
-                    _ = TranslateMessage(&mut message);
-                    DispatchMessageW(&mut message);
+                    _ = TranslateMessage(&message);
+                    DispatchMessageW(&message);
                 }
             }
         }
