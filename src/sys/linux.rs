@@ -770,12 +770,7 @@ fn create_shm_buffer_decor(
         _ => todo!(),
     };
     const DECOR: &[u8] = b"decor\0";
-    let file = unsafe {
-        memfd_create(
-            DECOR.as_ptr(),
-            MFD_ALLOW_SEALING | MFD_CLOEXEC,
-        )
-    };
+    let file = unsafe { memfd_create(DECOR.as_ptr(), MFD_ALLOW_SEALING | MFD_CLOEXEC) };
     if file < 0 {
         panic!(
             "Failed to create memfd: {err}",
@@ -829,12 +824,7 @@ fn create_shm_buffer(
     window_internal: Arc<Mutex<WindowInternal>>,
 ) -> WlBuffer {
     let mem_fd = b"mem_fd\0";
-    let file = unsafe {
-        memfd_create(
-            mem_fd.as_ptr(),
-            MFD_ALLOW_SEALING | MFD_CLOEXEC,
-        )
-    };
+    let file = unsafe { memfd_create(mem_fd.as_ptr(), MFD_ALLOW_SEALING | MFD_CLOEXEC) };
     if file < 0 {
         panic!(
             "Failed to create memfd: {err}",
