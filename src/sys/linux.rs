@@ -12,6 +12,7 @@ use raw_window_handle::{
 };
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_void};
+use std::fmt::Debug;
 use std::fs::File;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd};
 use std::ptr::NonNull;
@@ -107,7 +108,6 @@ mod ax {
 
         let tree = accesskit::Tree {
             root: NodeId(1),
-            app_name: Some("app_window".to_string()),
             toolkit_name: Some("app_window".to_string()),
             toolkit_version: Some("0.1.0".to_string()),
         };
@@ -415,6 +415,13 @@ pub struct Window {
     internal: Arc<Mutex<WindowInternal>>,
 }
 
+struct DebugWrapper(Box<dyn Fn(Size) + Send>);
+impl Debug for DebugWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DebugWrapper")
+    }
+}
+
 #[derive(Debug)]
 struct WindowInternal {
     app_state: Weak<AppState>,
@@ -429,7 +436,7 @@ struct WindowInternal {
     buffer: Option<WlBuffer>,
     requested_maximize: bool,
     adapter: Option<accesskit_unix::Adapter>,
-    size_update_notify: Option<Box<dyn Fn(Size) + Send>>,
+    size_update_notify: Option<DebugWrapper>,
     decor_subsurface: Option<WlSubsurface>,
     title: String,
 }
@@ -981,7 +988,7 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                         locked_data
                             .size_update_notify
                             .as_ref()
-                            .map(|f| f(locked_data.applied_size()));
+                            .map(|f| f.0(locked_data.applied_size()));
                     }
                 }
             }
@@ -1542,8 +1549,11 @@ unsafe impl Send for Surface {}
 unsafe impl Sync for Surface {}
 
 impl Surface {
-    pub async fn size(&self) -> Size {
-        self.window_internal.lock().unwrap().applied_size()
+    pub async fn size_scale(&self) -> (Size, f64) {
+
+        let size = self.window_internal.lock().unwrap().applied_size();
+        let scale = todo!();
+            (size, scale)
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {
@@ -1568,7 +1578,7 @@ impl Surface {
     }
 
     pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
-        self.window_internal.lock().unwrap().size_update_notify = Some(Box::new(update));
+        self.window_internal.lock().unwrap().size_update_notify = Some(DebugWrapper(Box::new(update)));
     }
 }
 
