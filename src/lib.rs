@@ -220,6 +220,7 @@ pub mod some_executor;
 ///     WGPUStrategy::MainThread => println!("GPU access must be on main thread"),
 ///     WGPUStrategy::NotMainThread => println!("GPU access must NOT be on main thread"),
 ///     WGPUStrategy::Relaxed => println!("GPU types are Send+Sync"),
+///     _ => println!("Unknown strategy"),
 /// }
 /// 
 /// // Spawn a future on the appropriate thread for wgpu

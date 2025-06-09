@@ -61,7 +61,7 @@ mod gpu {
         logwise::warn_sync!("main_run");
         let mut app_surface = window.surface().await;
         let ( sender,mut receiver) = ampsc::channel();
-        let size = app_surface.size().await;
+        let (size, _scale) = app_surface.size_scale().await;
         let latest_size = Arc::new(Mutex::new(size));
         let move_latest_size = latest_size.clone();
         app_surface.size_update(move |size| {
@@ -100,8 +100,8 @@ mod gpu {
                     required_limits: wgpu::Limits::downlevel_webgl2_defaults()
                         .using_resolution(adapter.limits()),
                     memory_hints: wgpu::MemoryHints::MemoryUsage,
+                    trace: wgpu::Trace::default(),
                 },
-                None,
             )
             .await
             .expect("Failed to create device");
