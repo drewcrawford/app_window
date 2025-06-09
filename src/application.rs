@@ -1,5 +1,28 @@
 //SPDX-License-Identifier: MPL-2.0
 
+//! Application lifecycle and main thread management.
+//!
+//! This module provides the core functionality for initializing and running the application's
+//! event loop. It handles platform-specific requirements for UI event processing and provides
+//! utilities for executing code on the main thread.
+//!
+//! # Main Thread Requirements
+//!
+//! Many platforms (notably macOS) require that UI operations occur on the main thread. This module
+//! provides abstractions to handle these requirements portably across all platforms.
+//!
+//! # Getting Started
+//!
+//! Every application using `app_window` must call [`main()`] exactly once from the first thread
+//! of the program. This initializes the platform event loop and allows windows to be created.
+//!
+//! ```no_run
+//! app_window::application::main(|| {
+//!     println!("Application initialized!");
+//!     // Your application setup code here
+//! });
+//! ```
+
 use std::sync::atomic::AtomicBool;
 
 use crate::sys;
@@ -9,32 +32,62 @@ static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
 pub(crate) const CALL_MAIN: &'static str = "Call app_window::application::run_main_thread";
 
 
-/**
-Performs the runloop or event loop.
-
-Call this function exactly once, from the first thread in your program.
-
-On most platforms, this function parks the thread, possibly in a platform-specific way to receive UI events.
-
-On platforms like wasm, this function may return immediately.
-
-# Arguments
-
-Accepts a function/closure that will be run "once the main loop is ready".  On platforms where
-the main thread must be parked, this closure will be invoked on a secondary thread.
-
-
-# Discussion
-
-On many platforms, UI needs some kind of application-wide runloop or event loop.  Calling this function
-turns the current thread into that runloop (on platforms where this is necessary).
-
-Many platforms, such as macOS, require that the first thread created by the application perform the runloop
-(you can't do it on an arbitrary thread).  Accordingly on all platforms, require this function to be called
-from the first thread.
-
-
-*/
+/// Initializes and runs the application event loop.
+///
+/// This function sets up the platform-specific event loop and must be called exactly once
+/// from the first thread in your program. It turns the calling thread into the main event
+/// loop thread.
+///
+/// # Arguments
+///
+/// * `closure` - A function or closure that will be executed once the event loop is ready.
+///   On platforms where the main thread must handle events, this closure runs on a
+///   secondary thread.
+///
+/// # Platform Behavior
+///
+/// - **macOS/Windows/Linux**: Parks the calling thread to process UI events
+/// - **WebAssembly**: May return immediately after setting up event handlers
+///
+/// # Panics
+///
+/// - If called from any thread other than the first thread
+/// - If called more than once
+///
+/// # Examples
+///
+/// Basic application setup:
+///
+/// ```no_run
+/// app_window::application::main(|| {
+///     println!("Event loop is ready!");
+/// });
+/// ```
+///
+/// Creating a window after initialization:
+///
+/// ```no_run
+/// use app_window::coordinates::{Position, Size};
+/// 
+/// app_window::application::main(|| {
+///     # #[cfg(feature = "some_executor")]
+///     # {
+///     // Spawn an async task to create a window
+///     let task = async {
+///         let window = app_window::window::Window::new(
+///             Position::new(100.0, 100.0),
+///             Size::new(800.0, 600.0),
+///             "My Window".to_string()
+///         ).await;
+///         
+///         // Keep window alive
+///         std::mem::forget(window);
+///     };
+///     
+///     // In a real app, spawn this with your executor
+///     # }
+/// });
+/// ```
 pub fn main<F: FnOnce() -> () + Send + 'static>(closure: F) {
     assert!(sys::is_main_thread(), "Call main from the first thread");
     let old = IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Release);
@@ -48,18 +101,68 @@ pub fn main<F: FnOnce() -> () + Send + 'static>(closure: F) {
     sys::run_main_thread(closure);
 }
 
-/**
-Determines if the main thread was started.
-*/
+/// Checks if the main thread event loop has been started.
+///
+/// This internal function is used to verify that [`main()`] has been called before
+/// attempting operations that require the event loop.
 pub(crate) fn is_main_thread_running() -> bool {
     IS_MAIN_THREAD_RUNNING.load(std::sync::atomic::Ordering::Acquire)
 }
 
-/**
-Run the specified closure on the main thread.
-
-The main thread may be blocked or unable to receive events while this closure is running.
-*/
+/// Executes a closure on the main thread and returns its result.
+///
+/// This async function allows code running on any thread to execute operations that must
+/// occur on the main thread. The closure is scheduled to run on the main thread, and this
+/// function waits for its completion.
+///
+/// # Type Parameters
+///
+/// * `R` - The return type of the closure (must be `Send`)
+/// * `F` - The closure type
+///
+/// # Arguments
+///
+/// * `closure` - A function or closure to execute on the main thread
+///
+/// # Returns
+///
+/// The value returned by the closure
+///
+/// # Performance Considerations
+///
+/// The main thread may be blocked or unable to process other events while the closure
+/// is executing. Keep main thread operations brief to maintain UI responsiveness.
+///
+/// # Examples
+///
+/// ```no_run
+/// # async fn example() {
+/// use app_window::application;
+/// 
+/// // Execute a UI operation on the main thread
+/// let result = application::on_main_thread(|| {
+///     println!("Running on main thread!");
+///     42
+/// }).await;
+/// 
+/// assert_eq!(result, 42);
+/// # }
+/// ```
+///
+/// Platform-specific operations:
+///
+/// ```no_run
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// use app_window::application;
+/// 
+/// // Many UI operations must happen on the main thread
+/// let window_title = application::on_main_thread(|| {
+///     // Platform-specific window operations would go here
+///     "Main Window".to_string()
+/// }).await;
+/// # Ok(())
+/// # }
+/// ```
 pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
     let(sender,receiver) = r#continue::continuation();
     let block = move ||{
@@ -71,10 +174,20 @@ pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>
     receiver.await
 }
 
-/**
-Submits the closure to the main thread, installing a main thread executor if necessary.
-*/
-
+/// Submits a closure to be executed on the main thread.
+///
+/// This internal function provides the low-level mechanism for scheduling work on the
+/// main thread. Unlike [`on_main_thread()`], this function does not wait for the closure
+/// to complete or return a result.
+///
+/// # Arguments
+///
+/// * `closure` - A function or closure to execute on the main thread
+///
+/// # Implementation Notes
+///
+/// This function handles platform-specific details of main thread execution and may
+/// install a main thread executor if necessary for the current platform.
 pub(crate) fn submit_to_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     sys::on_main_thread(closure);
 }
