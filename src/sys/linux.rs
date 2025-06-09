@@ -769,8 +769,12 @@ fn create_shm_buffer_decor(
         DecodingResult::U8(d) => d,
         _ => todo!(),
     };
-    let file =
-        unsafe { memfd_create(b"decor\0" as *const libc::c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC) };
+    let file = unsafe {
+        memfd_create(
+            b"decor\0" as *const libc::c_char,
+            MFD_ALLOW_SEALING | MFD_CLOEXEC,
+        )
+    };
     if file < 0 {
         panic!(
             "Failed to create memfd: {err}",
