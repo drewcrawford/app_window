@@ -3,8 +3,8 @@ use crate::coordinates::{Position, Size};
 use crate::executor::on_main_thread_async;
 use accesskit::NodeId;
 use libc::{
-    EFD_SEMAPHORE, MFD_ALLOW_SEALING, MFD_CLOEXEC, SYS_gettid, eventfd, getpid, memfd_create,
-    pid_t, syscall,
+    EFD_SEMAPHORE, MFD_ALLOW_SEALING, MFD_CLOEXEC, SYS_gettid, c_char, eventfd, getpid,
+    memfd_create, pid_t, syscall,
 };
 use memmap2::MmapMut;
 use raw_window_handle::{
@@ -769,8 +769,12 @@ fn create_shm_buffer_decor(
         DecodingResult::U8(d) => d,
         _ => todo!(),
     };
-    const DECOR: &[u8] = b"decor\0";
-    let file = unsafe { memfd_create(DECOR.as_ptr(), MFD_ALLOW_SEALING | MFD_CLOEXEC) };
+    let file = unsafe {
+        memfd_create(
+            b"decor\0" as *const _ as *const c_char,
+            MFD_ALLOW_SEALING | MFD_CLOEXEC,
+        )
+    };
     if file < 0 {
         panic!(
             "Failed to create memfd: {err}",
@@ -823,8 +827,12 @@ fn create_shm_buffer(
     queue_handle: &QueueHandle<App>,
     window_internal: Arc<Mutex<WindowInternal>>,
 ) -> WlBuffer {
-    let mem_fd = b"mem_fd\0";
-    let file = unsafe { memfd_create(mem_fd.as_ptr(), MFD_ALLOW_SEALING | MFD_CLOEXEC) };
+    let file = unsafe {
+        memfd_create(
+            b"mem_fd\0" as *const _ as *const c_char,
+            MFD_ALLOW_SEALING | MFD_CLOEXEC,
+        )
+    };
     if file < 0 {
         panic!(
             "Failed to create memfd: {err}",
