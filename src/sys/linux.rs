@@ -11,6 +11,7 @@ use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{c_char, c_int, c_void};
 use std::fmt::Debug;
 use std::fs::File;
@@ -18,7 +19,6 @@ use std::os::fd::{AsFd, AsRawFd, FromRawFd};
 use std::ptr::NonNull;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
-use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalList, GlobalListContents, registry_queue_init};
@@ -124,7 +124,7 @@ mod ax {
             toolkit_name: Some("app_window".to_string()),
             toolkit_version: Some("0.1.0".to_string()),
         };
-        
+
         accesskit::TreeUpdate {
             nodes: vec![
                 (NodeId(1), window),
@@ -276,11 +276,13 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let subcompositor: WlSubcompositor = globals.bind(&qh, 1..=1, ()).unwrap();
     //fedora 41 KDE uses version 1?
     let shm: WlShm = globals.bind(&qh, 1..=2, ()).unwrap();
-    
+
     // Bind all available wl_output interfaces
     for global in globals.contents().clone_list() {
         if global.interface == "wl_output" {
-            let _output: WlOutput = globals.bind(&qh, global.version..=global.version, global.name).unwrap();
+            let _output: WlOutput = globals
+                .bind(&qh, global.version..=global.version, global.name)
+                .unwrap();
         }
     }
 
@@ -516,9 +518,15 @@ impl WindowInternal {
     }
 
     fn close_window(&self) {
-        if let Some(e) = self.xdg_toplevel.as_ref() { e.destroy() }
-        if let Some(s) = self.xdg_surface.as_ref() { s.destroy() }
-        if let Some(s) = self.wl_surface.as_ref() { s.destroy() }
+        if let Some(e) = self.xdg_toplevel.as_ref() {
+            e.destroy()
+        }
+        if let Some(s) = self.xdg_surface.as_ref() {
+            s.destroy()
+        }
+        if let Some(s) = self.wl_surface.as_ref() {
+            s.destroy()
+        }
     }
     fn maximize(&mut self) {
         if self.requested_maximize {
@@ -720,9 +728,7 @@ impl AppState {
         let decode = decode_decor.decode().expect("Can't decode decor");
         let dimensions = decode_decor.get_dimensions().unwrap();
         let decor = match decode {
-            DecodingResult::U8(d) => {
-                d
-            }
+            DecodingResult::U8(d) => d,
             _ => todo!(),
         };
 
@@ -760,9 +766,7 @@ fn create_shm_buffer_decor(
     let decode = decode_decor.decode().expect("Can't decode decor");
     let dimensions = decode_decor.get_dimensions().unwrap();
     let decor = match decode {
-        DecodingResult::U8(d) => {
-            d
-        }
+        DecodingResult::U8(d) => d,
         _ => todo!(),
     };
     let file =
@@ -800,7 +804,7 @@ fn create_shm_buffer_decor(
             _mmap: Arc::new(mmap),
         })),
     };
-    
+
     pool.create_buffer(
         0,
         dimensions.0 as i32,
@@ -856,7 +860,7 @@ fn create_shm_buffer(
             window_internal,
         })),
     };
-    
+
     pool.create_buffer(
         0,
         width,
@@ -950,13 +954,21 @@ impl Dispatch<WlSurface, SurfaceEvents> for App {
             wayland_client::protocol::wl_surface::Event::Enter { output } => {
                 if let SurfaceEvents::Standard(window_internal) = data {
                     let output_id = output.id().protocol_id();
-                    window_internal.lock().unwrap().current_outputs.insert(output_id);
+                    window_internal
+                        .lock()
+                        .unwrap()
+                        .current_outputs
+                        .insert(output_id);
                 }
             }
             wayland_client::protocol::wl_surface::Event::Leave { output } => {
                 if let SurfaceEvents::Standard(window_internal) = data {
                     let output_id = output.id().protocol_id();
-                    window_internal.lock().unwrap().current_outputs.remove(&output_id);
+                    window_internal
+                        .lock()
+                        .unwrap()
+                        .current_outputs
+                        .remove(&output_id);
                 }
             }
             _ => {
@@ -1020,10 +1032,12 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                         }
                         let title = locked_data.title.clone();
                         let applied_size = locked_data.applied_size();
-                        if let Some(a) = locked_data.adapter.as_mut() { a.update_if_active(|| ax::build_tree_update(title, applied_size)) }
-                        if let Some(f) = locked_data
-                            .size_update_notify
-                            .as_ref() { f.0(locked_data.applied_size()) }
+                        if let Some(a) = locked_data.adapter.as_mut() {
+                            a.update_if_active(|| ax::build_tree_update(title, applied_size))
+                        }
+                        if let Some(f) = locked_data.size_update_notify.as_ref() {
+                            f.0(locked_data.applied_size())
+                        }
                     }
                 }
             }
@@ -1148,7 +1162,12 @@ impl Dispatch<WlOutput, u32> for App {
                 if let Some(output_info) = outputs.get_mut(output_id) {
                     output_info.scale_factor = factor as f64;
                 } else {
-                    outputs.insert(*output_id, OutputInfo { scale_factor: factor as f64 });
+                    outputs.insert(
+                        *output_id,
+                        OutputInfo {
+                            scale_factor: factor as f64,
+                        },
+                    );
                 }
             }
             wayland_client::protocol::wl_output::Event::Done => {
@@ -1277,24 +1296,14 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                 let position = Position::new(parent_surface_x, parent_surface_y);
                 data.wl_pointer_pos.replace(position);
                 let cursor_request = match MouseRegion::from_position(size, position) {
-                    MouseRegion::BottomRight => {
-                        CursorRequest::bottom_right_corner()
-                    }
-                    MouseRegion::Bottom => {
-                        CursorRequest::bottom_side()
-                    }
-                    MouseRegion::Right => {
-                        CursorRequest::right_side()
-                    }
+                    MouseRegion::BottomRight => CursorRequest::bottom_right_corner(),
+                    MouseRegion::Bottom => CursorRequest::bottom_side(),
+                    MouseRegion::Right => CursorRequest::right_side(),
                     MouseRegion::Client
                     | MouseRegion::MaximizeButton
                     | MouseRegion::CloseButton
-                    | MouseRegion::MinimizeButton => {
-                        CursorRequest::left_ptr()
-                    }
-                    MouseRegion::Titlebar => {
-                        CursorRequest::left_ptr()
-                    }
+                    | MouseRegion::MinimizeButton => CursorRequest::left_ptr(),
+                    MouseRegion::Titlebar => CursorRequest::left_ptr(),
                 };
                 let app_state = data.app_state.upgrade().unwrap();
                 let lock_a = app_state.active_cursor.lock().unwrap();
@@ -1405,21 +1414,17 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
                 surface: _,
                 keys: _,
             } => {
-                if let Some(e) = data.as_ref()
-                    .lock()
-                    .unwrap()
-                    .adapter
-                    .as_mut() { e.update_window_focus_state(true) }
+                if let Some(e) = data.as_ref().lock().unwrap().adapter.as_mut() {
+                    e.update_window_focus_state(true)
+                }
             }
             wayland_client::protocol::wl_keyboard::Event::Leave {
                 serial: _,
                 surface: _,
             } => {
-                if let Some(e) = data.as_ref()
-                    .lock()
-                    .unwrap()
-                    .adapter
-                    .as_mut() { e.update_window_focus_state(false) }
+                if let Some(e) = data.as_ref().lock().unwrap().adapter.as_mut() {
+                    e.update_window_focus_state(false)
+                }
             }
             wayland_client::protocol::wl_keyboard::Event::Key {
                 serial: _serial,
@@ -1455,10 +1460,10 @@ impl Window {
             let window_internal =
                 WindowInternal::new(&info.app_state, size, title, &info.queue_handle, true);
 
-            let surface = info
-                .app_state
-                .compositor
-                .create_surface(&info.queue_handle, SurfaceEvents::Standard(window_internal.clone()));
+            let surface = info.app_state.compositor.create_surface(
+                &info.queue_handle,
+                SurfaceEvents::Standard(window_internal.clone()),
+            );
 
             let decor_surface = info
                 .app_state
@@ -1611,29 +1616,33 @@ unsafe impl Sync for Surface {}
 impl Surface {
     pub async fn size_scale(&self) -> (Size, f64) {
         let size = self.window_internal.lock().unwrap().applied_size();
-        
+
         // Get the scale factor from the app state directly (accessible from any thread)
         let window_internal = self.window_internal.lock().unwrap();
         let current_outputs = window_internal.current_outputs.clone();
-        let app_state = window_internal.app_state.upgrade().expect("App state is gone");
+        let app_state = window_internal
+            .app_state
+            .upgrade()
+            .expect("App state is gone");
         drop(window_internal);
-        
+
         // Get the scale factor for the outputs this window is currently on
         let outputs = app_state.outputs.lock().unwrap();
         let scale = if current_outputs.is_empty() {
             // If no outputs are tracked yet, default to 1.0
-            1.0
+            1.07
         } else {
             // Use the scale factor of the first output the window is on
             // In a proper implementation, you might want to use the "primary" output
             // or the one with the largest intersection area with the window
-            current_outputs.iter()
+            current_outputs
+                .iter()
                 .filter_map(|output_id| outputs.get(output_id))
                 .map(|output_info| output_info.scale_factor)
                 .next()
                 .unwrap_or(1.0)
         };
-        
+
         (size, scale)
     }
 
@@ -1659,7 +1668,8 @@ impl Surface {
     }
 
     pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, update: F) {
-        self.window_internal.lock().unwrap().size_update_notify = Some(DebugWrapper(Box::new(update)));
+        self.window_internal.lock().unwrap().size_update_notify =
+            Some(DebugWrapper(Box::new(update)));
     }
 }
 
