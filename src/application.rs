@@ -13,7 +13,7 @@
 //!
 //! # Getting Started
 //!
-//! Every application using `app_window` must call [`main()`] exactly once from the first thread
+//! Every application using `app_window` must call [`main`](crate::application::main) exactly once from the first thread
 //! of the program. This initializes the platform event loop and allows windows to be created.
 //!
 //! ```no_run

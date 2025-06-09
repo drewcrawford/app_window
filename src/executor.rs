@@ -15,8 +15,8 @@ smooth operation.
 
 All futures submitted to this executor will run on the main thread. The executor
 provides two main entry points:
-- [`on_main_thread_async`]: Can be called from any thread to run a future on the main thread
-- [`already_on_main_thread_submit`]: Must be called from the main thread
+- [`on_main_thread_async`](crate::executor::on_main_thread_async): Can be called from any thread to run a future on the main thread
+- [`already_on_main_thread_submit`](crate::executor::already_on_main_thread_submit): Must be called from the main thread
 
 # Integration with `some_executor`
 

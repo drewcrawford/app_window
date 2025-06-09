@@ -2,7 +2,7 @@
 
 //! Cross-platform window management.
 //!
-//! This module provides the [`Window`] type for creating and managing platform-native windows.
+//! This module provides the [`Window`](crate::window::Window) type for creating and managing platform-native windows.
 //! Windows can be created in various configurations (windowed, fullscreen) and provide surfaces
 //! for rendering content using graphics APIs like wgpu.
 //!
