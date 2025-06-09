@@ -59,19 +59,15 @@ pub fn is_main_thread() -> bool {
 
 struct WinClosure(Box<dyn FnOnce() + Send + 'static>);
 
+#[derive(Default)]
 struct HwndImp {
     size_notify: Option<Box<dyn Fn(Size)>>,
-}
-impl Default for HwndImp {
-    fn default() -> Self {
-        Self { size_notify: None }
-    }
 }
 thread_local! {
     static HWND_IMPS: RefCell<HashMap<*mut c_void /* hwnd */, HwndImp>> = RefCell::new(HashMap::new());
 }
 
-pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
+pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     //need to create a message queue first
     let mut message = MSG::default();
     _ = unsafe { PeekMessageW(&mut message, None, WM_USER, WM_USER, PM_NOREMOVE) }; //create a message queue
@@ -142,8 +138,8 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: L
             let height = ((l_param.0 as u32 >> 16) & 0xFFFF) as i32; // HIWORD(lParam)
             let size = Size::new(width as f64, height as f64);
             HWND_IMPS.with_borrow_mut(|c| {
-                let entry = c.entry(hwnd.0).or_insert(HwndImp::default());
-                entry.size_notify.as_ref().map(|f| f(size));
+                let entry = c.entry(hwnd.0).or_default();
+                if let Some(f) = entry.size_notify.as_ref() { f(size) }
             });
             LRESULT(0)
         }
@@ -283,12 +279,12 @@ impl Surface {
         RawDisplayHandle::Windows(WindowsDisplayHandle::new())
     }
 
-    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, _update: F) {
+    pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, _update: F) {
         let move_hwnd = self.imp.copying();
         on_main_thread(move || {
             let hwnd = move_hwnd.get();
             HWND_IMPS.with_borrow_mut(|c| {
-                let entry = c.entry(hwnd.0).or_insert(HwndImp::default());
+                let entry = c.entry(hwnd.0).or_default();
                 entry.size_notify = Some(Box::new(_update));
             });
         });
