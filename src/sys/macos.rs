@@ -45,7 +45,7 @@ pub fn is_main_thread() -> bool {
 }
 
 pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
-    std::thread::spawn(|| closure());
+    std::thread::spawn(closure);
     unsafe { SwiftAppWindowRunMainThread() }
 }
 
