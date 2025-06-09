@@ -13,15 +13,14 @@ use std::num::NonZero;
 use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
-    GetSystemMetrics, IDC_ARROW, LoadCursorW, MSG, PM_NOREMOVE, PeekMessageW,
-    PostThreadMessageW, RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, ShowWindow,
-    TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW,
-    WS_OVERLAPPEDWINDOW, WS_POPUP,
+    GetSystemMetrics, IDC_ARROW, LoadCursorW, MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW,
+    RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, ShowWindow, TranslateMessage,
+    WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
-use windows::Win32::UI::HiDpi::GetDpiForWindow;
 
 const WM_RUN_FUNCTION: u32 = WM_USER;
 
@@ -42,7 +41,7 @@ fn main_thread_id() -> u32 {
     #[unsafe(link_section = ".CRT$XCU")]
     static INIT_MAIN_THREAD_ID: unsafe fn() = {
         unsafe fn initer() {
-            unsafe {MAIN_THREAD_ID = windows::Win32::System::Threading::GetCurrentThreadId()};
+            unsafe { MAIN_THREAD_ID = windows::Win32::System::Threading::GetCurrentThreadId() };
         }
         initer
     };
@@ -139,7 +138,9 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: L
             let size = Size::new(width as f64, height as f64);
             HWND_IMPS.with_borrow_mut(|c| {
                 let entry = c.entry(hwnd.0).or_default();
-                if let Some(f) = entry.size_notify.as_ref() { f(size) }
+                if let Some(f) = entry.size_notify.as_ref() {
+                    f(size)
+                }
             });
             LRESULT(0)
         }
@@ -180,10 +181,10 @@ fn create_window_impl(position: Position, size: Size, title: String, style: WIND
             position.x() as i32,
             position.y() as i32, //position
             size.width() as i32,
-            size.height() as i32,        //size
-            None,  //parent
-            None, //menu
-            None,                    //instance
+            size.height() as i32, //size
+            None,                 //parent
+            None,                 //menu
+            None,                 //instance
             None,
         )
     }
@@ -260,9 +261,9 @@ impl Surface {
             let mut rect = RECT::default();
             unsafe { GetClientRect(*hwnd, &mut rect).expect("Can't get size") }
             let s = Size::new(rect.right as f64, rect.bottom as f64);
-            let dpi = unsafe{GetDpiForWindow(*hwnd)};
+            let dpi = unsafe { GetDpiForWindow(*hwnd) };
             let scale = dpi as f64 / 96.0;
-            (s,scale)
+            (s, scale)
         })
         .await
     }
