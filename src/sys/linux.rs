@@ -719,13 +719,12 @@ impl AppState {
         let mut decode_decor = zune_png::PngDecoder::new(decor);
         let decode = decode_decor.decode().expect("Can't decode decor");
         let dimensions = decode_decor.get_dimensions().unwrap();
-        let decor;
-        match decode {
+        let decor = match decode {
             DecodingResult::U8(d) => {
-                decor = d;
+                d
             }
             _ => todo!(),
-        }
+        };
 
         let a = Arc::new(AppState {
             compositor: compositor.clone(),
@@ -760,13 +759,12 @@ fn create_shm_buffer_decor(
     let mut decode_decor = zune_png::PngDecoder::new(decor);
     let decode = decode_decor.decode().expect("Can't decode decor");
     let dimensions = decode_decor.get_dimensions().unwrap();
-    let decor;
-    match decode {
+    let decor = match decode {
         DecodingResult::U8(d) => {
-            decor = d;
+            d
         }
         _ => todo!(),
-    }
+    };
     let file =
         unsafe { memfd_create(b"decor\0" as *const c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC) };
     if file < 0 {
@@ -1278,27 +1276,26 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                 let size = data.applied_size();
                 let position = Position::new(parent_surface_x, parent_surface_y);
                 data.wl_pointer_pos.replace(position);
-                let cursor_request;
-                match MouseRegion::from_position(size, position) {
+                let cursor_request = match MouseRegion::from_position(size, position) {
                     MouseRegion::BottomRight => {
-                        cursor_request = CursorRequest::bottom_right_corner();
+                        CursorRequest::bottom_right_corner()
                     }
                     MouseRegion::Bottom => {
-                        cursor_request = CursorRequest::bottom_side();
+                        CursorRequest::bottom_side()
                     }
                     MouseRegion::Right => {
-                        cursor_request = CursorRequest::right_side();
+                        CursorRequest::right_side()
                     }
                     MouseRegion::Client
                     | MouseRegion::MaximizeButton
                     | MouseRegion::CloseButton
                     | MouseRegion::MinimizeButton => {
-                        cursor_request = CursorRequest::left_ptr();
+                        CursorRequest::left_ptr()
                     }
                     MouseRegion::Titlebar => {
-                        cursor_request = CursorRequest::left_ptr();
+                        CursorRequest::left_ptr()
                     }
-                }
+                };
                 let app_state = data.app_state.upgrade().unwrap();
                 let lock_a = app_state.active_cursor.lock().unwrap();
                 let active_cursor = lock_a.as_ref().expect("No active cursor");
