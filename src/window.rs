@@ -16,7 +16,7 @@
 //!
 //! ```no_run
 //! use app_window::coordinates::{Position, Size};
-//! 
+//!
 //! app_window::application::main(|| {
 //!     // Spawn a task to create windows - can be on any thread
 //!     let task = async {
@@ -33,11 +33,11 @@
 //! });
 //! ```
 
-use std::fmt::Display;
 use crate::application::CALL_MAIN;
 use crate::coordinates::{Position, Size};
 use crate::surface::Surface;
 use crate::sys;
+use std::fmt::Display;
 
 /// A cross-platform window.
 ///
@@ -90,8 +90,8 @@ pub struct Window {
 /// - **Windows**: May fail if exclusive fullscreen mode cannot be acquired
 /// - **Linux**: May fail if the compositor doesn't support fullscreen
 /// - **Web**: May fail if fullscreen permission is not granted
-#[derive(thiserror::Error,Debug)]
-pub struct FullscreenError(#[from]sys::FullscreenError);
+#[derive(thiserror::Error, Debug)]
+pub struct FullscreenError(#[from] sys::FullscreenError);
 
 impl Display for FullscreenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -135,8 +135,12 @@ impl Window {
     /// # Panics
     ///
     /// Panics if [`application::main()`](crate::application::main) has not been called.
-    pub async fn fullscreen(title: String) -> Result<Self,FullscreenError> {
-        assert!(crate::application::is_main_thread_running(), "{}",CALL_MAIN);
+    pub async fn fullscreen(title: String) -> Result<Self, FullscreenError> {
+        assert!(
+            crate::application::is_main_thread_running(),
+            "{}",
+            CALL_MAIN
+        );
         let sys = crate::sys::Window::fullscreen(title).await?;
         Ok(Window {
             sys,
@@ -167,7 +171,7 @@ impl Window {
     ///     Size::new(800.0, 600.0),
     ///     "My Application".to_string()
     /// ).await;
-    /// 
+    ///
     /// // Window is now visible at (100, 100) with size 800x600
     /// std::mem::forget(window);
     /// # };
@@ -184,7 +188,10 @@ impl Window {
     ///
     /// Panics if [`application::main()`](crate::application::main) has not been called.
     pub async fn new(position: Position, size: Size, title: String) -> Self {
-        assert!(crate::application::is_main_thread_running(), "Call app_window::application::run_main_thread");
+        assert!(
+            crate::application::is_main_thread_running(),
+            "Call app_window::application::run_main_thread"
+        );
         Window {
             sys: crate::sys::Window::new(position, size, title).await,
             created_surface: false,
@@ -203,10 +210,10 @@ impl Window {
     /// # let task = async {
     /// let mut window = app_window::window::Window::default().await;
     /// let surface = window.surface().await;
-    /// 
+    ///
     /// // Now you can use the surface with a graphics API
     /// let (size, scale) = surface.size_scale().await;
-    /// println!("Surface size: {}x{} at {} scale", 
+    /// println!("Surface size: {}x{} at {} scale",
     ///          size.width(), size.height(), scale);
     /// # };
     /// # });
@@ -251,21 +258,23 @@ impl Window {
     ///
     /// Panics if [`application::main()`](crate::application::main) has not been called.
     pub async fn default() -> Self {
-        assert!(crate::application::is_main_thread_running(), "Call app_window::application::run_main_thread");
+        assert!(
+            crate::application::is_main_thread_running(),
+            "Call app_window::application::run_main_thread"
+        );
         Window {
             sys: crate::sys::Window::default().await,
             created_surface: false,
         }
     }
-
 }
 
-
-
-#[cfg(test)] mod test {
+#[cfg(test)]
+mod test {
     use crate::window::Window;
 
-    #[test] fn test_send() {
+    #[test]
+    fn test_send() {
         fn assert_send<T: Send>() {}
         assert_send::<Window>();
         fn assert_sync<T: Sync>() {}

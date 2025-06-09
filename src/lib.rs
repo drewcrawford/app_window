@@ -98,16 +98,16 @@ assert_eq!(result, 42);
 */
 
 /// Window creation and management.
-/// 
+///
 /// This module provides the [`window::Window`] type for creating and managing windows
 /// across different platforms. Windows can be created from any thread after the
 /// application has been initialized.
-/// 
+///
 /// # Example
 /// ```no_run
 /// # async fn example() {
 /// use app_window::{window::Window, coordinates::{Position, Size}};
-/// 
+///
 /// // Create a window with specific position and size
 /// let window = Window::new(
 ///     Position::new(100.0, 100.0),
@@ -119,15 +119,15 @@ assert_eq!(result, 42);
 pub mod window;
 
 /// Application lifecycle and main thread management.
-/// 
+///
 /// This module provides the entry point for app_window applications and utilities
 /// for executing code on the main thread. The [`application::main`] function must
 /// be called once from the first thread to initialize the platform event loop.
-/// 
+///
 /// # Example
 /// ```no_run
 /// use app_window::application;
-/// 
+///
 /// fn main() {
 ///     application::main(|| {
 ///         // Application code here
@@ -139,19 +139,19 @@ pub mod application;
 mod sys;
 
 /// Coordinate types for window positioning and sizing.
-/// 
+///
 /// This module provides [`coordinates::Position`] and [`coordinates::Size`] types
 /// for working with window coordinates. All values are in logical pixels, which
 /// may differ from physical pixels on high-DPI displays.
-/// 
+///
 /// # Example
 /// ```
 /// use app_window::coordinates::{Position, Size};
-/// 
+///
 /// let pos = Position::new(100.0, 200.0);
 /// assert_eq!(pos.x(), 100.0);
 /// assert_eq!(pos.y(), 200.0);
-/// 
+///
 /// let size = Size::new(800.0, 600.0);
 /// assert_eq!(size.width(), 800.0);
 /// assert_eq!(size.height(), 600.0);
@@ -159,18 +159,18 @@ mod sys;
 pub mod coordinates;
 
 /// Rendering surface abstraction.
-/// 
+///
 /// This module provides the [`surface::Surface`] type, which represents a drawable
 /// area within a window. Surfaces integrate with graphics APIs like wgpu through
 /// the `raw-window-handle` trait implementations.
-/// 
+///
 /// # Example
 /// ```no_run
 /// # async fn example() {
 /// # use app_window::{application, window::Window};
 /// let mut window = Window::default().await;
 /// let surface = window.surface().await;
-/// 
+///
 /// // Get size and scale factor
 /// let (size, scale) = surface.size_scale().await;
 /// # }
@@ -178,11 +178,11 @@ pub mod coordinates;
 pub mod surface;
 
 /// Main thread executor for async operations.
-/// 
+///
 /// This module provides utilities for running futures on the main thread, which is
 /// required for UI operations on many platforms. The executor integrates with the
 /// native event loop to process both async tasks and platform events.
-/// 
+///
 /// # Example
 /// ```no_run
 /// # use app_window::{application, executor};
@@ -195,7 +195,7 @@ pub mod surface;
 pub mod executor;
 
 /// Integration with the `some_executor` crate.
-/// 
+///
 /// This module provides [`some_executor::MainThreadExecutor`], which implements
 /// the `SomeExecutor` and `SomeLocalExecutor` traits from the `some_executor` crate.
 /// This allows the main thread executor to be used with any library that supports
@@ -204,17 +204,17 @@ pub mod executor;
 pub mod some_executor;
 
 /// Platform-specific wgpu integration.
-/// 
+///
 /// This module provides utilities for using wgpu with app_window, handling the
 /// different threading requirements across platforms. Some platforms require GPU
 /// access from the main thread, while others require it from a different thread.
-/// 
+///
 /// # Example
 /// ```no_run
 /// # #[cfg(feature = "wgpu")]
 /// # {
 /// use app_window::wgpu::{wgpu_spawn, WGPU_STRATEGY, WGPUStrategy};
-/// 
+///
 /// // Check the platform's wgpu strategy
 /// match WGPU_STRATEGY {
 ///     WGPUStrategy::MainThread => println!("GPU access must be on main thread"),
@@ -222,7 +222,7 @@ pub mod some_executor;
 ///     WGPUStrategy::Relaxed => println!("GPU types are Send+Sync"),
 ///     _ => println!("Unknown strategy"),
 /// }
-/// 
+///
 /// // Spawn a future on the appropriate thread for wgpu
 /// wgpu_spawn(async {
 ///     // wgpu operations here

@@ -31,7 +31,6 @@ static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
 
 pub(crate) const CALL_MAIN: &str = "Call app_window::application::run_main_thread";
 
-
 /// Initializes and runs the application event loop.
 ///
 /// This function sets up the platform-specific event loop and must be called exactly once
@@ -68,7 +67,7 @@ pub(crate) const CALL_MAIN: &str = "Call app_window::application::run_main_threa
 ///
 /// ```no_run
 /// use app_window::coordinates::{Position, Size};
-/// 
+///
 /// app_window::application::main(|| {
 ///     # #[cfg(feature = "some_executor")]
 ///     # {
@@ -93,10 +92,13 @@ pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
     let old = IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Release);
 
     assert!(!old, "Do not call main more than once.");
-    #[cfg(feature = "some_executor")] {
+    #[cfg(feature = "some_executor")]
+    {
         use crate::some_executor::MainThreadExecutor;
-        some_executor::thread_executor::set_thread_executor(Box::new(MainThreadExecutor{}));
-        some_executor::thread_executor::set_thread_local_executor_adapting_notifier(MainThreadExecutor{});
+        some_executor::thread_executor::set_thread_executor(Box::new(MainThreadExecutor {}));
+        some_executor::thread_executor::set_thread_local_executor_adapting_notifier(
+            MainThreadExecutor {},
+        );
     }
     sys::run_main_thread(closure);
 }
@@ -138,13 +140,13 @@ pub(crate) fn is_main_thread_running() -> bool {
 /// ```no_run
 /// # async fn example() {
 /// use app_window::application;
-/// 
+///
 /// // Execute a UI operation on the main thread
 /// let result = application::on_main_thread(|| {
 ///     println!("Running on main thread!");
 ///     42
 /// }).await;
-/// 
+///
 /// assert_eq!(result, 42);
 /// # }
 /// ```
@@ -154,7 +156,7 @@ pub(crate) fn is_main_thread_running() -> bool {
 /// ```no_run
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// use app_window::application;
-/// 
+///
 /// // Many UI operations must happen on the main thread
 /// let window_title = application::on_main_thread(|| {
 ///     // Platform-specific window operations would go here
@@ -163,9 +165,9 @@ pub(crate) fn is_main_thread_running() -> bool {
 /// # Ok(())
 /// # }
 /// ```
-pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
-    let(sender,receiver) = r#continue::continuation();
-    let block = move ||{
+pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
+    let (sender, receiver) = r#continue::continuation();
+    let block = move || {
         let r = closure();
         sender.send(r);
     };
@@ -191,4 +193,3 @@ pub async fn on_main_thread<R: Send + 'static,F: FnOnce() -> R + Send + 'static>
 pub(crate) fn submit_to_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     sys::on_main_thread(closure);
 }
-

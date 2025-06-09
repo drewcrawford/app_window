@@ -24,16 +24,16 @@ When the `some_executor` feature is enabled, this executor can be wrapped with
 `crate::some_executor::MainThreadExecutor` to provide a `some_executor::SomeExecutor`
 implementation.
 */
+use crate::sys;
 use std::cell::Cell;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, RawWaker, RawWakerVTable};
-use crate::sys;
 
 /// Internal state shared between a task and its waker.
-/// 
+///
 /// This struct tracks whether a task needs to be polled again.
 struct Inner {
     needs_poll: AtomicBool,
@@ -55,42 +55,36 @@ struct Waker {
     inner: Arc<Inner>,
 }
 
-
-
 /// Virtual function table for our custom waker implementation.
 ///
 /// This defines how to clone, wake, wake_by_ref, and drop our waker type.
 const WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(
     |data| {
-        let w = unsafe{Arc::from_raw(data as *const Waker)};
+        let w = unsafe { Arc::from_raw(data as *const Waker) };
         let w2 = w.clone();
         _ = Arc::into_raw(w); //leave original arc unchanged
         RawWaker::new(Arc::into_raw(w2) as *const (), &WAKER_VTABLE)
-
     },
     |data| {
-        let w = unsafe{Arc::from_raw(data as *const Waker)};
+        let w = unsafe { Arc::from_raw(data as *const Waker) };
         w.inner.needs_poll.store(true, Ordering::Relaxed);
         pump_tasks();
     },
     |data| {
-        let w = unsafe{Arc::from_raw(data as *const Waker)};
+        let w = unsafe { Arc::from_raw(data as *const Waker) };
         w.inner.needs_poll.store(true, Ordering::Relaxed);
         pump_tasks();
         std::mem::forget(w);
-
     },
     |data| {
-        let w = unsafe{Arc::from_raw(data as *const Waker)};
+        let w = unsafe { Arc::from_raw(data as *const Waker) };
         drop(w);
-    }
+    },
 );
 impl Waker {
     fn into_waker(self) -> std::task::Waker {
         let arc_waker = Arc::into_raw(Arc::new(self));
-        unsafe {
-            std::task::Waker::from_raw(RawWaker::new(arc_waker as *const (), &WAKER_VTABLE))
-        }
+        unsafe { std::task::Waker::from_raw(RawWaker::new(arc_waker as *const (), &WAKER_VTABLE)) }
     }
 }
 /// A task in the executor's queue.
@@ -129,7 +123,7 @@ thread_local! {
 ///     // Perform computation that needs main thread access
 ///     2 + 2
 /// }).await;
-/// 
+///
 /// assert_eq!(result, 4);
 /// # }
 /// # }
@@ -139,12 +133,16 @@ thread_local! {
 ///
 /// On all supported platforms, this ensures the future runs on the thread that owns
 /// the native event loop, which is required for UI operations.
-pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output=R> + Send + 'static>(future: F) -> R {
+pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Send + 'static>(
+    future: F,
+) -> R {
     let (sender, fut) = r#continue::continuation();
-    crate::application::submit_to_main_thread(||{already_on_main_thread_submit(async move {
-        let r = future.await;
-        sender.send(r);
-    })});
+    crate::application::submit_to_main_thread(|| {
+        already_on_main_thread_submit(async move {
+            let r = future.await;
+            sender.send(r);
+        })
+    });
     fut.await
 }
 
@@ -176,8 +174,7 @@ pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output=R> + Send 
 /// (when the `some_executor` feature is enabled) when spawning tasks, but can be used
 /// directly when you're already on the main thread and want to submit work to be
 /// executed asynchronously.
-pub fn already_on_main_thread_submit<F: Future<Output=()> + 'static>(future: F) {
-
+pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F) {
     assert!(sys::is_main_thread());
     let mut tasks = FUTURES.take();
     let wake_inner = Arc::new(Inner::new());
@@ -198,7 +195,9 @@ fn main_executor_iter(tasks: &mut Vec<Task>) {
     tasks.retain_mut(|task| {
         let old = task.wake_inner.needs_poll.swap(false, Ordering::Relaxed);
         if old {
-            let waker = Waker{inner: task.wake_inner.clone()};
+            let waker = Waker {
+                inner: task.wake_inner.clone(),
+            };
             let into_waker = waker.into_waker();
             let mut context = Context::from_waker(&into_waker);
             let poll = task.future.as_mut().poll(&mut context);

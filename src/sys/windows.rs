@@ -1,18 +1,26 @@
 //SPDX-License-Identifier: MPL-2.0
 
+use crate::coordinates::{Position, Size};
+use raw_window_handle::{
+    RawDisplayHandle, RawWindowHandle, Win32WindowHandle, WindowsDisplayHandle,
+};
+use send_cells::send_cell::SendCell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt::Display;
 use std::num::NonZero;
-use raw_window_handle::{RawDisplayHandle, RawWindowHandle, Win32WindowHandle, WindowsDisplayHandle};
-use send_cells::send_cell::SendCell;
-use windows::core::{w, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows::Win32::Graphics::Gdi::{HBRUSH};
+use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW, GetSystemMetrics, LoadCursorW, PeekMessageW, PostThreadMessageW, RegisterClassExW, ShowWindow, TranslateMessage, HMENU, IDC_ARROW, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP};
-use crate::coordinates::{Position, Size};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
+    GetSystemMetrics, HMENU, IDC_ARROW, LoadCursorW, MSG, PM_NOREMOVE, PeekMessageW,
+    PostThreadMessageW, RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, ShowWindow,
+    TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW,
+    WS_OVERLAPPEDWINDOW, WS_POPUP,
+};
+use windows::core::{HSTRING, PCWSTR, w};
 const WM_RUN_FUNCTION: u32 = WM_USER;
 
 #[derive(Debug)]
@@ -40,7 +48,6 @@ fn main_thread_id() -> u32 {
     unsafe { MAIN_THREAD_ID }
 }
 
-
 pub fn is_main_thread() -> bool {
     //windows does not have a clear concept of a main thread but allows any thread to be in charge
     //of a window.  However for compatibility we project a 'main thread-like' concept onto windows
@@ -55,9 +62,7 @@ struct HwndImp {
 }
 impl Default for HwndImp {
     fn default() -> Self {
-        Self {
-            size_notify: None,
-        }
+        Self { size_notify: None }
     }
 }
 thread_local! {
@@ -102,7 +107,15 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let boxed_closure = Box::new(WinClosure(Box::new(closure)));
     let closure_ptr = Box::into_raw(boxed_closure) as *mut ();
     let as_usize = closure_ptr as usize;
-    unsafe { PostThreadMessageW(main_thread_id(), WM_RUN_FUNCTION, WPARAM(as_usize), LPARAM(0)) }.expect("PostThreadMessageW failed");
+    unsafe {
+        PostThreadMessageW(
+            main_thread_id(),
+            WM_RUN_FUNCTION,
+            WPARAM(as_usize),
+            LPARAM(0),
+        )
+    }
+    .expect("PostThreadMessageW failed");
 }
 
 #[derive(Debug)]
@@ -115,7 +128,8 @@ unsafe impl Sync for Window {}
 
 extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     eprintln!("got msg hwnd {hwnd:?} msg {msg} w_param {w_param:?} l_param {l_param:?}");
-    #[cfg(feature = "app_input")] {
+    #[cfg(feature = "app_input")]
+    {
         if app_input::window_proc(hwnd, msg, w_param, l_param) == LRESULT(0) {
             return LRESULT(0);
         }
@@ -123,23 +137,22 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: L
 
     match msg {
         m if m == WM_SIZE => {
-            let width = (l_param.0 as u32 & 0xFFFF) as i32;  // LOWORD(lParam)
+            let width = (l_param.0 as u32 & 0xFFFF) as i32; // LOWORD(lParam)
             let height = ((l_param.0 as u32 >> 16) & 0xFFFF) as i32; // HIWORD(lParam)
             let size = Size::new(width as f64, height as f64);
-            HWND_IMPS.with_borrow_mut(|c|  {
+            HWND_IMPS.with_borrow_mut(|c| {
                 let entry = c.entry(hwnd.0).or_insert(HwndImp::default());
                 entry.size_notify.as_ref().map(|f| f(size));
             });
             LRESULT(0)
         }
-        _ => {
-            unsafe{DefWindowProcW(hwnd,msg,w_param, l_param)}
-        }
+        _ => unsafe { DefWindowProcW(hwnd, msg, w_param, l_param) },
     }
 }
 fn create_window_impl(position: Position, size: Size, title: String, style: WINDOW_STYLE) -> HWND {
-    let instance = unsafe{GetModuleHandleW(PCWSTR::null())}.expect("Can't get module");
-    let cursor = unsafe{LoadCursorW(HINSTANCE::default(), IDC_ARROW)}.expect("Can't load cursor");
+    let instance = unsafe { GetModuleHandleW(PCWSTR::null()) }.expect("Can't get module");
+    let cursor =
+        unsafe { LoadCursorW(HINSTANCE::default(), IDC_ARROW) }.expect("Can't load cursor");
     let winstr: HSTRING = title.into();
     let class_name = w!("raw_input_debug_window");
     let window_class = WNDCLASSEXW {
@@ -156,22 +169,29 @@ fn create_window_impl(position: Position, size: Size, title: String, style: WIND
         lpszClassName: class_name,
         hIconSm: Default::default(),
     };
-    let r = unsafe{RegisterClassExW(&window_class)};
-    assert_ne!(r, 0, "failed to register window class: {:?}",unsafe{GetLastError()});
+    let r = unsafe { RegisterClassExW(&window_class) };
+    assert_ne!(r, 0, "failed to register window class: {:?}", unsafe {
+        GetLastError()
+    });
 
-    let window = unsafe{CreateWindowExW(WINDOW_EX_STYLE(0), //style
-                                        class_name,
-                                        &winstr,
-                                        style,
-                                        position.x() as i32, position.y() as i32, //position
-                                        size.width() as i32, size.height() as i32, //size
-                                        HWND(std::ptr::null_mut()), //parent
-                                        HMENU(std::ptr::null_mut()), //menu
-                                        instance, //instance
-                                        None,
-
-    )}.expect("failed to create window");
-    unsafe{_ = ShowWindow(window, SW_SHOWNORMAL)};
+    let window = unsafe {
+        CreateWindowExW(
+            WINDOW_EX_STYLE(0), //style
+            class_name,
+            &winstr,
+            style,
+            position.x() as i32,
+            position.y() as i32, //position
+            size.width() as i32,
+            size.height() as i32,        //size
+            HWND(std::ptr::null_mut()),  //parent
+            HMENU(std::ptr::null_mut()), //menu
+            instance,                    //instance
+            None,
+        )
+    }
+    .expect("failed to create window");
+    unsafe { _ = ShowWindow(window, SW_SHOWNORMAL) };
     window
 }
 
@@ -180,43 +200,45 @@ impl Window {
         let window = crate::application::on_main_thread(move || {
             let window = create_window_impl(position, size, title, WS_OVERLAPPEDWINDOW);
             SendCell::new(window)
-        }).await;
+        })
+        .await;
 
-        Window {
-            hwnd: window,
-        }
-
+        Window { hwnd: window }
     }
 
     pub async fn default() -> Self {
-        Self::new(Position::new(0.0, 0.0), Size::new(800.0, 600.0), "app_window".to_string()).await
+        Self::new(
+            Position::new(0.0, 0.0),
+            Size::new(800.0, 600.0),
+            "app_window".to_string(),
+        )
+        .await
     }
 
     pub async fn fullscreen(title: String) -> Result<Self, FullscreenError> {
-        let size = Size::new(unsafe { GetSystemMetrics(SM_CXSCREEN) as f64}, unsafe { GetSystemMetrics(SM_CYSCREEN) as f64});
+        let size = Size::new(unsafe { GetSystemMetrics(SM_CXSCREEN) as f64 }, unsafe {
+            GetSystemMetrics(SM_CYSCREEN) as f64
+        });
         let window = crate::application::on_main_thread(move || {
             let window = create_window_impl(Position::new(0.0, 0.0), size, title, WS_POPUP);
             SendCell::new(window)
-        }).await;
-
-        Ok(Window {
-            hwnd: window,
         })
+        .await;
+
+        Ok(Window { hwnd: window })
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
         let copy_hwnd = self.hwnd.copying();
         crate::surface::Surface {
-            sys: Surface {
-                imp: copy_hwnd,
-            },
+            sys: Surface { imp: copy_hwnd },
         }
     }
 }
 
 impl Drop for Window {
     fn drop(&mut self) {
-        let unsafe_hwnd = unsafe{*self.hwnd.get_unchecked()};
+        let unsafe_hwnd = unsafe { *self.hwnd.get_unchecked() };
         let unsafe_port_hwnd = send_cells::unsafe_send_cell::UnsafeSendCell::new(unsafe_hwnd);
         println!("destroy window!");
         on_main_thread(move || {
@@ -241,13 +263,16 @@ impl Surface {
             let mut rect = RECT::default();
             unsafe { GetClientRect(*hwnd, &mut rect).expect("Can't get size") }
             Size::new(rect.right as f64, rect.bottom as f64)
-        }).await
+        })
+        .await
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {
         //should be fine since we're just reading the value
-        let unsafe_hwnd: HWND = unsafe{*self.imp.get_unchecked()};
-        RawWindowHandle::Win32(Win32WindowHandle::new(NonZero::new(unsafe_hwnd.0 as isize).expect("HWND is null")))
+        let unsafe_hwnd: HWND = unsafe { *self.imp.get_unchecked() };
+        RawWindowHandle::Win32(Win32WindowHandle::new(
+            NonZero::new(unsafe_hwnd.0 as isize).expect("HWND is null"),
+        ))
     }
 
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
@@ -263,12 +288,9 @@ impl Surface {
                 entry.size_notify = Some(Box::new(_update));
             });
         });
-
     }
 }
 
 impl Drop for Surface {
-    fn drop(&mut self) {
-
-    }
+    fn drop(&mut self) {}
 }
