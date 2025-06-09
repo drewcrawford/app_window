@@ -15,12 +15,14 @@ use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
-    GetSystemMetrics, HMENU, IDC_ARROW, LoadCursorW, MSG, PM_NOREMOVE, PeekMessageW,
+    GetSystemMetrics, IDC_ARROW, LoadCursorW, MSG, PM_NOREMOVE, PeekMessageW,
     PostThreadMessageW, RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, ShowWindow,
     TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW,
     WS_OVERLAPPEDWINDOW, WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
+use windows::Win32::UI::HiDpi::GetDpiForWindow;
+
 const WM_RUN_FUNCTION: u32 = WM_USER;
 
 #[derive(Debug)]
@@ -37,10 +39,10 @@ fn main_thread_id() -> u32 {
     static mut MAIN_THREAD_ID: u32 = 0;
     #[used]
     #[allow(non_upper_case_globals)]
-    #[link_section = ".CRT$XCU"]
+    #[unsafe(link_section = ".CRT$XCU")]
     static INIT_MAIN_THREAD_ID: unsafe fn() = {
         unsafe fn initer() {
-            MAIN_THREAD_ID = windows::Win32::System::Threading::GetCurrentThreadId();
+            unsafe {MAIN_THREAD_ID = windows::Win32::System::Threading::GetCurrentThreadId()};
         }
         initer
     };
@@ -72,14 +74,13 @@ thread_local! {
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     //need to create a message queue first
     let mut message = MSG::default();
-    _ = unsafe { PeekMessageW(&mut message, HWND::default(), WM_USER, WM_USER, PM_NOREMOVE) }; //create a message queue
+    _ = unsafe { PeekMessageW(&mut message, None, WM_USER, WM_USER, PM_NOREMOVE) }; //create a message queue
     //we don't care about the return value of PeekMessageW, it simply tells us if messages are available or not
 
     //now the queue is available so subsequent calls to PostMessageW will work
     closure(); //I think it's ok to run inline on windows?
-    let all_hwnd = HWND::default();
     loop {
-        let message_ret = unsafe { GetMessageW(&mut message, all_hwnd, 0, 0) };
+        let message_ret = unsafe { GetMessageW(&mut message, None, 0, 0) };
         if message_ret.0 == 0 {
             break;
         } else if message_ret.0 == -1 {
@@ -152,7 +153,7 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: L
 fn create_window_impl(position: Position, size: Size, title: String, style: WINDOW_STYLE) -> HWND {
     let instance = unsafe { GetModuleHandleW(PCWSTR::null()) }.expect("Can't get module");
     let cursor =
-        unsafe { LoadCursorW(HINSTANCE::default(), IDC_ARROW) }.expect("Can't load cursor");
+        unsafe { LoadCursorW(Some(HINSTANCE::default()), IDC_ARROW) }.expect("Can't load cursor");
     let winstr: HSTRING = title.into();
     let class_name = w!("raw_input_debug_window");
     let window_class = WNDCLASSEXW {
@@ -184,9 +185,9 @@ fn create_window_impl(position: Position, size: Size, title: String, style: WIND
             position.y() as i32, //position
             size.width() as i32,
             size.height() as i32,        //size
-            HWND(std::ptr::null_mut()),  //parent
-            HMENU(std::ptr::null_mut()), //menu
-            instance,                    //instance
+            None,  //parent
+            None, //menu
+            None,                    //instance
             None,
         )
     }
@@ -256,13 +257,16 @@ unsafe impl Send for Surface {}
 unsafe impl Sync for Surface {}
 
 impl Surface {
-    pub async fn size(&self) -> Size {
+    pub async fn size_scale(&self) -> (Size, f64) {
         let send_hwnd = self.imp.copying();
         crate::application::on_main_thread(move || {
             let hwnd = send_hwnd.get();
             let mut rect = RECT::default();
             unsafe { GetClientRect(*hwnd, &mut rect).expect("Can't get size") }
-            Size::new(rect.right as f64, rect.bottom as f64)
+            let s = Size::new(rect.right as f64, rect.bottom as f64);
+            let dpi = unsafe{GetDpiForWindow(*hwnd)};
+            let scale = dpi as f64 / 96.0;
+            (s,scale)
         })
         .await
     }
