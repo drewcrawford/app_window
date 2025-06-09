@@ -28,7 +28,7 @@ logwise = "0.2.3"
 wgpu = {version = "~24", optional = true}
 thiserror = "2.0.9"
 some_executor = {version = "0.4.1", optional = true}
-continue = "~0.1"
+continue = "0.1"
 
 [dev-dependencies]
 # needed for gpu example
