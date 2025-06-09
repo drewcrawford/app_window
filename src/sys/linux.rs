@@ -12,7 +12,7 @@ use raw_window_handle::{
 };
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{c_int, c_void};
 use std::fmt::Debug;
 use std::fs::File;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd};
