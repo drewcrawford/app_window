@@ -3,7 +3,7 @@
 /*!
 A cross-platform window crate.  Alternative to winit.
 
-![logo](art/logo.png)
+![logo](../../../art/logo.png)
 
 The main goal of this project is to provide a cross-platform API to bring up a window (or appropriate
 platform surface) for rendering application or game content.  (The content is out of scope for
