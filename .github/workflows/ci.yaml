@@ -1,4 +1,7 @@
+# xplat v1
 on: push
+env:
+  RUSTFLAGS: "-D warnings"
 jobs:
   build:
     name: Build on ${{ matrix.os }}
@@ -10,14 +13,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install libwayland-client
-        run: sudo apt-get install libwayland-dev
-        if: matrix.os == 'ubuntu-latest'
-
-
-      - name: Test
-        run: cargo test
+      - run: cargo check
+      - run: cargo clippy --no-deps
+      - run: cargo fmt --check
+      - run: cargo doc
+      - run: cargo test
 
       - name: Build example
         run: cargo build --example main
@@ -25,5 +25,5 @@ jobs:
       - name: Build wasm
         if: matrix.os == 'ubuntu-latest'
         run: |
-          rustup target add wasm32-unknown-unknown
+          rustup target add wasm32-unknown-unknown  
           cargo build --example main --target wasm32-unknown-unknown
