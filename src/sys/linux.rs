@@ -770,7 +770,7 @@ fn create_shm_buffer_decor(
         _ => todo!(),
     };
     let file =
-        unsafe { memfd_create(b"decor\0" as *const c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC) };
+        unsafe { memfd_create(b"decor\0" as *const libc::c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC) };
     if file < 0 {
         panic!(
             "Failed to create memfd: {err}",
@@ -825,7 +825,7 @@ fn create_shm_buffer(
 ) -> WlBuffer {
     let file = unsafe {
         memfd_create(
-            b"mem_fd\0" as *const c_char,
+            b"mem_fd\0" as *const libc::c_char,
             MFD_ALLOW_SEALING | MFD_CLOEXEC,
         )
     };
