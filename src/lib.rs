@@ -16,7 +16,7 @@ This crate distinguishes itself from winit in a few ways:
   run on any executor.  When we spawn tasks we use [`some_executor`](https://sealedabstract.com/code/some_executor) which is designed to be executor-agnostic.
    * That not withstanding, include a "main-thread" executor that can spawn tasks that need to run on the main thread, while *also* processing native events on that thread.
    * Optionally provides a 'wgpu executor' that can spawn tasks for using wgpu.  Notably, on platforms that require wgpu to be accessed from the main thread,
-      it does that, and on platforms that need it NOT to be on the main thread, it does that too!
+     it does that, and on platforms that need it NOT to be on the main thread, it does that too!
 
 # Quick Start
 
