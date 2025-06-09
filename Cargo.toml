@@ -64,7 +64,7 @@ wasm_thread = "0.3.3"
 # windows
 
 [target.'cfg(target_os="windows")'.dependencies]
-windows = { version = "0.58.0", features=[
+windows = { version = "0.61.0", features=[
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
@@ -86,8 +86,8 @@ io-uring = "0.7.3"
 zune-png = "0.4.10"
 # probably at some point this will be a global requirement,
 # for now we only NEED it to advertise decorations on linux
-accesskit = "0.17.1"
-accesskit_unix = "0.13.1"
+accesskit = "0.19.0"
+accesskit_unix = "0.15.0"
 send_cells = "0.1.0"
 some_local_executor = "0.1.2"
 
