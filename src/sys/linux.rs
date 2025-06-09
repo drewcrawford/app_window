@@ -12,11 +12,13 @@ use raw_window_handle::{
 };
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_void};
+use std::fmt::Debug;
 use std::fs::File;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd};
 use std::ptr::NonNull;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalList, GlobalListContents, registry_queue_init};
@@ -24,6 +26,7 @@ use wayland_client::protocol::wl_buffer::{Event, WlBuffer};
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_display::WlDisplay;
 use wayland_client::protocol::wl_keyboard::WlKeyboard;
+use wayland_client::protocol::wl_output::WlOutput;
 use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::{Format, WlShm};
@@ -43,6 +46,17 @@ use zune_png::zune_core::result::DecodingResult;
 const CLOSE_ID: NodeId = NodeId(3);
 const MAXIMIZE_ID: NodeId = NodeId(4);
 const MINIMIZE_ID: NodeId = NodeId(5);
+
+#[derive(Debug, Clone)]
+struct OutputInfo {
+    scale_factor: f64,
+}
+
+impl Default for OutputInfo {
+    fn default() -> Self {
+        Self { scale_factor: 1.0 }
+    }
+}
 
 mod ax {
     use crate::coordinates::Size;
@@ -74,7 +88,7 @@ mod ax {
         close_button.set_bounds(Rect::new(
             window_size.width() - BUTTON_WIDTH as f64,
             0.0,
-            window_size.width() as f64,
+            window_size.width(),
             TITLEBAR_HEIGHT as f64,
         ));
         close_button.set_label("Close");
@@ -85,7 +99,7 @@ mod ax {
         maximize_button.set_bounds(Rect::new(
             window_size.width() - BUTTON_WIDTH as f64 * 2.0,
             0.0,
-            window_size.width() as f64 - BUTTON_WIDTH as f64 * 1.0,
+            window_size.width() - BUTTON_WIDTH as f64 * 1.0,
             TITLEBAR_HEIGHT as f64,
         ));
         maximize_button.set_label("Maximize");
@@ -96,7 +110,7 @@ mod ax {
         minimize_button.set_bounds(Rect::new(
             window_size.width() - BUTTON_WIDTH as f64 * 3.0,
             0.0,
-            window_size.width() as f64 - BUTTON_WIDTH as f64 * 2.0,
+            window_size.width() - BUTTON_WIDTH as f64 * 2.0,
             TITLEBAR_HEIGHT as f64,
         ));
         minimize_button.set_label("Minimize");
@@ -107,11 +121,11 @@ mod ax {
 
         let tree = accesskit::Tree {
             root: NodeId(1),
-            app_name: Some("app_window".to_string()),
             toolkit_name: Some("app_window".to_string()),
             toolkit_version: Some("0.1.0".to_string()),
         };
-        let update = accesskit::TreeUpdate {
+        
+        accesskit::TreeUpdate {
             nodes: vec![
                 (NodeId(1), window),
                 /*(NodeId(2), title_bar),*/ (CLOSE_ID, close_button),
@@ -120,8 +134,7 @@ mod ax {
             ],
             tree: Some(tree),
             focus: NodeId(1),
-        };
-        update
+        }
     }
 
     pub struct Inner {
@@ -215,7 +228,7 @@ struct MainThreadSender {
 impl MainThreadSender {
     fn send(&self, closure: Box<dyn FnOnce() + Send>) {
         self.sender.send(closure).expect("Can't send closure");
-        let val = 1 as u64;
+        let val = 1_u64;
         let w = unsafe {
             libc::write(
                 self.eventfd,
@@ -243,10 +256,10 @@ struct MainThreadInfo {
 }
 
 thread_local! {
-    static MAIN_THREAD_INFO: RefCell<Option<MainThreadInfo>> = RefCell::new(None);
+    static MAIN_THREAD_INFO: RefCell<Option<MainThreadInfo>> = const { RefCell::new(None) };
 }
 
-pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
+pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let (sender, receiver) = channel();
     let channel_read_event = unsafe { eventfd(0, EFD_SEMAPHORE) };
     assert_ne!(channel_read_event, -1, "Failed to create eventfd");
@@ -263,6 +276,13 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let subcompositor: WlSubcompositor = globals.bind(&qh, 1..=1, ()).unwrap();
     //fedora 41 KDE uses version 1?
     let shm: WlShm = globals.bind(&qh, 1..=2, ()).unwrap();
+    
+    // Bind all available wl_output interfaces
+    for global in globals.contents().clone_list() {
+        if global.interface == "wl_output" {
+            let _output: WlOutput = globals.bind(&qh, global.version..=global.version, global.name).unwrap();
+        }
+    }
 
     let mut app = App(AppState::new(&qh, compositor, &connection, shm));
     let main_thread_info = MainThreadInfo {
@@ -415,6 +435,13 @@ pub struct Window {
     internal: Arc<Mutex<WindowInternal>>,
 }
 
+struct DebugWrapper(Box<dyn Fn(Size) + Send>);
+impl Debug for DebugWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DebugWrapper")
+    }
+}
+
 #[derive(Debug)]
 struct WindowInternal {
     app_state: Weak<AppState>,
@@ -429,9 +456,10 @@ struct WindowInternal {
     buffer: Option<WlBuffer>,
     requested_maximize: bool,
     adapter: Option<accesskit_unix::Adapter>,
-    size_update_notify: Option<Box<dyn Fn(Size) + Send>>,
+    size_update_notify: Option<DebugWrapper>,
     decor_subsurface: Option<WlSubsurface>,
     title: String,
+    current_outputs: std::collections::HashSet<u32>,
 }
 impl WindowInternal {
     fn new(
@@ -461,6 +489,7 @@ impl WindowInternal {
             size_update_notify: None,
             decor_subsurface: None,
             xdg_surface: None,
+            current_outputs: HashSet::new(),
         }));
         if ax {
             let _aximpl = ax::AX::new(size, title.clone(), window_internal.clone());
@@ -487,9 +516,9 @@ impl WindowInternal {
     }
 
     fn close_window(&self) {
-        self.xdg_toplevel.as_ref().map(|e| e.destroy());
-        self.xdg_surface.as_ref().map(|s| s.destroy());
-        self.wl_surface.as_ref().map(|s| s.destroy());
+        if let Some(e) = self.xdg_toplevel.as_ref() { e.destroy() }
+        if let Some(s) = self.xdg_surface.as_ref() { s.destroy() }
+        if let Some(s) = self.wl_surface.as_ref() { s.destroy() }
     }
     fn maximize(&mut self) {
         if self.requested_maximize {
@@ -520,7 +549,7 @@ unsafe impl Sync for Window {}
 struct App(Arc<AppState>);
 
 enum SurfaceEvents {
-    Standard(()),
+    Standard(Arc<Mutex<WindowInternal>>),
     Cursor,
     Decor,
 }
@@ -584,7 +613,7 @@ impl ActiveCursor {
         queue_handle: &QueueHandle<App>,
     ) -> Self {
         let mut cursor_theme =
-            CursorTheme::load(&connection, shm, CURSOR_SIZE as u32).expect("Can't load cursors");
+            CursorTheme::load(connection, shm, CURSOR_SIZE as u32).expect("Can't load cursors");
         cursor_theme
             .set_fallback(|_, _| Some(include_bytes!("../../linux_assets/left_ptr").into()));
         let cursor = cursor_theme.get_cursor("wait").expect("Can't get cursor");
@@ -613,7 +642,7 @@ impl ActiveCursor {
                     on_main_thread(move || {
                         let mut binding = move_cursor_theme.lock().unwrap();
                         let cursor = binding
-                            .get_cursor(&mt_active_request.lock().unwrap().name)
+                            .get_cursor(mt_active_request.lock().unwrap().name)
                             .expect("Can't get cursor");
                         let present_time = start_time.elapsed();
                         let frame_info = cursor.frame_and_duration(present_time.as_millis() as u32);
@@ -675,6 +704,7 @@ struct AppState {
     //option for lazy-init purposes
     active_cursor: Mutex<Option<ActiveCursor>>,
     seat: Mutex<Option<WlSeat>>,
+    outputs: Mutex<HashMap<u32, OutputInfo>>,
     _decor: Vec<u8>,
     decor_dimensions: (usize, usize),
 }
@@ -689,19 +719,19 @@ impl AppState {
         let mut decode_decor = zune_png::PngDecoder::new(decor);
         let decode = decode_decor.decode().expect("Can't decode decor");
         let dimensions = decode_decor.get_dimensions().unwrap();
-        let decor;
-        match decode {
+        let decor = match decode {
             DecodingResult::U8(d) => {
-                decor = d;
+                d
             }
             _ => todo!(),
-        }
+        };
 
         let a = Arc::new(AppState {
             compositor: compositor.clone(),
             shm: shm.clone(),
             active_cursor: Mutex::new(None),
             seat: Mutex::new(None),
+            outputs: Mutex::new(HashMap::new()),
             _decor: decor,
             decor_dimensions: dimensions,
         });
@@ -729,13 +759,12 @@ fn create_shm_buffer_decor(
     let mut decode_decor = zune_png::PngDecoder::new(decor);
     let decode = decode_decor.decode().expect("Can't decode decor");
     let dimensions = decode_decor.get_dimensions().unwrap();
-    let decor;
-    match decode {
+    let decor = match decode {
         DecodingResult::U8(d) => {
-            decor = d;
+            d
         }
         _ => todo!(),
-    }
+    };
     let file =
         unsafe { memfd_create(b"decor\0" as *const c_char, MFD_ALLOW_SEALING | MFD_CLOEXEC) };
     if file < 0 {
@@ -771,7 +800,8 @@ fn create_shm_buffer_decor(
             _mmap: Arc::new(mmap),
         })),
     };
-    let buffer = pool.create_buffer(
+    
+    pool.create_buffer(
         0,
         dimensions.0 as i32,
         dimensions.1 as i32,
@@ -779,8 +809,7 @@ fn create_shm_buffer_decor(
         Format::Argb8888,
         queue_handle,
         release_info,
-    );
-    buffer
+    )
 }
 
 fn create_shm_buffer(
@@ -827,7 +856,8 @@ fn create_shm_buffer(
             window_internal,
         })),
     };
-    let buffer = pool.create_buffer(
+    
+    pool.create_buffer(
         0,
         width,
         height,
@@ -835,8 +865,7 @@ fn create_shm_buffer(
         Format::Argb8888,
         queue_handle,
         release_info,
-    );
-    buffer
+    )
 }
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for App {
@@ -913,11 +942,27 @@ impl Dispatch<WlSurface, SurfaceEvents> for App {
         _state: &mut Self,
         _proxy: &WlSurface,
         event: <WlSurface as Proxy>::Event,
-        _data: &SurfaceEvents,
+        data: &SurfaceEvents,
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("got WlSurface event {:?}", event);
+        match event {
+            wayland_client::protocol::wl_surface::Event::Enter { output } => {
+                if let SurfaceEvents::Standard(window_internal) = data {
+                    let output_id = output.id().protocol_id();
+                    window_internal.lock().unwrap().current_outputs.insert(output_id);
+                }
+            }
+            wayland_client::protocol::wl_surface::Event::Leave { output } => {
+                if let SurfaceEvents::Standard(window_internal) = data {
+                    let output_id = output.id().protocol_id();
+                    window_internal.lock().unwrap().current_outputs.remove(&output_id);
+                }
+            }
+            _ => {
+                println!("got WlSurface event {:?}", event);
+            }
+        }
     }
 }
 
@@ -965,7 +1010,7 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                                 size.width() as i32,
                                 size.height() as i32,
                                 &app_state.shm,
-                                &qh,
+                                qh,
                                 data.clone(),
                             );
                             let surface = locked_data.wl_surface.as_ref().unwrap();
@@ -975,13 +1020,10 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                         }
                         let title = locked_data.title.clone();
                         let applied_size = locked_data.applied_size();
-                        locked_data.adapter.as_mut().map(|a| {
-                            a.update_if_active(|| ax::build_tree_update(title, applied_size))
-                        });
-                        locked_data
+                        if let Some(a) = locked_data.adapter.as_mut() { a.update_if_active(|| ax::build_tree_update(title, applied_size)) }
+                        if let Some(f) = locked_data
                             .size_update_notify
-                            .as_ref()
-                            .map(|f| f(locked_data.applied_size()));
+                            .as_ref() { f.0(locked_data.applied_size()) }
                     }
                 }
             }
@@ -1088,6 +1130,34 @@ impl Dispatch<WlSubsurface, ()> for App {
         _qhandle: &QueueHandle<Self>,
     ) {
         println!("got WlSubsurface event {:?}", event);
+    }
+}
+
+impl Dispatch<WlOutput, u32> for App {
+    fn event(
+        state: &mut Self,
+        _proxy: &WlOutput,
+        event: <WlOutput as Proxy>::Event,
+        output_id: &u32,
+        _conn: &Connection,
+        _qhandle: &QueueHandle<Self>,
+    ) {
+        match event {
+            wayland_client::protocol::wl_output::Event::Scale { factor } => {
+                let mut outputs = state.0.outputs.lock().unwrap();
+                if let Some(output_info) = outputs.get_mut(output_id) {
+                    output_info.scale_factor = factor as f64;
+                } else {
+                    outputs.insert(*output_id, OutputInfo { scale_factor: factor as f64 });
+                }
+            }
+            wayland_client::protocol::wl_output::Event::Done => {
+                // Output configuration is complete
+            }
+            _ => {
+                // Handle other output events if needed (geometry, mode, etc.)
+            }
+        }
     }
 }
 
@@ -1204,29 +1274,28 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
 
                 //get current size
                 let size = data.applied_size();
-                let position = Position::new(parent_surface_x as f64, parent_surface_y as f64);
+                let position = Position::new(parent_surface_x, parent_surface_y);
                 data.wl_pointer_pos.replace(position);
-                let cursor_request;
-                match MouseRegion::from_position(size, position) {
+                let cursor_request = match MouseRegion::from_position(size, position) {
                     MouseRegion::BottomRight => {
-                        cursor_request = CursorRequest::bottom_right_corner();
+                        CursorRequest::bottom_right_corner()
                     }
                     MouseRegion::Bottom => {
-                        cursor_request = CursorRequest::bottom_side();
+                        CursorRequest::bottom_side()
                     }
                     MouseRegion::Right => {
-                        cursor_request = CursorRequest::right_side();
+                        CursorRequest::right_side()
                     }
                     MouseRegion::Client
                     | MouseRegion::MaximizeButton
                     | MouseRegion::CloseButton
                     | MouseRegion::MinimizeButton => {
-                        cursor_request = CursorRequest::left_ptr();
+                        CursorRequest::left_ptr()
                     }
                     MouseRegion::Titlebar => {
-                        cursor_request = CursorRequest::left_ptr();
+                        CursorRequest::left_ptr()
                     }
-                }
+                };
                 let app_state = data.app_state.upgrade().unwrap();
                 let lock_a = app_state.active_cursor.lock().unwrap();
                 let active_cursor = lock_a.as_ref().expect("No active cursor");
@@ -1258,7 +1327,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
 
                 //get current size
                 let size = data.applied_size();
-                let mouse_pos = data.wl_pointer_pos.clone().expect("No pointer position");
+                let mouse_pos = data.wl_pointer_pos.expect("No pointer position");
                 let mouse_region = MouseRegion::from_position(size, mouse_pos);
                 let pressed: u32 = state.into();
                 if button == 0x110 {
@@ -1336,23 +1405,21 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
                 surface: _,
                 keys: _,
             } => {
-                data.as_ref()
+                if let Some(e) = data.as_ref()
                     .lock()
                     .unwrap()
                     .adapter
-                    .as_mut()
-                    .map(|e| e.update_window_focus_state(true));
+                    .as_mut() { e.update_window_focus_state(true) }
             }
             wayland_client::protocol::wl_keyboard::Event::Leave {
                 serial: _,
                 surface: _,
             } => {
-                data.as_ref()
+                if let Some(e) = data.as_ref()
                     .lock()
                     .unwrap()
                     .adapter
-                    .as_mut()
-                    .map(|e| e.update_window_focus_state(false));
+                    .as_mut() { e.update_window_focus_state(false) }
             }
             wayland_client::protocol::wl_keyboard::Event::Key {
                 serial: _serial,
@@ -1391,7 +1458,7 @@ impl Window {
             let surface = info
                 .app_state
                 .compositor
-                .create_surface(&info.queue_handle, SurfaceEvents::Standard(()));
+                .create_surface(&info.queue_handle, SurfaceEvents::Standard(window_internal.clone()));
 
             let decor_surface = info
                 .app_state
@@ -1441,7 +1508,7 @@ impl Window {
 
             surface.attach(
                 Some(
-                    &window_internal
+                    window_internal
                         .lock()
                         .unwrap()
                         .buffer
@@ -1542,8 +1609,32 @@ unsafe impl Send for Surface {}
 unsafe impl Sync for Surface {}
 
 impl Surface {
-    pub async fn size(&self) -> Size {
-        self.window_internal.lock().unwrap().applied_size()
+    pub async fn size_scale(&self) -> (Size, f64) {
+        let size = self.window_internal.lock().unwrap().applied_size();
+        
+        // Get the scale factor from the app state directly (accessible from any thread)
+        let window_internal = self.window_internal.lock().unwrap();
+        let current_outputs = window_internal.current_outputs.clone();
+        let app_state = window_internal.app_state.upgrade().expect("App state is gone");
+        drop(window_internal);
+        
+        // Get the scale factor for the outputs this window is currently on
+        let outputs = app_state.outputs.lock().unwrap();
+        let scale = if current_outputs.is_empty() {
+            // If no outputs are tracked yet, default to 1.0
+            1.0
+        } else {
+            // Use the scale factor of the first output the window is on
+            // In a proper implementation, you might want to use the "primary" output
+            // or the one with the largest intersection area with the window
+            current_outputs.iter()
+                .filter_map(|output_id| outputs.get(output_id))
+                .map(|output_info| output_info.scale_factor)
+                .next()
+                .unwrap_or(1.0)
+        };
+        
+        (size, scale)
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {
@@ -1567,8 +1658,8 @@ impl Surface {
         ))
     }
 
-    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
-        self.window_internal.lock().unwrap().size_update_notify = Some(Box::new(update));
+    pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, update: F) {
+        self.window_internal.lock().unwrap().size_update_notify = Some(DebugWrapper(Box::new(update)));
     }
 }
 
