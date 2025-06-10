@@ -10,8 +10,7 @@ pub fn main() {
     #[cfg(feature = "app_input")]
     #[cfg(not(target_arch = "wasm32"))]
     use std::thread;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_thread as thread;
+
 
     #[cfg(feature = "app_input")]
     thread::spawn(move || {
