@@ -11,7 +11,6 @@ pub fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     use std::thread;
 
-
     #[cfg(feature = "app_input")]
     thread::spawn(move || {
         let k = app_input::keyboard::Keyboard::coalesced();
