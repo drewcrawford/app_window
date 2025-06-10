@@ -34,5 +34,5 @@ jobs:
       - name: Build wasm
         if: matrix.os == 'ubuntu-latest'
         run: |
-          rustup target add wasm32-unknown-unknown  
-          cargo build --example main --target wasm32-unknown-unknown
+          rustup +nightly target add wasm32-unknown-unknown  
+          cargo +nightly build --example main --target wasm32-unknown-unknown
