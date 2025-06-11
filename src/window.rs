@@ -190,7 +190,7 @@ impl Window {
     pub async fn new(position: Position, size: Size, title: String) -> Self {
         assert!(
             crate::application::is_main_thread_running(),
-            "Call app_window::application::run_main_thread"
+            "Call app_window::application::main"
         );
         Window {
             sys: crate::sys::Window::new(position, size, title).await,

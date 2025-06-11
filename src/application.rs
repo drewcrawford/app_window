@@ -29,7 +29,7 @@ use crate::sys;
 
 static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
 
-pub(crate) const CALL_MAIN: &str = "Call app_window::application::run_main_thread";
+pub(crate) const CALL_MAIN: &str = "Call app_window::application::main";
 
 /// Initializes and runs the application event loop.
 ///
