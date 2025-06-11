@@ -178,7 +178,7 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 
 /// Submits a closure to be executed on the main thread.
 ///
-/// This internal function provides the low-level mechanism for scheduling work on the
+/// This function provides the low-level mechanism for scheduling work on the
 /// main thread. Unlike [`on_main_thread()`], this function does not wait for the closure
 /// to complete or return a result.
 ///
@@ -190,6 +190,6 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 ///
 /// This function handles platform-specific details of main thread execution and may
 /// install a main thread executor if necessary for the current platform.
-pub(crate) fn submit_to_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
+pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     sys::on_main_thread(closure);
 }
