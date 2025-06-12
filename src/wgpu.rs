@@ -9,7 +9,11 @@ See https://caniuse.com/mdn-api_offscreencanvas_getcontext_webgpu_context.  Curr
 we take the view that it can only be accessed from the main thread for widest browser compatability,
 but this may change.
 */
+use crate::executor::on_main_thread_async;
 use crate::sys;
+use some_executor::SomeExecutor;
+use some_executor::observer::FinishedObservation;
+use some_executor::task::Task;
 use std::future::Future;
 
 /**
@@ -51,84 +55,111 @@ Describes the preferred strategy for interacting with wgpu on this platform.
 #[cfg(any(target_arch = "wasm32", target_os = "macos"))]
 pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 
-/**
-Spawns a future onto an executor suitable for wgpu.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub struct NotDirect<F>(F);
 
-This function will panic if not executed on the main thread.
-
-The details of this vary per platform, as does the platform signature.  On most platforms we require
-that the future be Send and 'static, but on MainThread platforms we do not.
-*/
-#[cfg(target_os = "windows")]
-pub fn wgpu_spawn<F: Future<Output = ()> + Send + 'static>(f: F) {
-    assert!(
-        sys::is_main_thread(),
-        "call wgpu_spawn from the main thread"
-    );
-    use some_executor::SomeExecutor;
-    use some_executor::task::Task;
-    //'relaxed' version.  Let's submit to current executor?
-    let mut ex = some_executor::current_executor::current_executor();
-    let task = Task::without_notifications(
-        "wgpu_spawn".into(),
-        f,
-        some_executor::task::Configuration::default(),
-    );
-    use some_executor::observer::Observer;
-    ex.spawn_objsafe(task.into_objsafe()).detach();
+impl<F> std::fmt::Display for NotDirect<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "This future cannot be called directly on the current thread. \
+             Use `wgpu_call_context` to ensure it is executed in a suitable context."
+        )
+    }
 }
 
 /**
-Spawns a future onto an executor suitable for wgpu.
+Attempts to call the future directly, returning an error
+if the current thread is not suitable for direct wgpu calls.
 
-This function will panic if not executed on the main thread.
-
-The details of this vary per platform, as does the platform signature.  On most platforms we require
-that the future be Send and 'static, but on MainThread platforms we do not.
+This is an alternative to [wgpu_call_context] that does not
+require the future to be `Send` or `'static`. It is useful when you want to ensure that the future
+is executed on the correct thread for wgpu operations.
 */
-#[cfg(any(target_arch = "wasm32", target_os = "macos"))]
-pub fn wgpu_spawn<F: Future<Output = ()> + 'static>(f: F) {
-    //MainThread implementation
-    assert!(
-        sys::is_main_thread(),
-        "call wgpu_spawn from the main thread"
-    );
-    crate::executor::already_on_main_thread_submit(f);
+pub async fn wgpu_call_direct_or_err<F, R>(f: F) -> Result<R, NotDirect<F>>
+where
+    F: Future<Output = R>,
+{
+    match WGPU_STRATEGY {
+        WGPUStrategy::MainThread => {
+            // MainThread strategy; if we're on the main thread, we can just call the future directly.
+            if sys::is_main_thread() {
+                Ok(f.await)
+            } else {
+                Err(NotDirect(f))
+            }
+        }
+        WGPUStrategy::NotMainThread => {
+            if sys::is_main_thread() {
+                Err(NotDirect(f))
+            } else {
+                // NotMainThread strategy; we can call the future directly.
+                Ok(f.await)
+            }
+        }
+        WGPUStrategy::Relaxed => {
+            //we can call the future directly.
+            Ok(f.await)
+        }
+    }
 }
 
 /**
-Spawns a future onto an executor suitable for wgpu.
+Calls the future in a context suitable for wgpu operations.
+This function is designed to ensure that the future is executed in a context that is compatible with wgpu operations
+on the current platform. It handles the differences in threading models across platforms.
 
-This function will panic if not executed on the main thread.
+# Arguments
+- `f`: The future to be executed. It must implement `Future<Output = R>`, where `R` is the expected output type.
+# Returns
+- `R`: The result of the future execution.
 
-The details of this vary per platform, as does the platform signature.  On most platforms we require
-that the future be Send and 'static, but on MainThread platforms we do not.
+# See also
+- [`wgpu_call_direct_or_err`] for a version that does not require the future to be `Send` or `'static`.
 */
-#[cfg(target_os = "linux")]
-pub fn wgpu_spawn<F: Future<Output = ()> + Send + 'static>(f: F) {
-    assert!(
-        sys::is_main_thread(),
-        "call wgpu_spawn from the main thread"
-    );
-    std::thread::Builder::new()
-        .name("wgpu_spawn".into())
-        .spawn(|| {
-            let mut exec = some_local_executor::Executor::new();
-            let task = some_local_executor::Task::without_notifications(
-                "wgpu_spawn".into(),
-                f,
-                some_local_executor::Configuration::default(),
-            );
-            use some_local_executor::some_executor::SomeLocalExecutor;
-            let o = exec.spawn_local(task);
-            std::mem::forget(o);
-            exec.drain();
-        })
-        .expect("Can't spawn thread");
+pub async fn wgpu_call_context<F, R>(f: F) -> R
+where
+    F: Future<Output = R> + Send + 'static,
+    R: Send + Unpin + 'static,
+{
+    match wgpu_call_direct_or_err(f).await {
+        Ok(result) => result,
+        Err(f) => {
+            match WGPU_STRATEGY {
+                WGPUStrategy::MainThread => on_main_thread_async(f.0).await,
+                WGPUStrategy::NotMainThread => {
+                    //run on the executor pool
+                    let mut exec = some_executor::current_executor::current_executor();
+                    let task = Task::without_notifications(
+                        "wgpu_call_context".into(),
+                        some_executor::task::Configuration::default(),
+                        f.0,
+                    );
+                    let observer = exec.spawn_objsafe(task.into_objsafe());
+                    let pinned_fut = Box::pin(observer);
+                    let result = pinned_fut.await;
+                    match result {
+                        FinishedObservation::Cancelled => todo!(),
+                        FinishedObservation::Ready(r) => {
+                            let a = r
+                                .downcast::<R>()
+                                .expect("wgpu_call_context: expected result to be of type R");
+                            *a
+                        }
+                    }
+                }
+                WGPUStrategy::Relaxed => {
+                    unreachable!()
+                }
+            }
+        }
+    }
 }
-
 #[cfg(test)]
 mod tests {
+    use crate::wgpu::wgpu_call_context;
+
     #[cfg(target_os = "windows")] //list 'relaxed' platforms here
     #[test]
     fn test_relaxed() {
@@ -140,5 +171,12 @@ mod tests {
         assert_sync::<wgpu::Surface>();
         assert_send::<wgpu::Adapter>();
         assert_sync::<wgpu::Adapter>();
+    }
+
+    #[test]
+    fn test_wgpu_call_context_is_send() {
+        fn assert_send<T: Send>(t: T) {}
+        let f = wgpu_call_context(async {});
+        assert_send(f);
     }
 }

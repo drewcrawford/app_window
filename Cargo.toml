@@ -1,6 +1,6 @@
 [package]
 name = "app_window"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Drew Crawford <drew@sealedabstract.com>"]
 description = "Cross-platform window library"
@@ -27,7 +27,7 @@ raw-window-handle = "0.6.2"
 logwise = "0.2.3"
 wgpu = {version = "~25", optional = true}
 thiserror = "2.0.9"
-some_executor = {version = "0.4.1", optional = true}
+some_executor = {version = "0.5", optional = true}
 continue = "0.1"
 
 [dev-dependencies]
@@ -73,7 +73,7 @@ windows = { version = "0.61.0", features=[
 ] }
 send_cells = "0.1.0"
 # we use to submit wgpu to local executor
-some_executor = { version = "0.4.1", optional=true }
+some_executor = { version = "0.5", optional=true }
 
 # linux
 [target.'cfg(target_os="linux")'.dependencies]
@@ -92,3 +92,5 @@ accesskit_unix = "0.15.0"
 send_cells = "0.1.0"
 some_local_executor = "0.1.2"
 
+[patch.crates-io]
+some_executor = {path = "../some_executor",features=[]}

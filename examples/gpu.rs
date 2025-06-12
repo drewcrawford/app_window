@@ -2,6 +2,7 @@
 */
 #[cfg(feature = "wgpu")]
 mod gpu {
+    use app_window::wgpu::wgpu_call_context;
     use app_window::window::Window;
     use some_executor::hint::Hint;
     use some_executor::observer::Observer;
@@ -85,13 +86,20 @@ mod gpu {
         });
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
 
-        let surface = unsafe {
-            instance.create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: app_surface.raw_display_handle(),
-                raw_window_handle: app_surface.raw_window_handle(),
+        let app_surface = Arc::new(app_surface);
+        let move_surface = app_surface.clone();
+        let (instance, surface) = unsafe {
+            wgpu_call_context(async move {
+                let surface = instance
+                    .create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
+                        raw_display_handle: move_surface.raw_display_handle(),
+                        raw_window_handle: move_surface.raw_window_handle(),
+                    })
+                    .expect("Can't create surface");
+                (instance, surface)
             })
-        }
-        .expect("Can't create surface");
+            .await
+        };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -189,29 +197,28 @@ mod gpu {
         app_window::application::main(|| {
             let task = some_executor::task::Task::without_notifications(
                 "run".into(),
-                async {
-                    let window = Window::default().await;
-                    #[cfg(feature = "wgpu")]
-                    {
-                        app_window::application::on_main_thread(|| {
-                            app_window::wgpu::wgpu_spawn(async move {
-                                wgpu_run(window).await;
-                            })
-                        })
-                        .await;
-                    }
-
-                    #[cfg(not(feature = "wgpu"))]
-                    panic!("wgpu feature not enabled");
-                },
                 Configuration::new(
                     Hint::Unknown,
                     Priority::UserInteractive,
                     some_executor::Instant::now(),
                 ),
+                async {
+                    let window = Window::default().await;
+                    #[cfg(feature = "wgpu")]
+                    {
+                        wgpu_run(window).await;
+                    }
+
+                    #[cfg(not(feature = "wgpu"))]
+                    panic!("wgpu feature not enabled");
+                },
             );
+            // let task_dbg: some_executor::task::Task<{async block@examples/gpu.rs:195:17: 195:22}, Infallible> = task;
+
+            let objsafe = task.into_objsafe();
+            // let dbg: some_executor::task::Task<Pin<Box<dyn Future<Output = Box<(dyn std::any::Any + Send + 'static)>> + Send>>, Box<dyn ObserverNotified<(dyn std::any::Any + Send + 'static)> + Send>> = objsafe;
             some_executor::current_executor::current_executor()
-                .spawn_objsafe(task.into_objsafe())
+                .spawn_objsafe(objsafe)
                 .detach();
         });
     }
