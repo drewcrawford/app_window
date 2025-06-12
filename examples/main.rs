@@ -40,7 +40,6 @@ pub fn main() {
                 let w = app_window::window::Window::default().await;
                 std::mem::forget(w);
             },
-
         );
         some_executor::current_executor::current_executor()
             .spawn_objsafe(task.into_objsafe())
