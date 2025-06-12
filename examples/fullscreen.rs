@@ -11,13 +11,13 @@ pub fn main() {
     app_window::application::main(|| {
         let task = Task::without_notifications(
             "fullscreen".to_string(),
+            Configuration::default(),
             async {
                 let w = app_window::window::Window::fullscreen("Hello".to_string())
                     .await
                     .expect("Can't create window");
                 std::mem::forget(w);
             },
-            Configuration::default(),
         );
         some_executor::current_executor::current_executor()
             .spawn_objsafe(task.into_objsafe())

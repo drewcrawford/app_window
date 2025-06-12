@@ -8,9 +8,7 @@ use crate::application::submit_to_main_thread;
 use crate::executor::already_on_main_thread_submit;
 use some_executor::observer::{FinishedObservation, Observer, ObserverNotified};
 use some_executor::task::Task;
-use some_executor::{
-    DynExecutor, LocalExecutorExt, SomeExecutor, SomeExecutorExt, SomeLocalExecutor,
-};
+use some_executor::{BoxedSendObserverFuture, DynExecutor, LocalExecutorExt, ObjSafeTask, SomeExecutor, SomeExecutorExt, SomeLocalExecutor};
 use std::any::Any;
 use std::convert::Infallible;
 use std::future::Future;
@@ -158,15 +156,7 @@ impl SomeExecutor for MainThreadExecutor {
         }
     }
 
-    fn spawn_objsafe(
-        &mut self,
-        task: Task<
-            Pin<Box<dyn Future<Output = Box<dyn Any + 'static + Send>> + 'static + Send>>,
-            Box<dyn ObserverNotified<dyn Any + Send> + Send>,
-        >,
-    ) -> Box<
-        dyn Observer<Value = Box<dyn Any + Send>, Output = FinishedObservation<Box<dyn Any + Send>>>,
-    > {
+    fn spawn_objsafe(&mut self, task: some_executor::ObjSafeTask) -> some_executor::BoxedSendObserver {
         let (s, o) = task.spawn_objsafe(self);
         submit_to_main_thread(|| {
             already_on_main_thread_submit(async {
@@ -175,23 +165,7 @@ impl SomeExecutor for MainThreadExecutor {
         });
         Box::new(o)
     }
-
-    fn spawn_objsafe_async<'s>(
-        &'s mut self,
-        task: Task<
-            Pin<Box<dyn Future<Output = Box<dyn Any + 'static + Send>> + 'static + Send>>,
-            Box<dyn ObserverNotified<dyn Any + Send> + Send>,
-        >,
-    ) -> Box<
-        dyn Future<
-                Output = Box<
-                    dyn Observer<
-                            Value = Box<dyn Any + Send>,
-                            Output = FinishedObservation<Box<dyn Any + Send>>,
-                        >,
-                >,
-            > + 's,
-    > {
+    fn spawn_objsafe_async<'s>(&'s mut self, task: ObjSafeTask) -> BoxedSendObserverFuture<'s> {
         Box::new(async {
             let (s, o) = task.spawn_objsafe(self);
             submit_to_main_thread(|| {
@@ -201,11 +175,11 @@ impl SomeExecutor for MainThreadExecutor {
             });
             Box::new(o)
                 as Box<
-                    dyn Observer<
-                            Value = Box<dyn Any + Send>,
-                            Output = FinishedObservation<Box<dyn Any + Send>>,
-                        >,
-                >
+                dyn Observer<
+                    Value = Box<dyn Any + Send>,
+                    Output = FinishedObservation<Box<dyn Any + Send>>,
+                > + Send,
+            >
         })
     }
 
