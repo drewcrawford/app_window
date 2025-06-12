@@ -93,4 +93,3 @@ send_cells = "0.1.0"
 some_local_executor = "0.1.2"
 
 [patch.crates-io]
-some_executor = {path = "../some_executor",features=[]}
