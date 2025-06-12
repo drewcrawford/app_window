@@ -133,10 +133,16 @@ thread_local! {
 ///
 /// On all supported platforms, this ensures the future runs on the thread that owns
 /// the native event loop, which is required for UI operations.
-pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Send + 'static>(
+pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Send>(
     future: F,
 ) -> R {
     let (sender, fut) = r#continue::continuation();
+    // Box the future, erase the lifetime
+    let boxed = Box::pin(future) as Pin<Box<dyn Future<Output = R> + Send + '_>>;
+    let future: Pin<Box<dyn Future<Output = R> + Send + 'static>> = unsafe {
+        // SAFETY: We ensure the future is 'static by not returning until it completes
+        std::mem::transmute(boxed)
+    };
     crate::application::submit_to_main_thread(|| {
         already_on_main_thread_submit(async move {
             let r = future.await;
