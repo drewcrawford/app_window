@@ -304,11 +304,12 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 
     event_queue.flush().expect("Failed to flush event queue");
 
-    let mut read_guard = event_queue.prepare_read().expect("Failed to prepare read");
+    let mut read_guard = Some(event_queue.prepare_read().expect("Failed to prepare read"));
     const WAYLAND_DATA_AVAILABLE: u64 = 1;
     const CHANNEL_DATA_AVAILABLE: u64 = 2;
-    let fd = read_guard.connection_fd();
+    let fd = read_guard.as_ref().unwrap().connection_fd();
     let io_uring_fd = io_uring::types::Fd(fd.as_raw_fd());
+    let io_uring_fd_raw = io_uring_fd.0.as_raw_fd();
     let mut wayland_entry =
         io_uring::opcode::PollAdd::new(io_uring_fd, libc::POLLIN as u32).build();
     wayland_entry = wayland_entry.user_data(WAYLAND_DATA_AVAILABLE);
@@ -322,10 +323,43 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     eventfd_opcode = eventfd_opcode.user_data(CHANNEL_DATA_AVAILABLE);
     unsafe { sqs.push(&eventfd_opcode) }.expect("Can't submit peek");
     drop(sqs);
+    //flush_queue_debug
+    std::thread::Builder::new().name("flush_queue_debug".to_string()).spawn(move || {
+        for _ in 0..1_000_000 {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            on_main_thread(||{}) //wake
+        }
+    }).unwrap();
+
+    fn next_read_guard(event_queue: &mut wayland_client::EventQueue<App>, app: &mut App, read_guard: &mut Option<wayland_client::backend::ReadEventsGuard>) {
+        loop {
+            let _read_guard = event_queue.prepare_read();
+
+            match _read_guard {
+                Some(guard) => {
+                    *read_guard = Some(guard);
+                    break; //out of loop
+                }
+                None => {
+                    event_queue
+                        .dispatch_pending(app)
+                        .expect("Can't dispatch events");
+                    event_queue.flush().expect("Failed to flush event queue");
+                    //try again
+                    println!("retrying");
+                }
+            }
+        }
+    }
+
     //park
     loop {
-        // println!("will submit_and_wait...");
+
+        next_read_guard(&mut event_queue, &mut app, &mut read_guard);
+        assert!(read_guard.as_ref().unwrap().connection_fd().as_raw_fd() == io_uring_fd_raw);
         let r = io_uring.submit_and_wait(1);
+        //we also want to take once regardless of entry
+        let mut take_read_guard = read_guard.take();
         match r {
             Ok(_) => {}
             Err(e) => {
@@ -336,95 +370,93 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
                 continue;
             }
         }
-        let mut entries = Vec::new();
+        let mut wayland_data_available = false;
+        let mut channel_data_available = false;
         for entry in io_uring.completion() {
-            entries.push(entry);
-        }
-        for entry in entries {
             let result = entry.result();
             if result < 0 {
                 panic!("Error in completion queue: {err}", err = result);
             }
             match entry.user_data() {
                 WAYLAND_DATA_AVAILABLE => {
-                    match read_guard.read() {
-                        Ok(_) => {}
-                        Err(e) => {
-                            match e {
-                                WaylandError::Io(e) => {
-                                    match e.kind() {
-                                        std::io::ErrorKind::WouldBlock => {
-                                            //continue
-                                        }
-                                        _ => {
-                                            panic!("Error reading from wayland: {err}", err = e);
-                                        }
-                                    }
-                                }
-                                WaylandError::Protocol(_) => {
-                                    panic!("Protocol error reading from wayland");
-                                }
-                            }
-                        }
-                    }
-                    event_queue
-                        .dispatch_pending(&mut app)
-                        .expect("Can't dispatch events");
-                    //prepare next read
-                    //ensure writes queued during dispatch_pending go out (such as proxy replies, etc)
-                    event_queue.flush().expect("Failed to flush event queue");
-
-                    loop {
-                        let _read_guard = event_queue.prepare_read();
-
-                        match _read_guard {
-                            Some(guard) => {
-                                read_guard = guard;
-                                break; //out of loop
-                            }
-                            None => {
-                                event_queue
-                                    .dispatch_pending(&mut app)
-                                    .expect("Can't dispatch events");
-                                event_queue.flush().expect("Failed to flush event queue");
-                                //try again
-                                println!("retrying");
-                            }
-                        }
-                    }
-
-                    let mut sqs = io_uring.submission();
-                    wayland_entry =
-                        io_uring::opcode::PollAdd::new(io_uring_fd, libc::POLLIN as u32).build();
-                    wayland_entry = wayland_entry.user_data(WAYLAND_DATA_AVAILABLE);
-                    unsafe { sqs.push(&wayland_entry) }.expect("Can't submit peek");
-                    //return to submit_and_wait
+                    wayland_data_available = true;
                 }
                 CHANNEL_DATA_AVAILABLE => {
-                    let mut buf = [0u8; 8];
-                    let r = unsafe {
-                        libc::read(channel_read_event, buf.as_mut_ptr() as *mut c_void, 8)
-                    };
-                    assert_eq!(r, 8, "Failed to read from eventfd");
-                    let closure = receiver
-                        .recv_timeout(Duration::from_secs(0))
-                        .expect("Failed to receive closure");
-                    closure();
-                    //let's ensure any writes went out to wayland
-                    event_queue.flush().expect("Failed to flush event queue");
-
-                    //submit new peek
-                    let mut sqs = io_uring.submission();
-                    unsafe { sqs.push(&eventfd_opcode) }.expect("Can't submit peek");
-                    //return to submit_and_wait
+                    channel_data_available = true;
                 }
                 other => {
                     unimplemented!("Unknown user data: {other}", other = other);
                 }
             }
         }
+        if wayland_data_available {
+            match take_read_guard.take().expect("Read guard not available").read() {
+                Ok(_) => {}
+                Err(e) => {
+                    match e {
+                        WaylandError::Io(e) => {
+                            match e.kind() {
+                                std::io::ErrorKind::WouldBlock => {
+                                    //continue
+                                }
+                                _ => {
+                                    panic!("Error reading from wayland: {err}", err = e);
+                                }
+                            }
+                        }
+                        WaylandError::Protocol(_) => {
+                            panic!("Protocol error reading from wayland");
+                        }
+                    }
+                }
+            }
+            event_queue
+                .dispatch_pending(&mut app)
+                .expect("Can't dispatch events");
+            //prepare next read
+            //ensure writes queued during dispatch_pending go out (such as proxy replies, etc)
+            event_queue.flush().expect("Failed to flush event queue");
+
+            let mut sqs = io_uring.submission();
+            wayland_entry =
+                io_uring::opcode::PollAdd::new(io_uring_fd, libc::POLLIN as u32).build();
+            wayland_entry = wayland_entry.user_data(WAYLAND_DATA_AVAILABLE);
+            unsafe { sqs.push(&wayland_entry) }.expect("Can't submit peek");
+            //return to submit_and_wait
+        }
+        if channel_data_available {
+            drop(take_read_guard); //we don't need it anymore
+            let mut buf = [0u8; 8];
+            let r = unsafe {
+                libc::read(channel_read_event, buf.as_mut_ptr() as *mut c_void, 8)
+            };
+            assert_eq!(r, 8, "Failed to read from eventfd");
+            let closure = receiver
+                .recv_timeout(Duration::from_secs(0))
+                .expect("Failed to receive closure");
+            closure();
+            //let's ensure any writes went out to wayland
+            event_queue.dispatch_pending(&mut app).expect("can't dispatch events");
+            event_queue.flush().expect("Failed to flush event queue");
+            println!("flushed");
+            //submit new peek
+            let mut sqs = io_uring.submission();
+            unsafe { sqs.push(&eventfd_opcode) }.expect("Can't submit peek");
+            //return to submit_and_wait
+        }
     }
 }
+// for entry in todo!() {
+//     let result = entry.result();
+//     if result < 0 {
+//         panic!("Error in completion queue: {err}", err = result);
+//     }
+//     match entry.user_data() {
+//         WAYLAND_DATA_AVAILABLE => {
+
+
+    // }
+// }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     // println!("sending on_main_thread...");
