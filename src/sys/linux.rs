@@ -998,7 +998,6 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
             xdg_surface::Event::Configure { serial } => {
                 let proposed = locked_data.proposed_configure.take();
                 if let Some(mut configure) = proposed {
-                    proxy.ack_configure(serial);
                     let app_state = locked_data.app_state.upgrade().unwrap();
                     if configure.width == 0 && configure.height == 0 {
                         //pick our own size
@@ -1046,6 +1045,7 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                         }
                     }
                 }
+                proxy.ack_configure(serial);
             }
             _ => {
                 println!("got XdgSurface event {:?}", event);
