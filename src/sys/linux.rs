@@ -298,7 +298,9 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
 
-    closure();
+    _ = std::thread::Builder::new().name("app_window closure".to_string()).spawn(|| {
+        closure()
+    });
 
     event_queue.flush().expect("Failed to flush event queue");
 
