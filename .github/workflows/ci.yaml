@@ -1,4 +1,4 @@
-# xplat v1
+# xplat v2
 on: push
 env:
   RUSTFLAGS: "-D warnings"
@@ -14,11 +14,11 @@ jobs:
     steps:
       # we need wayland etc. to build
       - name: Install ubuntu deps
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux' && !(env.GITEA_ACTIONS == 'true')
         run: sudo apt install libwayland-dev pkg-config
 
       - name: Install rust nightly
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux' && !(env.GITEA_ACTIONS == 'true')
         run: rustup install nightly
 
       - uses: actions/checkout@v4
