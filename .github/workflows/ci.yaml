@@ -31,9 +31,9 @@ jobs:
         with:
           key: app_window_${{ runner.os }}-target
           path: "target"
+      - run: cargo fmt --check
       - run: cargo check
       - run: cargo clippy --no-deps
-      - run: cargo fmt --check
       - run: cargo doc
       - run: cargo test
 
