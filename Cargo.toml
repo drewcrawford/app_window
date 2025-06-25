@@ -13,8 +13,11 @@ exclude = [".*"]
 rust-version = "1.85.1"
 
 
-[lib]
+#[lib]
 
+[[example]]
+name = "gpu"
+required-features = ["wgpu"]
 
 [features]
 app_input = ["dep:app_input"]
