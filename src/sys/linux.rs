@@ -298,9 +298,9 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     MAIN_THREAD_INFO.replace(Some(main_thread_info));
     let mut io_uring = io_uring::IoUring::new(2).expect("Failed to create io_uring");
 
-    _ = std::thread::Builder::new().name("app_window closure".to_string()).spawn(|| {
-        closure()
-    });
+    _ = std::thread::Builder::new()
+        .name("app_window closure".to_string())
+        .spawn(|| closure());
 
     event_queue.flush().expect("Failed to flush event queue");
 
@@ -324,14 +324,21 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     unsafe { sqs.push(&eventfd_opcode) }.expect("Can't submit peek");
     drop(sqs);
     //flush_queue_debug
-    std::thread::Builder::new().name("flush_queue_debug".to_string()).spawn(move || {
-        for _ in 0..1_000_000 {
-            std::thread::sleep(std::time::Duration::from_millis(1));
-            on_main_thread(||{}) //wake
-        }
-    }).unwrap();
+    std::thread::Builder::new()
+        .name("flush_queue_debug".to_string())
+        .spawn(move || {
+            for _ in 0..1_000_000 {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+                on_main_thread(|| {}) //wake
+            }
+        })
+        .unwrap();
 
-    fn next_read_guard(event_queue: &mut wayland_client::EventQueue<App>, app: &mut App, read_guard: &mut Option<wayland_client::backend::ReadEventsGuard>) {
+    fn next_read_guard(
+        event_queue: &mut wayland_client::EventQueue<App>,
+        app: &mut App,
+        read_guard: &mut Option<wayland_client::backend::ReadEventsGuard>,
+    ) {
         loop {
             let _read_guard = event_queue.prepare_read();
 
@@ -354,7 +361,6 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 
     //park
     loop {
-
         next_read_guard(&mut event_queue, &mut app, &mut read_guard);
         assert!(read_guard.as_ref().unwrap().connection_fd().as_raw_fd() == io_uring_fd_raw);
         let r = io_uring.submit_and_wait(1);
@@ -390,7 +396,11 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
             }
         }
         if wayland_data_available {
-            match take_read_guard.take().expect("Read guard not available").read() {
+            match take_read_guard
+                .take()
+                .expect("Read guard not available")
+                .read()
+            {
                 Ok(_) => {}
                 Err(e) => {
                     match e {
@@ -427,16 +437,16 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
         if channel_data_available {
             drop(take_read_guard); //we don't need it anymore
             let mut buf = [0u8; 8];
-            let r = unsafe {
-                libc::read(channel_read_event, buf.as_mut_ptr() as *mut c_void, 8)
-            };
+            let r = unsafe { libc::read(channel_read_event, buf.as_mut_ptr() as *mut c_void, 8) };
             assert_eq!(r, 8, "Failed to read from eventfd");
             let closure = receiver
                 .recv_timeout(Duration::from_secs(0))
                 .expect("Failed to receive closure");
             closure();
             //let's ensure any writes went out to wayland
-            event_queue.dispatch_pending(&mut app).expect("can't dispatch events");
+            event_queue
+                .dispatch_pending(&mut app)
+                .expect("can't dispatch events");
             event_queue.flush().expect("Failed to flush event queue");
             println!("flushed");
             //submit new peek
@@ -454,8 +464,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 //     match entry.user_data() {
 //         WAYLAND_DATA_AVAILABLE => {
 
-
-    // }
+// }
 // }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
