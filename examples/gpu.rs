@@ -197,17 +197,24 @@ mod gpu {
 
     }
     pub fn main() {
+        //set up main thread
         app_window::application::main(|| {
-            test_executors::spawn_local(async {
-                app_window::wgpu::wgpu_call_context_relaxed(async {
-                    logwise::info_sync!("Will create window");
-                    let w = Window::default().await;
-                    logwise::info_sync!("did create window");
+            //get back on main thread; some platforms require this
+            app_window::application::submit_to_main_thread( || {
+                //set up a local executor
+                test_executors::spawn_local(async {
+                    //use relaxed context
+                    //1.  On wasm this allows us to direct call a non-send future
+                    //2.  On native this moves our send future to the appropriate thread.
+                    app_window::wgpu::wgpu_call_context_relaxed(async {
+                        logwise::info_sync!("Will create window");
+                        let w = Window::default().await;
+                        logwise::info_sync!("did create window");
+                        wgpu_run(w).await;
+                    }).await;
+                }, "gpu_main");
+            });
 
-                    wgpu_run(w).await;
-                }).await;
-
-            }, "gpu_main");
         });
     }
 }
