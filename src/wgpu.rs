@@ -156,6 +156,47 @@ where
         }
     }
 }
+
+/**
+A function that can be used to call a future in a relaxed context.
+
+On this platform, we require that the future is `Send` and `'static`.
+However on other platforms we may not require this.
+
+On this platform, the function can be called from any thread.
+However on other platforms, it can only be called on the main thread.
+*/
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn wgpu_call_context_relaxed<F, R>(f: F) -> R
+where
+    F: Future<Output = R> + Send + 'static,
+    R: Send + Unpin + 'static,
+{
+    wgpu_call_context(f).await
+}
+
+/**
+A function that can be used to call a future in a relaxed context.
+
+On this platform, we do not require that the future is `Send` or `'static`.
+However on other platforms we may require this.
+
+On this platform, this function can only be called on the main thread.
+However, on other platforms, it can be called from any thread.
+*/
+#[cfg(target_arch = "wasm32")]
+pub fn wgpu_call_context_relaxed<F, R>(f: F) -> impl Future<Output=R> + Send
+where
+    F: Future<Output = R>,
+    R: Unpin + 'static,
+{
+    if !sys::is_main_thread() {
+        panic!("wgpu_call_context_relaxed can only be called on the main thread on wasm32");
+    }
+    let cell = send_cells::send_cell::SendCell::new(f);
+    cell.into_future()
+}
+
 #[cfg(test)]
 mod tests {
     use crate::wgpu::wgpu_call_context;

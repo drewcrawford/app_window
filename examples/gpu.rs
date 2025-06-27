@@ -2,7 +2,7 @@
 */
 #[cfg(feature = "wgpu")]
 mod gpu {
-    use app_window::wgpu::wgpu_call_context;
+    use app_window::wgpu::{wgpu_call_context, wgpu_call_context_relaxed};
     use app_window::window::Window;
     use some_executor::hint::Hint;
     use some_executor::observer::Observer;
@@ -10,7 +10,13 @@ mod gpu {
     use some_executor::{Priority, SomeExecutor};
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
+    use send_cells::send_cell::SendCell;
     use wgpu::{Device, Queue, SurfaceTargetUnsafe};
+
+    enum Message {
+        SizeChanged,
+    }
+
 
     struct State<'window> {
         surface: wgpu::Surface<'window>,
@@ -84,21 +90,18 @@ mod gpu {
             );
             some_executor.spawn_objsafe(task).detach();
         });
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
 
         let app_surface = Arc::new(app_surface);
         let move_surface = app_surface.clone();
-        let (instance, surface) = unsafe {
-            wgpu_call_context(async move {
-                let surface = instance
-                    .create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
-                        raw_display_handle: move_surface.raw_display_handle(),
-                        raw_window_handle: move_surface.raw_window_handle(),
-                    })
-                    .expect("Can't create surface");
-                (instance, surface)
-            })
-            .await
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+
+        let surface = unsafe {
+            instance
+                .create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: move_surface.raw_display_handle(),
+                    raw_window_handle: move_surface.raw_window_handle(),
+                })
+                .expect("Can't create surface")
         };
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -165,6 +168,7 @@ mod gpu {
             .expect("Can't configure");
         surface.configure(&device, &config);
 
+
         let state = State {
             surface,
             device,
@@ -173,9 +177,7 @@ mod gpu {
         };
         render(&state);
 
-        enum Message {
-            SizeChanged,
-        }
+
 
         loop {
             let msg = receiver.receive().await;
@@ -192,34 +194,20 @@ mod gpu {
                 }
             }
         }
+
     }
     pub fn main() {
         app_window::application::main(|| {
-            let task = some_executor::task::Task::without_notifications(
-                "run".into(),
-                Configuration::new(
-                    Hint::Unknown,
-                    Priority::UserInteractive,
-                    some_executor::Instant::now(),
-                ),
-                async {
-                    let window = Window::default().await;
-                    #[cfg(feature = "wgpu")]
-                    {
-                        wgpu_run(window).await;
-                    }
+            test_executors::spawn_local(async {
+                app_window::wgpu::wgpu_call_context_relaxed(async {
+                    logwise::info_sync!("Will create window");
+                    let w = Window::default().await;
+                    logwise::info_sync!("did create window");
 
-                    #[cfg(not(feature = "wgpu"))]
-                    panic!("wgpu feature not enabled");
-                },
-            );
-            // let task_dbg: some_executor::task::Task<{async block@examples/gpu.rs:195:17: 195:22}, Infallible> = task;
+                    wgpu_run(w).await;
+                }).await;
 
-            let objsafe = task.into_objsafe();
-            // let dbg: some_executor::task::Task<Pin<Box<dyn Future<Output = Box<(dyn std::any::Any + Send + 'static)>> + Send>>, Box<dyn ObserverNotified<(dyn std::any::Any + Send + 'static)> + Send>> = objsafe;
-            some_executor::current_executor::current_executor()
-                .spawn_objsafe(objsafe)
-                .detach();
+            }, "gpu_main");
         });
     }
 }

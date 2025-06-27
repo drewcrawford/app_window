@@ -13,9 +13,6 @@ exclude = [".*"]
 rust-version = "1.85.1"
 
 
-[lib]
-
-
 [features]
 app_input = ["dep:app_input"]
 some_executor = ["dep:some_executor"]
@@ -35,6 +32,8 @@ continue = "0.1"
 wgpu = "~25"
 ampsc = "0.2.0"
 some_executor = "0.5.0"
+send_cells = "0.1.1"
+test_executors = "0.3.4" # gpu example
 
 
 # macos
@@ -93,3 +92,4 @@ send_cells = "0.1.0"
 some_local_executor = "0.1.2"
 
 [patch.crates-io]
+send_cells = { path = "../send_cells" }

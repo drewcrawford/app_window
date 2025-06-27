@@ -220,7 +220,9 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
         event_loop_context,
         async move {
             loop {
+                logwise::debuginternal_sync!("Waiting for main thread event");
                 let event = receiver.receive().await.expect("Can't receive event");
+                logwise::debuginternal_sync!("Received main thread event");
                 match event {
                     MainThreadEvent::Execute(f) => f(),
                 }
