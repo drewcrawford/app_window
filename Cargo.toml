@@ -24,15 +24,14 @@ raw-window-handle = "0.6.2"
 logwise = "0.2.3"
 wgpu = {version = "~25", optional = true}
 thiserror = "2.0.9"
-some_executor = {version = "0.5", optional = true}
+some_executor = {version = "0.5.1", optional = true}
 continue = "0.1"
-some_local_executor = "0.1.2"
 
 [dev-dependencies]
 # needed for gpu example
 wgpu = "~25"
 ampsc = "0.2.0"
-some_executor = "0.5.0"
+some_executor = "0.5.1"
 send_cells = "0.1.1"
 test_executors = "0.3.4" # gpu example
 
@@ -55,7 +54,7 @@ wasm-bindgen-futures = "0.4.49"
 ampsc = "0.2.0"
 send_cells = "0.1.1"
 #wasm32 requries some_executor to spawn tasks
-some_executor = "0.5.0"
+some_executor = "0.5.1"
 
 [target.'cfg(target_arch="wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.7"
@@ -73,7 +72,7 @@ windows = { version = "0.61.0", features=[
 ] }
 send_cells = "0.1.0"
 # we use to submit wgpu to local executor
-some_executor = { version = "0.5", optional=true }
+some_executor = { version = "0.5.1", optional=true }
 
 # linux
 [target.'cfg(target_os="linux")'.dependencies]

@@ -182,8 +182,11 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
         future: Box::pin(future),
         wake_inner,
     };
+    println!("before tasks {:?}",tasks.len());
     tasks.push(task);
+    println!("pushed task {:?}", tasks.len());
     main_executor_iter(&mut tasks);
+    println!("finished iterating tasks{:?}", tasks.len());
     FUTURES.replace(tasks);
 }
 

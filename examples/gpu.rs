@@ -6,7 +6,7 @@ mod gpu {
     use app_window::window::Window;
     use some_executor::hint::Hint;
     use some_executor::observer::Observer;
-    use some_executor::task::Configuration;
+    use some_executor::task::{Configuration, Task};
     use some_executor::{Priority, SomeExecutor};
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
@@ -176,9 +176,6 @@ mod gpu {
             render_pipeline,
         };
         render(&state);
-
-
-
         loop {
             let msg = receiver.receive().await;
             match msg {
@@ -199,22 +196,14 @@ mod gpu {
     pub fn main() {
         //set up main thread
         app_window::application::main(|| {
-            //get back on main thread; some platforms require this
-            app_window::application::submit_to_main_thread( || {
-                //set up a local executor
-                test_executors::spawn_local(async {
-                    //use relaxed context
-                    //1.  On wasm this allows us to direct call a non-send future
-                    //2.  On native this moves our send future to the appropriate thread.
-                    app_window::wgpu::wgpu_call_context_relaxed(async {
-                        logwise::info_sync!("Will create window");
-                        let w = Window::default().await;
-                        logwise::info_sync!("did create window");
-                        wgpu_run(w).await;
-                    }).await;
-                }, "gpu_main");
+            app_window::wgpu::wgpu_begin_context(async {
+                app_window::wgpu::wgpu_in_context(async {
+                    logwise::info_sync!("making window");
+                    let w = Window::default().await;
+                    logwise::info_sync!("did create window");
+                    wgpu_run(w).await;
+                });
             });
-
         });
     }
 }

@@ -15,7 +15,6 @@ use some_executor::SomeExecutor;
 use some_executor::observer::{FinishedObservation, Observer};
 use some_executor::task::{Configuration, Task};
 use std::future::Future;
-use some_local_executor::some_executor::SomeLocalExecutor;
 
 /**
 Describes the preferred strategy for interacting with wgpu on this platform.
@@ -207,13 +206,10 @@ The behavior of this function depends on the platform's wgpu strategy:
 * `WGPUStrategy::Relaxed`: If we're on the main thread, use the main thread executor.  If we're not on the main thread, use the thread executor or panic.
 
 */
-fn wgpu_begin_context<F>(f: F)
+pub fn wgpu_begin_context<F>(f: F)
 where
     F: Future<Output=()> + Send + 'static,
 {
-    if some_executor::thread_executor::thread_executor(|e| e.is_none()) {
-        logwise::warn_sync!("wgpu_begin_context called without a thread executor.  On some platforms this may panic.")
-    }
     match WGPU_STRATEGY {
         WGPUStrategy::MainThread => {
             if sys::is_main_thread() {
@@ -265,6 +261,46 @@ where
         },
     }
 }
+
+pub fn wgpu_in_context<F>(f: F) where F: Future<Output=()> + 'static {
+    match WGPU_STRATEGY {
+        WGPUStrategy::MainThread => {
+            //we need to intermix with the main thread executor.
+            if sys::is_main_thread() {
+                already_on_main_thread_submit(f);
+            } else {
+                panic!("wgpu_in_context called outside the context");
+            }
+        },
+        WGPUStrategy::NotMainThread => {
+            if sys::is_main_thread() {
+                panic!("wgpu_in_context called outside the context");
+            } else {
+                some_executor::thread_executor::thread_local_executor(|e| {
+                    let t = Task::without_notifications("wgpu_in_context".to_string(), Configuration::default(), f);
+                    let t_objsafe = t.into_objsafe_local();
+                    let observer = e.spawn_local_objsafe(t_objsafe);
+                    observer.detach();
+                })
+            }
+        },
+        WGPUStrategy::Relaxed => {
+            if sys::is_main_thread() {
+                //prefer our executor
+                already_on_main_thread_submit(f);
+            } else {
+                //fall back to the thread executor
+                some_executor::thread_executor::thread_local_executor(|e| {
+                    let t = Task::without_notifications("wgpu_in_context".to_string(), Configuration::default(), f);
+                    let t_objsafe = t.into_objsafe_local();
+                    let observer = e.spawn_local_objsafe(t_objsafe);
+                    observer.detach();
+                });
+            }
+        },
+    }
+}
+
 
 
 #[cfg(test)]
