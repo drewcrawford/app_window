@@ -9,12 +9,13 @@ See https://caniuse.com/mdn-api_offscreencanvas_getcontext_webgpu_context.  Curr
 we take the view that it can only be accessed from the main thread for widest browser compatability,
 but this may change.
 */
-use crate::executor::on_main_thread_async;
+use crate::executor::{already_on_main_thread_submit, on_main_thread_async};
 use crate::sys;
 use some_executor::SomeExecutor;
-use some_executor::observer::FinishedObservation;
-use some_executor::task::Task;
+use some_executor::observer::{FinishedObservation, Observer};
+use some_executor::task::{Configuration, Task};
 use std::future::Future;
+use some_local_executor::some_executor::SomeLocalExecutor;
 
 /**
 Describes the preferred strategy for interacting with wgpu on this platform.
@@ -196,6 +197,75 @@ where
     let cell = send_cells::send_cell::SendCell::new(f);
     cell.into_future()
 }
+
+/**
+Begins a context for wgpu operations.
+
+The behavior of this function depends on the platform's wgpu strategy:
+* `WGPUStrategy::MainThread`: Executes the future on the main thread via app_window's main thread executor.
+* `WGPUStrategy::NotMainThread`: If we're not on the main thread, use the thread executor or panic.  If we're on the main thread, spin up a new thread with a local executor.
+* `WGPUStrategy::Relaxed`: If we're on the main thread, use the main thread executor.  If we're not on the main thread, use the thread executor or panic.
+
+*/
+fn wgpu_begin_context<F>(f: F)
+where
+    F: Future<Output=()> + Send + 'static,
+{
+    if some_executor::thread_executor::thread_executor(|e| e.is_none()) {
+        logwise::warn_sync!("wgpu_begin_context called without a thread executor.  On some platforms this may panic.")
+    }
+    match WGPU_STRATEGY {
+        WGPUStrategy::MainThread => {
+            if sys::is_main_thread() {
+                // If we're on the main thread, we can just call the future directly.
+                already_on_main_thread_submit(f);
+            } else {
+                // If we're not on the main thread, we need to run it on the main thread executor.
+                sys::on_main_thread(|| {
+                    already_on_main_thread_submit(f);
+                })
+            }
+        },
+        WGPUStrategy::NotMainThread => {
+            if sys::is_main_thread() {
+                let t = std::thread::Builder::new()
+                    .name("wgpu_begin_context".to_string())
+                    .spawn(|| {
+                       some_executor::thread_executor::thread_local_executor(|e| {
+                           let t = Task::without_notifications("wgpu_begin_context".to_string(), Configuration::default(), f);
+                           let t_objsafe = t.into_objsafe_local();
+                           let observer = e.spawn_local_objsafe(t_objsafe);
+                           observer.detach();
+                       })
+                    });
+            }
+            else {
+                //dispatch onto current thread executor
+                some_executor::thread_executor::thread_local_executor(|e| {
+                    let t = Task::without_notifications("wgpu_begin_context".to_string(), Configuration::default(), f);
+                    let t_objsafe = t.into_objsafe_local();
+                    let observer = e.spawn_local_objsafe(t_objsafe);
+                    observer.detach();
+                })
+            }
+        },
+        WGPUStrategy::Relaxed => {
+            if sys::is_main_thread() {
+                // If we're on the main thread, we can just call the future directly.
+                already_on_main_thread_submit(f);
+            } else {
+                // If we're not on the main thread, we need to run it on the thread executor.
+                some_executor::thread_executor::thread_local_executor(|e| {
+                    let t = Task::without_notifications("wgpu_begin_context".to_string(), Configuration::default(), f);
+                    let t_objsafe = t.into_objsafe_local();
+                    let observer = e.spawn_local_objsafe(t_objsafe);
+                    observer.detach();
+                });
+            }
+        },
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

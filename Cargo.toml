@@ -26,6 +26,7 @@ wgpu = {version = "~25", optional = true}
 thiserror = "2.0.9"
 some_executor = {version = "0.5", optional = true}
 continue = "0.1"
+some_local_executor = "0.1.2"
 
 [dev-dependencies]
 # needed for gpu example
@@ -89,7 +90,8 @@ zune-png = "0.4.10"
 accesskit = "0.19.0"
 accesskit_unix = "0.15.0"
 send_cells = "0.1.0"
-some_local_executor = "0.1.2"
+
 
 [patch.crates-io]
 send_cells = { path = "../send_cells" }
+some_executor = { path = "../some_executor" }
