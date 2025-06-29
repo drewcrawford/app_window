@@ -9,10 +9,9 @@ See https://caniuse.com/mdn-api_offscreencanvas_getcontext_webgpu_context.  Curr
 we take the view that it can only be accessed from the main thread for widest browser compatability,
 but this may change.
 */
-use crate::executor::{already_on_main_thread_submit, on_main_thread_async};
+use crate::executor::already_on_main_thread_submit;
 use crate::sys;
-use some_executor::SomeExecutor;
-use some_executor::observer::{FinishedObservation, Observer};
+use some_executor::observer::Observer;
 use some_executor::task::{Configuration, Task};
 use std::future::Future;
 
@@ -106,7 +105,7 @@ where
         },
         WGPUStrategy::NotMainThread => {
             if sys::is_main_thread() {
-                let t = std::thread::Builder::new()
+                std::thread::Builder::new()
                     .name("wgpu_begin_context".to_string())
                     .spawn(|| {
                        some_executor::thread_executor::thread_local_executor(|e| {
@@ -115,7 +114,7 @@ where
                            let observer = e.spawn_local_objsafe(t_objsafe);
                            observer.detach();
                        })
-                    });
+                    }).expect("Failed to spawn wgpu_begin_context thread");
             }
             else {
                 //dispatch onto current thread executor

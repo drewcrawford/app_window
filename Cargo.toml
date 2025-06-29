@@ -91,6 +91,10 @@ accesskit_unix = "0.15.0"
 send_cells = "0.1.0"
 
 
+[[example]]
+name = "gpu"
+required-features = ["wgpu"]
+
 [[test]]
 name = "executor_bug_test"
 path = "tests/executor_bug_test.rs"

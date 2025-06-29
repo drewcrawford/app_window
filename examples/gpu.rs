@@ -1,16 +1,14 @@
 /*! An example for wgpu.
 */
-#[cfg(feature = "wgpu")]
 mod gpu {
-    use app_window::wgpu::{wgpu_call_context, wgpu_call_context_relaxed};
     use app_window::window::Window;
     use some_executor::hint::Hint;
     use some_executor::observer::Observer;
-    use some_executor::task::{Configuration, Task};
+    use some_executor::task::Configuration;
     use some_executor::{Priority, SomeExecutor};
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
-    use send_cells::send_cell::SendCell;
+    
     use wgpu::{Device, Queue, SurfaceTargetUnsafe};
 
     enum Message {
@@ -60,7 +58,6 @@ mod gpu {
         frame.present();
     }
 
-    #[cfg(feature = "wgpu")]
     async fn wgpu_run(mut window: Window) {
         logwise::warn_sync!("main_run");
         let mut app_surface = window.surface().await;
@@ -214,8 +211,5 @@ pub fn main() {
         console_error_panic_hook::set_once();
     }
 
-    #[cfg(feature = "wgpu")]
     gpu::main();
-    #[cfg(not(feature = "wgpu"))]
-    panic!("wgpu feature not enabled");
 }
