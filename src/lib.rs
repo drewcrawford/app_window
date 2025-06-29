@@ -82,7 +82,6 @@ assert_eq!(result, 42);
 ```
 
 # Cargo features
-* `some_executor` - Provides interop with the `some-executor` crate.
 * `wgpu` - Helper functions for creating a wgpu surface.
 * `app_input` - Created windows are configured to receive input via [`app_input`](https://sealedabstract.com/code/app_input) crate.
 
@@ -200,7 +199,6 @@ pub mod executor;
 /// the `SomeExecutor` and `SomeLocalExecutor` traits from the `some_executor` crate.
 /// This allows the main thread executor to be used with any library that supports
 /// the `some_executor` abstraction.
-#[cfg(feature = "some_executor")]
 pub mod some_executor;
 
 /// Platform-specific wgpu integration.
