@@ -93,6 +93,7 @@ pub fn wgpu_begin_context<F>(f: F)
 where
     F: Future<Output=()> + Send + 'static,
 {
+    
     match WGPU_STRATEGY {
         WGPUStrategy::MainThread => {
             if sys::is_main_thread() {
@@ -110,7 +111,7 @@ where
                 std::thread::Builder::new()
                     .name("wgpu_begin_context".to_string())
                     .spawn(|| {
-                       some_executor::thread_executor::thread_local_executor(|e| {
+                        some_executor::thread_executor::thread_local_executor(|e| {
                            let t = Task::without_notifications("wgpu_begin_context".to_string(), Configuration::default(), f);
                            let t_objsafe = t.into_objsafe_local();
                            let observer = e.spawn_local_objsafe(t_objsafe);
@@ -184,110 +185,10 @@ pub fn wgpu_in_context<F>(f: F) where F: Future<Output=()> + 'static {
     }
 }
 
-/**
-An executor that dispatches tasks within wgpu context using `wgpu_begin_context`.
-
-This executor ensures that all spawned tasks execute with proper wgpu threading
-based on the platform's `WGPUStrategy`. Tasks are automatically wrapped in
-`wgpu_begin_context` calls for platform-appropriate execution.
-*/
-#[derive(Debug, Clone)]
-pub struct WgpuExecutor;
-
-impl SomeExecutor for WgpuExecutor {
-    type ExecutorNotifier = Infallible;
-
-    fn spawn<F, Notifier>(
-        &mut self,
-        task: Task<F, Notifier>,
-    ) -> impl Observer<Value = F::Output> + Send
-    where
-        F: Future + Send + 'static,
-        Notifier: ObserverNotified<F::Output> + Send,
-        Self: Sized,
-        F::Output: Send + std::marker::Unpin,
-    {
-        // Get the current executor to delegate to
-        let mut current_executor = some_executor::current_executor::current_executor();
-        
-        // Create a wrapped task that executes within wgpu context
-        let (spawned_task, observer) = task.spawn(&mut current_executor);
-        
-        // Submit the spawned task within wgpu context
-        wgpu_begin_context(async move {
-            spawned_task.into_future().await;
-        });
-        
-        observer
-    }
-
-    async fn spawn_async<F, Notifier>(
-        &mut self,
-        task: Task<F, Notifier>,
-    ) -> impl Observer<Value = F::Output>
-    where
-        F: Future + Send + 'static,
-        Notifier: ObserverNotified<F::Output> + Send,
-        Self: Sized,
-        F::Output: Send + std::marker::Unpin,
-    {
-        self.spawn(task)
-    }
-
-    fn spawn_objsafe(&mut self, task: ObjSafeTask) -> BoxedSendObserver {
-        // Get the current executor to delegate to
-        let mut current_executor = some_executor::current_executor::current_executor();
-        
-        // Spawn the task on the current executor and get the observer
-        let (spawned_task, observer) = task.spawn_objsafe(&mut current_executor);
-        
-        // Submit the spawned task within wgpu context
-        wgpu_begin_context(async move {
-            spawned_task.into_future().await;
-        });
-        
-        Box::new(observer)
-    }
-
-    fn spawn_objsafe_async<'s>(&'s mut self, task: ObjSafeTask) -> BoxedSendObserverFuture<'s> {
-        let observer = self.spawn_objsafe(task);
-        Box::new(async move { observer })
-    }
-
-    fn clone_box(&self) -> Box<DynExecutor> {
-        Box::new(self.clone())
-    }
-
-    fn executor_notifier(&mut self) -> Option<Self::ExecutorNotifier> {
-        None
-    }
-}
-
-impl SomeExecutorExt for WgpuExecutor {}
 
 
 
 #[cfg(test)]
 mod tests {
-    use crate::wgpu::wgpu_call_context;
-
-    #[cfg(target_os = "windows")] //list 'relaxed' platforms here
-    #[test]
-    fn test_relaxed() {
-        fn assert_send<T: Send>() {}
-        fn assert_sync<T: Sync>() {}
-        assert_send::<wgpu::Instance>();
-        assert_sync::<wgpu::Instance>();
-        assert_send::<wgpu::Surface>();
-        assert_sync::<wgpu::Surface>();
-        assert_send::<wgpu::Adapter>();
-        assert_sync::<wgpu::Adapter>();
-    }
-
-    #[test]
-    fn test_wgpu_call_context_is_send() {
-        fn assert_send<T: Send>(t: T) {}
-        let f = wgpu_call_context(async {});
-        assert_send(f);
-    }
+    
 }
