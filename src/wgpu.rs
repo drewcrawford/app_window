@@ -11,8 +11,10 @@ but this may change.
 */
 use crate::executor::already_on_main_thread_submit;
 use crate::sys;
-use some_executor::observer::Observer;
+use some_executor::observer::{Observer, ObserverNotified};
 use some_executor::task::{Configuration, Task};
+use some_executor::{BoxedSendObserver, BoxedSendObserverFuture, DynExecutor, ObjSafeTask, SomeExecutor, SomeExecutorExt};
+use std::convert::Infallible;
 use std::future::Future;
 
 /**
@@ -181,6 +183,87 @@ pub fn wgpu_in_context<F>(f: F) where F: Future<Output=()> + 'static {
         },
     }
 }
+
+/**
+An executor that dispatches tasks within wgpu context using `wgpu_begin_context`.
+
+This executor ensures that all spawned tasks execute with proper wgpu threading
+based on the platform's `WGPUStrategy`. Tasks are automatically wrapped in
+`wgpu_begin_context` calls for platform-appropriate execution.
+*/
+#[derive(Debug, Clone)]
+pub struct WgpuExecutor;
+
+impl SomeExecutor for WgpuExecutor {
+    type ExecutorNotifier = Infallible;
+
+    fn spawn<F, Notifier>(
+        &mut self,
+        task: Task<F, Notifier>,
+    ) -> impl Observer<Value = F::Output> + Send
+    where
+        F: Future + Send + 'static,
+        Notifier: ObserverNotified<F::Output> + Send,
+        Self: Sized,
+        F::Output: Send + std::marker::Unpin,
+    {
+        // Get the current executor to delegate to
+        let mut current_executor = some_executor::current_executor::current_executor();
+        
+        // Create a wrapped task that executes within wgpu context
+        let (spawned_task, observer) = task.spawn(&mut current_executor);
+        
+        // Submit the spawned task within wgpu context
+        wgpu_begin_context(async move {
+            spawned_task.into_future().await;
+        });
+        
+        observer
+    }
+
+    async fn spawn_async<F, Notifier>(
+        &mut self,
+        task: Task<F, Notifier>,
+    ) -> impl Observer<Value = F::Output>
+    where
+        F: Future + Send + 'static,
+        Notifier: ObserverNotified<F::Output> + Send,
+        Self: Sized,
+        F::Output: Send + std::marker::Unpin,
+    {
+        self.spawn(task)
+    }
+
+    fn spawn_objsafe(&mut self, task: ObjSafeTask) -> BoxedSendObserver {
+        // Get the current executor to delegate to
+        let mut current_executor = some_executor::current_executor::current_executor();
+        
+        // Spawn the task on the current executor and get the observer
+        let (spawned_task, observer) = task.spawn_objsafe(&mut current_executor);
+        
+        // Submit the spawned task within wgpu context
+        wgpu_begin_context(async move {
+            spawned_task.into_future().await;
+        });
+        
+        Box::new(observer)
+    }
+
+    fn spawn_objsafe_async<'s>(&'s mut self, task: ObjSafeTask) -> BoxedSendObserverFuture<'s> {
+        let observer = self.spawn_objsafe(task);
+        Box::new(async move { observer })
+    }
+
+    fn clone_box(&self) -> Box<DynExecutor> {
+        Box::new(self.clone())
+    }
+
+    fn executor_notifier(&mut self) -> Option<Self::ExecutorNotifier> {
+        None
+    }
+}
+
+impl SomeExecutorExt for WgpuExecutor {}
 
 
 

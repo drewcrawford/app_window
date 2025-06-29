@@ -211,7 +211,8 @@ pub mod some_executor;
 /// ```no_run
 /// # #[cfg(feature = "wgpu")]
 /// # {
-/// use app_window::wgpu::{wgpu_spawn, WGPU_STRATEGY, WGPUStrategy};
+/// use app_window::wgpu::{wgpu_begin_context, WgpuExecutor, WGPU_STRATEGY, WGPUStrategy};
+/// use some_executor::SomeExecutorExt;
 ///
 /// // Check the platform's wgpu strategy
 /// match WGPU_STRATEGY {
@@ -221,10 +222,13 @@ pub mod some_executor;
 ///     _ => println!("Unknown strategy"),
 /// }
 ///
-/// // Spawn a future on the appropriate thread for wgpu
-/// wgpu_spawn(async {
+/// // Use wgpu context directly
+/// wgpu_begin_context(async {
 ///     // wgpu operations here
 /// });
+///
+/// // Or use WgpuExecutor for more complex task management
+/// let mut executor = WgpuExecutor;
 /// # }
 /// ```
 #[cfg(feature = "wgpu")]
