@@ -59,35 +59,36 @@ pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 
 
 /**
-A function that can be used to call a future in a relaxed context.
-
-On this platform, we do not require that the future is `Send` or `'static`.
-However on other platforms we may require this.
-
-On this platform, this function can only be called on the main thread.
-However, on other platforms, it can be called from any thread.
-*/
-#[cfg(target_arch = "wasm32")]
-pub fn wgpu_call_context_relaxed<F, R>(f: F) -> impl Future<Output=R> + Send
-where
-    F: Future<Output = R>,
-    R: Unpin + 'static,
-{
-    if !sys::is_main_thread() {
-        panic!("wgpu_call_context_relaxed can only be called on the main thread on wasm32");
-    }
-    let cell = send_cells::send_cell::SendCell::new(f);
-    cell.into_future()
-}
-
-/**
 Begins a context for wgpu operations.
 
-The behavior of this function depends on the platform's wgpu strategy:
-* `WGPUStrategy::MainThread`: Executes the future on the main thread via app_window's main thread executor.
-* `WGPUStrategy::NotMainThread`: If we're not on the main thread, use the thread executor or panic.  If we're on the main thread, spin up a new thread with a local executor.
-* `WGPUStrategy::Relaxed`: If we're on the main thread, use the main thread executor.  If we're not on the main thread, use the thread executor or panic.
+# Context
 
+This function begins a wgpu execution context, allowing you to run futures that interact with wgpu.
+
+The type of context depends on the platform's wgpu strategy, which is defined by the `WGPU_STRATEGY` constant.
+
+* `WGPUStrategy::MainThread`: Executes the future on the main thread via app_window's main thread executor.
+* `WGPUStrategy::NotMainThread`: If we're not on the main thread, use [some_executor::thread_executor].  If we're on the main thread, 
+   spin up a new thread with a local executor.
+* `WGPUStrategy::Relaxed`: If we're on the main thread, use the main thread executor.  
+   If we're not on the main thread, use the thread executor.
+
+# A brief digression on Sendability
+
+In Rust the `Send` trait indicates that a type can be transferred between threads. For a Future, 
+this means the future can arbitrarily be sent between polls (so you can wake up on a different 
+thread every time).
+
+Meanwhile, GPU backends often require you to call their APIs "in context".  This is typically,
+though not always, from a certain thread.  If so, GPU types tend to be modeled as !Send, complicating
+their use in async code.  At the same time, you need Send to get into the "right context" if that
+context is another thread.
+
+Usually what we want to model is "you can Send until the future starts running, and not after that",
+which is a bit complex to express in Rust.  How we do it is:
+
+* [`wgpu_begin_context`]: Sets up the context (possibly a thread) and runs a Send future in it.
+* [`wgpu_in_context`]`: Uses a previously established context to run a future that is not Send.
 */
 pub fn wgpu_begin_context<F>(f: F)
 where
@@ -146,6 +147,26 @@ where
     }
 }
 
+/**
+Executes a non-Send future in the current wgpu context.
+
+# A brief digression on Sendability
+
+In Rust the `Send` trait indicates that a type can be transferred between threads. For a Future, 
+this means the future can arbitrarily be sent between polls (so you can wake up on a different 
+thread every time).
+
+Meanwhile, GPU backends often require you to call their APIs "in context".  This is typically,
+though not always, from a certain thread.  If so, GPU types tend to be modeled as !Send, complicating
+their use in async code.  At the same time, you need Send to get into the "right context" if that
+context is another thread.
+
+Usually what we want to model is "you can Send until the future starts running, and not after that",
+which is a bit complex to express in Rust.  How we do it is:
+
+* [`wgpu_begin_context`]: Sets up the context (possibly a thread) and runs a Send future in it.
+* [`wgpu_in_context`]`: Uses a previously established context to run a future that is not Send.
+*/
 pub fn wgpu_in_context<F>(f: F) where F: Future<Output=()> + 'static {
     match WGPU_STRATEGY {
         WGPUStrategy::MainThread => {
