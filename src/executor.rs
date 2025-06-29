@@ -97,7 +97,7 @@ struct Task {
 thread_local! {
     // Thread-local storage for the task queue.
     // This stores all pending tasks that need to be executed on the main thread.
-    static FUTURES: Cell<Vec<Task> >= const { Cell::new(Vec::new()) };
+    static FUTURES: Cell<Vec<Task>> = const { Cell::new(Vec::new()) };
 }
 
 /// Runs the specified future on the main thread and returns its result.
@@ -182,12 +182,9 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
         future: Box::pin(future),
         wake_inner,
     };
-    println!("before tasks {:?}",tasks.len());
     tasks.push(task);
-    println!("pushed task {:?}", tasks.len());
-    main_executor_iter(&mut tasks);
-    println!("finished iterating tasks{:?}", tasks.len());
     FUTURES.replace(tasks);
+    pump_tasks();
 }
 
 /// Polls all tasks that need attention.
@@ -220,6 +217,10 @@ fn pump_tasks() {
     crate::application::submit_to_main_thread(|| {
         let mut tasks = FUTURES.take();
         main_executor_iter(&mut tasks);
+        //ensure tasks created during main_executor_iter are not lost
+        let new_tasks = FUTURES.take();
+        tasks.extend(new_tasks);
         FUTURES.replace(tasks);
     });
 }
+

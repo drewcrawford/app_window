@@ -91,6 +91,11 @@ accesskit_unix = "0.15.0"
 send_cells = "0.1.0"
 
 
+[[test]]
+name = "executor_bug_test"
+path = "tests/executor_bug_test.rs"
+harness = false
+
 [patch.crates-io]
 send_cells = { path = "../send_cells" }
 some_executor = { path = "../some_executor" }
