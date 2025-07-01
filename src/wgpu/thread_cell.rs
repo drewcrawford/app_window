@@ -5,8 +5,9 @@ use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
+use crate::application::on_main_thread;
 use crate::executor::on_main_thread_async;
 use crate::sys;
 use crate::wgpu::{WGPU_STRATEGY, WGPUStrategy};
@@ -165,25 +166,42 @@ impl<T> WgpuCell<T> {
     This function works like `with_mut` but for construction - it ensures the value
     is created on the appropriate thread for the current platform's wgpu strategy.
     */
-    pub async fn new_on_thread<F>(f: F) -> WgpuCell<T>
+    pub async fn new_on_thread<C,F>(c: C) -> WgpuCell<T>
     where
-        F: Future<Output = T> + Send + 'static,
-        T: Send + 'static,
+        C: FnOnce() -> F + Send + 'static,
+        F: Future<Output = T>,
+        T: 'static,
     {
-        let value = match WGPU_STRATEGY {
+        match WGPU_STRATEGY {
             WGPUStrategy::MainThread => {
                 if sys::is_main_thread() {
-                    f.await
+                    WgpuCell::new(c().await)
                 } else {
-                    on_main_thread_async(async move {
-                       f.await
-                    }).await
+                    let v = Arc::new(Mutex::new(None));
+                    let move_v = v.clone();
+                    on_main_thread(|| {
+                        let t = some_executor::task::Task::without_notifications(
+                            "WgpuCell::new_on_thread".to_string(),
+                            some_executor::task::Configuration::default(),
+                            async move {
+                                let f = c();
+
+                                let cell = WgpuCell::new(f.await);
+                                move_v.lock().unwrap().replace(cell);
+                                
+                            },
+                        );
+                        t.spawn_thread_local();
+                    }).await;
+                    v.lock().unwrap()
+                        .take()
+                        .expect("WgpuCell value missing")
                 }
             }
             WGPUStrategy::NotMainThread => {
                 if !sys::is_main_thread() {
                     // If we're not on the main thread, we can just call the closure directly
-                    f.await
+                    WgpuCell::new(c().await)
                 } else {
                     // If we are on the main thread, we need to run it on a separate thread
                     let (s,r) = r#continue::continuation();
@@ -194,8 +212,8 @@ impl<T> WgpuCell<T> {
                                 "WgpuCell::new_on_thread".to_string(),
                                 some_executor::task::Configuration::default(),
                                 async move {
-                                    let r = f.await;
-                                    s.send(r);
+                                    let r = c().await;
+                                    s.send(WgpuCell::new(r));
                                 },
                             );
                             t.spawn_thread_local();
@@ -205,11 +223,10 @@ impl<T> WgpuCell<T> {
             }
             WGPUStrategy::Relaxed => {
                 // Relaxed strategy allows access from any thread
-                f.await
+                WgpuCell::new(c().await)
             }
-        };
+        }
         
-        WgpuCell::new(value)
     }
     
 
@@ -226,6 +243,9 @@ impl<T> WgpuCell<T> {
         }
     }
 }
+
+unsafe impl<T> Send for WgpuCell<T> {}
+
 
 impl<T: Future> WgpuCell<T> {
     pub fn into_future(mut self) -> WgpuFuture<T> {

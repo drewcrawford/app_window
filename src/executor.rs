@@ -229,9 +229,6 @@ fn main_executor_iter() {
         let mut swap_pollable = POLLABLE.take();
         let poll = swap_pollable.pop();
         POLLABLE.replace(swap_pollable);
-        
-        println!("[main_executor_iter] Polling task: {:?}", poll);
-        
         match poll {
             None => {
                 // No more pollable tasks, exit the loop
