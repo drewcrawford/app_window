@@ -157,6 +157,60 @@ impl<T> WgpuCell<T> {
             }
         }
     }
+
+    /**
+    Creates a new WgpuCell by running a constructor closure on the correct thread
+    based on the WGPU_STRATEGY.
+    
+    This function works like `with_mut` but for construction - it ensures the value
+    is created on the appropriate thread for the current platform's wgpu strategy.
+    */
+    pub async fn new_on_thread<F>(f: F) -> WgpuCell<T>
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let value = match WGPU_STRATEGY {
+            WGPUStrategy::MainThread => {
+                if sys::is_main_thread() {
+                    f.await
+                } else {
+                    on_main_thread_async(async move {
+                       f.await
+                    }).await
+                }
+            }
+            WGPUStrategy::NotMainThread => {
+                if !sys::is_main_thread() {
+                    // If we're not on the main thread, we can just call the closure directly
+                    f.await
+                } else {
+                    // If we are on the main thread, we need to run it on a separate thread
+                    let (s,r) = r#continue::continuation();
+                    _ = std::thread::Builder::new()
+                        .name("WgpuCell new_on_thread".to_string())
+                        .spawn(|| {
+                            let t = some_executor::task::Task::without_notifications(
+                                "WgpuCell::new_on_thread".to_string(),
+                                some_executor::task::Configuration::default(),
+                                async move {
+                                    let r = f.await;
+                                    s.send(r);
+                                },
+                            );
+                            t.spawn_thread_local();
+                        }).unwrap();
+                        r.await
+                }
+            }
+            WGPUStrategy::Relaxed => {
+                // Relaxed strategy allows access from any thread
+                f.await
+            }
+        };
+        
+        WgpuCell::new(value)
+    }
     
 
     #[inline]
@@ -373,4 +427,5 @@ mod tests {
         let _cell_from: WgpuCell<i32> = 42.into();
         let _cell_default: WgpuCell<i32> = Default::default();
     }
+
 }

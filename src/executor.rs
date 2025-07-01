@@ -100,13 +100,12 @@ struct Task {
 ///
 /// This function handles the wake notification for a specific task ID.
 fn wake_task(task_id: usize) {
-    // Add the task to the pollable queue
-    let mut pollable = POLLABLE.take();
-    pollable.push(task_id);
-    POLLABLE.replace(pollable);
-
     // Schedule main executor iteration on the main thread
-    crate::application::submit_to_main_thread(|| {
+    crate::application::submit_to_main_thread(move || {
+        // Add the task to the pollable queue
+        let mut pollable = POLLABLE.take();
+        pollable.push(task_id);
+        POLLABLE.replace(pollable);
         main_executor_iter();
     });
 }
@@ -226,30 +225,31 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
 /// that may be added during polling without losing them.
 fn main_executor_iter() {
     loop {
-        // Get the current list of pollable task IDs
-        let mut pollable = POLLABLE.take();
-
-        // If no tasks are pollable, we're done
-        if pollable.is_empty() {
-            POLLABLE.replace(pollable);
-            break;
-        }
-
-        // Process each pollable task
-        while let Some(task_id) = pollable.pop() {
-            // Get the task from RUNNING
-            let mut running = RUNNING.take().unwrap_or_default();
-            if let Some(mut task) = running.remove(&task_id) {
+        // Pop off a pollable task 
+        let mut swap_pollable = POLLABLE.take();
+        let poll = swap_pollable.pop();
+        POLLABLE.replace(swap_pollable);
+        
+        println!("[main_executor_iter] Polling task: {:?}", poll);
+        
+        match poll {
+            None => {
+                // No more pollable tasks, exit the loop
+                break;
+            }
+            Some(task) => {
+                // Get the task from RUNNING
+                let mut running = RUNNING.take().unwrap_or_default();
+                let mut task = running.remove(&task).unwrap();
                 RUNNING.replace(Some(running));
-
-                // Create waker and poll the task
+                
+                //with that out of the way, we can poll the task
                 let waker = Waker {
                     inner: task.wake_inner.clone(),
                 };
                 let into_waker = waker.into_waker();
                 let mut context = Context::from_waker(&into_waker);
                 let poll_result = task.future.as_mut().poll(&mut context);
-
                 match poll_result {
                     std::task::Poll::Ready(()) => {
                         // Task completed, don't put it back
@@ -257,19 +257,11 @@ fn main_executor_iter() {
                     std::task::Poll::Pending => {
                         // Task is still running, put it back in RUNNING
                         let mut running = RUNNING.take().unwrap_or_default();
-                        running.insert(task_id, task);
+                        running.insert(task.id, task);
                         RUNNING.replace(Some(running));
                     }
                 }
-            } else {
-                // Task not found in RUNNING, put running back
-                RUNNING.replace(Some(running));
             }
         }
-
-        // Put back the (now empty) pollable list
-        POLLABLE.replace(pollable);
-
-        // Continue loop to check if new tasks became pollable during this iteration
     }
 }
