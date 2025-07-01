@@ -8,13 +8,12 @@ mod gpu {
     use some_executor::{Priority, SomeExecutor};
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
-    
+
     use wgpu::{Device, Queue, SurfaceTargetUnsafe};
 
     enum Message {
         SizeChanged,
     }
-
 
     struct State<'window> {
         surface: wgpu::Surface<'window>,
@@ -165,7 +164,6 @@ mod gpu {
             .expect("Can't configure");
         surface.configure(&device, &config);
 
-
         let state = State {
             surface,
             device,
@@ -188,7 +186,6 @@ mod gpu {
                 }
             }
         }
-
     }
     pub fn main() {
         //set up main thread

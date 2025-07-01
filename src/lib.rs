@@ -211,7 +211,7 @@ pub mod some_executor;
 /// ```no_run
 /// # #[cfg(feature = "wgpu")]
 /// # {
-/// use app_window::wgpu::{wgpu_begin_context, WgpuExecutor, WGPU_STRATEGY, WGPUStrategy};
+/// use app_window::wgpu::{wgpu_begin_context, WGPU_STRATEGY, WGPUStrategy};
 /// use some_executor::SomeExecutorExt;
 ///
 /// // Check the platform's wgpu strategy
@@ -226,9 +226,6 @@ pub mod some_executor;
 /// wgpu_begin_context(async {
 ///     // wgpu operations here
 /// });
-///
-/// // Or use WgpuExecutor for more complex task management
-/// let mut executor = WgpuExecutor;
 /// # }
 /// ```
 #[cfg(feature = "wgpu")]

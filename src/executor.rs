@@ -26,24 +26,26 @@ implementation.
 */
 use crate::sys;
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, RawWaker, RawWakerVTable};
+
+/// Static counter for generating unique task IDs.
+static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(1);
 
 /// Internal state shared between a task and its waker.
 ///
-/// This struct tracks whether a task needs to be polled again.
+/// This struct tracks the task ID for waker operations.
 struct Inner {
-    needs_poll: AtomicBool,
+    task_id: usize,
 }
 
 impl Inner {
-    fn new() -> Self {
-        Inner {
-            needs_poll: AtomicBool::new(true),
-        }
+    fn new(task_id: usize) -> Self {
+        Inner { task_id }
     }
 }
 
@@ -67,13 +69,11 @@ const WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(
     },
     |data| {
         let w = unsafe { Arc::from_raw(data as *const Waker) };
-        w.inner.needs_poll.store(true, Ordering::Relaxed);
-        pump_tasks();
+        wake_task(w.inner.task_id);
     },
     |data| {
         let w = unsafe { Arc::from_raw(data as *const Waker) };
-        w.inner.needs_poll.store(true, Ordering::Relaxed);
-        pump_tasks();
+        wake_task(w.inner.task_id);
         std::mem::forget(w);
     },
     |data| {
@@ -89,15 +89,33 @@ impl Waker {
 }
 /// A task in the executor's queue.
 ///
-/// Each task contains a pinned future and shared state for wake notifications.
+/// Each task contains a pinned future, unique ID, and shared state for wake notifications.
 struct Task {
+    id: usize,
     future: Pin<Box<dyn Future<Output = ()> + 'static>>,
     wake_inner: Arc<Inner>,
 }
+
+/// Wakes a task by moving it from RUNNING to POLLABLE and scheduling executor iteration.
+///
+/// This function handles the wake notification for a specific task ID.
+fn wake_task(task_id: usize) {
+    // Add the task to the pollable queue
+    let mut pollable = POLLABLE.take();
+    pollable.push(task_id);
+    POLLABLE.replace(pollable);
+
+    // Schedule main executor iteration on the main thread
+    crate::application::submit_to_main_thread(|| {
+        main_executor_iter();
+    });
+}
+
 thread_local! {
-    // Thread-local storage for the task queue.
-    // This stores all pending tasks that need to be executed on the main thread.
-    static FUTURES: Cell<Vec<Task>> = const { Cell::new(Vec::new()) };
+    // Thread-local storage for tasks that are running but not currently pollable.
+    static RUNNING: Cell<Option<HashMap<usize, Task>>> = const { Cell::new(None) };
+    // Thread-local storage for task IDs that are ready to be polled.
+    static POLLABLE: Cell<Vec<usize>> = const { Cell::new(Vec::new()) };
 }
 
 /// Runs the specified future on the main thread and returns its result.
@@ -176,51 +194,82 @@ pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Sen
 /// executed asynchronously.
 pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F) {
     assert!(sys::is_main_thread());
-    let mut tasks = FUTURES.take();
-    let wake_inner = Arc::new(Inner::new());
+
+    // Generate unique task ID
+    let task_id = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed);
+
+    // Create task with unique ID
+    let wake_inner = Arc::new(Inner::new(task_id));
     let task = Task {
+        id: task_id,
         future: Box::pin(future),
         wake_inner,
     };
-    tasks.push(task);
-    FUTURES.replace(tasks);
-    pump_tasks();
+
+    // Add task to POLLABLE queue
+    let mut pollable = POLLABLE.take();
+    pollable.push(task_id);
+    POLLABLE.replace(pollable);
+
+    // Add task to RUNNING collection
+    let mut running = RUNNING.take().unwrap_or_default();
+    running.insert(task_id, task);
+    RUNNING.replace(Some(running));
+
+    // Execute the tasks
+    main_executor_iter();
 }
 
 /// Polls all tasks that need attention.
 ///
-/// This function iterates through the task queue and polls any tasks whose
-/// wakers have been triggered. Tasks that complete are removed from the queue.
-fn main_executor_iter(tasks: &mut Vec<Task>) {
-    tasks.retain_mut(|task| {
-        let old = task.wake_inner.needs_poll.swap(false, Ordering::Relaxed);
-        if old {
-            let waker = Waker {
-                inner: task.wake_inner.clone(),
-            };
-            let into_waker = waker.into_waker();
-            let mut context = Context::from_waker(&into_waker);
-            let poll = task.future.as_mut().poll(&mut context);
-            if let std::task::Poll::Ready(()) = poll {
-                return false;
+/// This function loops while there are pollable tasks, handling new tasks
+/// that may be added during polling without losing them.
+fn main_executor_iter() {
+    loop {
+        // Get the current list of pollable task IDs
+        let mut pollable = POLLABLE.take();
+
+        // If no tasks are pollable, we're done
+        if pollable.is_empty() {
+            POLLABLE.replace(pollable);
+            break;
+        }
+
+        // Process each pollable task
+        while let Some(task_id) = pollable.pop() {
+            // Get the task from RUNNING
+            let mut running = RUNNING.take().unwrap_or_default();
+            if let Some(mut task) = running.remove(&task_id) {
+                RUNNING.replace(Some(running));
+
+                // Create waker and poll the task
+                let waker = Waker {
+                    inner: task.wake_inner.clone(),
+                };
+                let into_waker = waker.into_waker();
+                let mut context = Context::from_waker(&into_waker);
+                let poll_result = task.future.as_mut().poll(&mut context);
+
+                match poll_result {
+                    std::task::Poll::Ready(()) => {
+                        // Task completed, don't put it back
+                    }
+                    std::task::Poll::Pending => {
+                        // Task is still running, put it back in RUNNING
+                        let mut running = RUNNING.take().unwrap_or_default();
+                        running.insert(task_id, task);
+                        RUNNING.replace(Some(running));
+                    }
+                }
+            } else {
+                // Task not found in RUNNING, put running back
+                RUNNING.replace(Some(running));
             }
         }
-        true
-    });
-}
 
-/// Schedules task processing on the main thread.
-///
-/// This is called by wakers to ensure that tasks get polled when they're ready.
-/// It submits a closure to the main thread that will process the task queue.
-fn pump_tasks() {
-    crate::application::submit_to_main_thread(|| {
-        let mut tasks = FUTURES.take();
-        main_executor_iter(&mut tasks);
-        //ensure tasks created during main_executor_iter are not lost
-        let new_tasks = FUTURES.take();
-        tasks.extend(new_tasks);
-        FUTURES.replace(tasks);
-    });
-}
+        // Put back the (now empty) pollable list
+        POLLABLE.replace(pollable);
 
+        // Continue loop to check if new tasks became pollable during this iteration
+    }
+}
