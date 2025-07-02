@@ -23,8 +23,10 @@ let package = Package(
                             .product(
                                 name: "SwiftRs",
                                 package: "swift-rs"
-                            )
+                            ),
+                            .target(name: "SwiftAppWindowC")
                         ]),
+        .target(name: "SwiftAppWindowC"),
         .testTarget(
             name: "SwiftAppWindowTests",
             dependencies: ["SwiftAppWindow"]

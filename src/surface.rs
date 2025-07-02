@@ -79,6 +79,11 @@ impl Surface {
     pub async fn size_scale(&self) -> (Size, f64) {
         self.sys.size_scale().await
     }
+    
+    pub fn size_main(&self) -> (Size, f64) {
+        assert!(sys::is_main_thread(), "`size_main` must be called from the main thread");
+        self.sys.size_main()
+    }
 
     /// Returns the raw window handle for this surface.
     ///

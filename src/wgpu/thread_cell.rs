@@ -188,7 +188,7 @@ impl<T> WgpuCell<T> {
 
                                 let cell = WgpuCell::new(f.await);
                                 move_v.lock().unwrap().replace(cell);
-                                
+
                             },
                         );
                         t.spawn_thread_local();

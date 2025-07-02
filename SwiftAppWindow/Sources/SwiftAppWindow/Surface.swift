@@ -7,6 +7,7 @@
 //  Created by Drew Crawford on 12/22/24.
 //
 import AppKit
+import SwiftAppWindowC
 
 final class SurfaceView: NSView {
     var sizeNotify: ((CGFloat, CGFloat) -> ())?
@@ -31,6 +32,14 @@ public final class Surface: Sendable {
             return (CGSize(width: view.frame.width, height: view.frame.height), scale)
         }
     }
+
+    func sizeMain() -> SwiftAppWindowSurfaceSize {
+        MainActor.assumeIsolated {
+            let scale = view.window?.backingScaleFactor ?? 1.0
+            return SwiftAppWindowSurfaceSize(width: view.frame.width, height: view.frame.height, scale: scale)
+        }
+
+    }
     var rawHandle: UnsafeMutableRawPointer {
         Unmanaged.passUnretained(view).toOpaque()
     }
@@ -50,6 +59,11 @@ public final class Surface: Sendable {
         let (size,scale) = await surface.size()
         ret(context, size.width, size.height, scale)
     }
+}
+
+@_cdecl("SwiftAppWindow_SurfaceSizeMain") public func SurfaceSizeMain(surface: UnsafeMutableRawPointer) -> SwiftAppWindowSurfaceSize {
+    let surface = Unmanaged<Surface>.fromOpaque(surface).takeUnretainedValue()
+    return surface.sizeMain()
 }
 
 @_cdecl("SwiftAppWindow_SurfaceRawHandle") public func RawHandle(surface: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer {
