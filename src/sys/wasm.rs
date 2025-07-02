@@ -303,6 +303,23 @@ impl Surface {
         .await
     }
 
+    pub fn size_main(&self) -> (Size, f64) {
+        let w = window().expect("No window?");
+        let width = w
+            .inner_width()
+            .expect("No width?")
+            .as_f64()
+            .expect("No width?");
+        let height = w
+            .inner_height()
+            .expect("No height?")
+            .as_f64()
+            .expect("No height?");
+        let px = w.device_pixel_ratio();
+
+        (Size::new(width, height), px)
+    }
+
     pub fn raw_window_handle(&self) -> RawWindowHandle {
         RawWindowHandle::Web(self.display_handle.clone())
     }
