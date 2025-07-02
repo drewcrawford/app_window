@@ -94,7 +94,6 @@ pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
     assert!(!old, "Do not call main more than once.");
     {
         use crate::some_executor::MainThreadExecutor;
-        some_executor::thread_executor::set_thread_executor(Box::new(MainThreadExecutor {}));
         some_executor::thread_executor::set_thread_local_executor_adapting_notifier(
             MainThreadExecutor {},
         );
