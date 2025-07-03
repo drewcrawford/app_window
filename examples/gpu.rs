@@ -10,6 +10,7 @@ mod gpu {
     use std::sync::{Arc, Mutex};
 
     use wgpu::{Device, Queue, SurfaceTargetUnsafe};
+    use app_window::WGPUStrategy;
 
     enum Message {
         SizeChanged,
@@ -190,14 +191,32 @@ mod gpu {
     pub fn main() {
         //set up main thread
         app_window::application::main(|| {
-            app_window::wgpu::wgpu_begin_context(async {
-                app_window::wgpu::wgpu_in_context(async {
-                    logwise::info_sync!("making window");
-                    let w = Window::default().await;
-                    logwise::info_sync!("did create window");
-                    wgpu_run(w).await;
-                });
-            });
+            match app_window::WGPU_STRATEGY {
+                WGPUStrategy::MainThread => {
+                    app_window::application::submit_to_main_thread(|| {
+                        some_executor::task::Task::without_notifications("gpu_main".to_string(), Configuration::default(), async {
+                            wgpu_run(Window::default().await).await;
+                        }).spawn_thread_local();
+                    });
+                }
+                WGPUStrategy::NotMainThread => {
+                    std::thread::Builder::new()
+                        .name("gpu_main".to_string())
+                        .spawn(||{
+                            some_executor::task::Task::without_notifications("gpu_main".to_string(), Configuration::default(), async {
+                                wgpu_run(Window::default().await).await;
+                            }).spawn_thread_local();
+                        }).unwrap();
+                }
+                WGPUStrategy::Relaxed => {
+                    some_executor::task::Task::without_notifications("gpu_main".to_string(), Configuration::default(), async {
+                        wgpu_run(Window::default().await).await;
+                    }).spawn_thread_local();
+                }
+                _ => {
+                    panic!("Unsupported WGPU strategy: {:?}", app_window::WGPU_STRATEGY);
+                }
+            }
         });
     }
 }

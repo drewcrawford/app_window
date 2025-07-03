@@ -32,6 +32,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, RawWaker, RawWakerVTable};
+use logwise::perfwarn_begin;
+use crate::application::submit_to_main_thread;
 
 /// Static counter for generating unique task IDs.
 static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(1);
@@ -207,6 +209,7 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
 
     // Add task to POLLABLE queue
     let mut pollable = POLLABLE.take();
+    logwise::info_sync!("Submitting task {id} to main executor", id=task_id);
     pollable.push(task_id);
     POLLABLE.replace(pollable);
 
@@ -225,6 +228,7 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
 /// that may be added during polling without losing them.
 fn main_executor_iter() {
     // Pop off a pollable task
+    let iter = perfwarn_begin!("main_executor_iter");
     let mut swap_pollable = POLLABLE.take();
     let poll = swap_pollable.pop();
     POLLABLE.replace(swap_pollable);
@@ -263,7 +267,7 @@ fn main_executor_iter() {
                 }
             }
             //there MAY be more pollable tasks.  However, we want to yield here
-            sys::on_main_thread(main_executor_iter)
+            submit_to_main_thread(main_executor_iter);
         }
     }
 }

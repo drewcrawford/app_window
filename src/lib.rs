@@ -201,32 +201,41 @@ pub mod executor;
 /// the `some_executor` abstraction.
 pub mod some_executor;
 
-/// Platform-specific wgpu integration.
-///
-/// This module provides utilities for using wgpu with app_window, handling the
-/// different threading requirements across platforms. Some platforms require GPU
-/// access from the main thread, while others require it from a different thread.
-///
-/// # Example
-/// ```no_run
-/// # #[cfg(feature = "wgpu")]
-/// # {
-/// use app_window::wgpu::{wgpu_begin_context, WGPU_STRATEGY, WGPUStrategy};
-/// use some_executor::SomeExecutorExt;
-///
-/// // Check the platform's wgpu strategy
-/// match WGPU_STRATEGY {
-///     WGPUStrategy::MainThread => println!("GPU access must be on main thread"),
-///     WGPUStrategy::NotMainThread => println!("GPU access must NOT be on main thread"),
-///     WGPUStrategy::Relaxed => println!("GPU types are Send+Sync"),
-///     _ => println!("Unknown strategy"),
-/// }
-///
-/// // Use wgpu context directly
-/// wgpu_begin_context(async {
-///     // wgpu operations here
-/// });
-/// # }
-/// ```
-#[cfg(feature = "wgpu")]
-pub mod wgpu;
+/**
+Describes the preferred strategy for interacting with wgpu on this platform.
+*/
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum WGPUStrategy {
+    /**
+    The main thread should be used to access wgpu.
+    */
+    MainThread,
+    /**
+    The main thread should **NOT be used to access wgpu.
+    */
+    NotMainThread,
+    /**
+    On this platform, wgpu types are sendable and can be used from any thread.
+
+    Platforms with this type should use test_relaxed to verify
+    */
+    Relaxed,
+}
+/**
+Describes the preferred strategy for interacting with wgpu on this platform.
+*/
+#[cfg(target_os = "linux")]
+pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::NotMainThread;
+
+/**
+Describes the preferred strategy for interacting with wgpu on this platform.
+*/
+#[cfg(target_os = "windows")]
+pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
+
+/**
+Describes the preferred strategy for interacting with wgpu on this platform.
+*/
+#[cfg(any(target_arch = "wasm32", target_os = "macos"))]
+pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;

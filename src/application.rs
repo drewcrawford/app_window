@@ -189,5 +189,16 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 /// This function handles platform-specific details of main thread execution and may
 /// install a main thread executor if necessary for the current platform.
 pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
-    sys::on_main_thread(closure);
+    let bt = std::backtrace::Backtrace::capture();
+    let perf = move ||{
+        let start = std::time::Instant::now();
+        closure();
+        let duration = start.elapsed();
+        if duration > std::time::Duration::from_millis(10) {
+            
+            logwise::warn_sync!("Main thread operation took too long: {duration}\nBacktrace:\n{bt}",duration=logwise::privacy::LogIt(duration),bt=logwise::privacy::LogIt(format!("{}",bt)));
+        }
+    };
+    sys::on_main_thread(perf);
+    // sys::on_main_thread(closure);
 }
