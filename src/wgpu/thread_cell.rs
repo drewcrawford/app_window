@@ -7,13 +7,49 @@ use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
+use send_cells::unsafe_sync_cell::UnsafeSyncCell;
 use crate::application::on_main_thread;
 use crate::executor::on_main_thread_async;
 use crate::sys;
-use crate::wgpu::{WGPU_STRATEGY, WGPUStrategy};
+use crate::wgpu::{WGPU_STRATEGY, WGPUStrategy, wgpu_begin_context};
 
-pub struct WgpuCell<T> {
-    inner: Option<UnsafeSendCell<T>>,
+#[derive(Debug)]
+struct Shared<T: 'static> {
+    inner: Option<UnsafeSendCell<UnsafeSyncCell<T>>>,
+    mutex: Mutex<()>,
+}
+
+impl<T> Drop for Shared<T> {
+    fn drop(&mut self) {
+        //when we're dropping the last value,
+        //we need to do so on the right thread
+        let take = self.inner.take().unwrap();
+        wgpu_begin_context(async {
+            drop(take);
+        })
+
+    }
+}
+
+pub struct WgpuCell<T: 'static> {
+    //option is so we can consume + custom drop
+    shared: Option<Arc<Shared<T>>>,
+}
+
+impl<T> PartialEq for WgpuCell<T> {
+    fn eq(&self, other: &Self) -> bool {
+        let s = self.shared.as_ref().unwrap();
+        let o = other.shared.as_ref().unwrap();
+        Arc::ptr_eq(&s, &o)
+    }
+}
+
+impl<T> Clone for WgpuCell<T> {
+    fn clone(&self) -> Self {
+        WgpuCell {
+            shared: self.shared.clone(),
+        }
+    }
 }
 
 impl<T> WgpuCell<T> {
@@ -21,7 +57,10 @@ impl<T> WgpuCell<T> {
     pub fn new(t: T) -> Self {
         //I don't think we actually need to verify the thread here?
         WgpuCell {
-            inner: unsafe { Some(UnsafeSendCell::new_unchecked(t) )},
+            shared: Some(Arc::new(Shared {
+                inner: Some(UnsafeSendCell::new(UnsafeSyncCell::new(t))),
+                mutex: Mutex::new(()),
+            })),
         }
     }
 
@@ -48,60 +87,36 @@ impl<T> WgpuCell<T> {
 
     #[inline]
     pub unsafe fn get_unchecked(&self) -> &T {
-        unsafe { &*self.inner.as_ref().unwrap().get() }
+        unsafe { self.shared.as_ref().unwrap().inner.as_ref().unwrap().get().get() }
     }
 
-    #[inline]
-    pub fn get(&self) -> &T {
+
+
+    pub fn assume<C, R>(&self, c: C) -> R
+    where
+        C: FnOnce(&T) -> R,
+    {
         Self::verify_thread();
-        unsafe { self.get_unchecked() }
+        let guard = self.shared.as_ref().unwrap().mutex.lock().unwrap();
+        let r = c(unsafe {self.shared.as_ref().unwrap().inner.as_ref().unwrap().get().get()});
+        drop(guard);
+        r
     }
 
-    #[inline]
-    pub unsafe fn get_unchecked_mut(&mut self) -> &mut T {
-        unsafe {
-            &mut *self
-                .inner
-                .as_mut()
-                .unwrap()
-                .get_mut()
-        }
-    }
-
-    #[inline]
-    pub fn get_mut(&mut self) -> &mut T {
-        Self::verify_thread();
-        unsafe { self.get_unchecked_mut() }
-    }
-
-    #[inline]
-    pub unsafe fn into_unchecked_inner(mut self) -> T {
-        unsafe {
-            self.inner.take().unwrap().into_inner()
-        }
-    }
-
-    #[inline]
-    pub fn into_inner(self) -> T {
-        Self::verify_thread();
-        unsafe { self.into_unchecked_inner() }
-    }
-
-    pub async fn assume<C, R>(&self, c: C) -> R
+    /**
+    Be careful with this - it allows holding the lock while awaiting.
+*/
+    pub async fn assume_async<C, R>(&self, c: C) -> R
     where
         C: AsyncFnOnce(&T) -> R,
     {
         Self::verify_thread();
-        c(unsafe { self.get_unchecked() }).await
+        let guard = self.shared.as_ref().unwrap().mutex.lock().unwrap();
+        let r = c(unsafe {self.shared.as_ref().unwrap().inner.as_ref().unwrap().get().get()}).await;
+        drop(guard);
+        r
     }
 
-    pub async fn assume_mut<C, R>(&mut self, c: C) -> R
-    where
-        C: AsyncFnOnce(&mut T) -> R,
-    {
-        Self::verify_thread();
-        c(unsafe { self.get_unchecked_mut() }).await
-    }
 
     /**
     Runs a closure with the inner value of the WgpuCell, ensuring that the closure is executed
@@ -110,51 +125,56 @@ impl<T> WgpuCell<T> {
     # Panics
     For the duration of this function, the cell may not be otherwise used.
     */
-    pub async fn with_mut<C,F,R>(&mut self, c: C) -> R
+    pub async fn with<C,R>(&self, c: C) -> R
     where
-        C: FnOnce(&mut T) -> F + Send + 'static,
-        F: Future<Output = R> + Send + 'static,
+        C: FnOnce(&T) -> R + Send + 'static,
         R: Send + 'static,
         T: 'static,
     {
-        //for the duration of this function, we take the inner value out of the cell
-        let mut take = self.inner.take().expect("WgpuCell value missing");
+
         match WGPU_STRATEGY {
             WGPUStrategy::MainThread => {
                 if sys::is_main_thread() {
-                    c(unsafe { take.get_mut() }).await
+                    self.assume(c)
                 } else {
-                    on_main_thread_async(async move {
-                        c(unsafe { take.get_mut() }).await
+                    let move_shared = self.shared.clone();
+                    on_main_thread(move ||{
+                        Self::verify_thread();
+                        let guard = move_shared.as_ref().unwrap().mutex.lock().unwrap();
+                        let r = c(unsafe {move_shared.as_ref().unwrap().inner.as_ref().unwrap().get().get()});
+                        drop(guard);
+                        r
                     }).await
                 }
             }
             WGPUStrategy::NotMainThread => {
                 if !sys::is_main_thread() {
                     // If we're not on the main thread, we can just call the closure directly
-                    c(unsafe { take.get_mut() }).await
+                    self.assume(c)
                 } else {
                     // If we are on the main thread, we need to run it on a separate thread
                     let (s,f) = r#continue::continuation();
+                    let move_shared = self.shared.clone();
                     _ = std::thread::Builder::new()
                         .name("WgpuCell thread".to_string())
-                        .spawn(|| {
-                            let t = some_executor::task::Task::without_notifications(
-                                "WgpuCell::with_mut".to_string(),
-                                some_executor::task::Configuration::default(),
-                                async move {
-                                    let r = c(unsafe { take.get_mut() }).await;
-                                    s.send(r);
-                                },
-                            );
-                            t.spawn_thread_local();
+                        .spawn(move || {
+                            Self::verify_thread();
+                            let guard = move_shared.as_ref().unwrap().mutex.lock().unwrap();
+                            let r = c(unsafe {move_shared.as_ref().unwrap().inner.as_ref().unwrap().get().get()});
+                            drop(guard);
+                            //now we need to ship this back to the main thread
+                            s.send(r);
                         }).unwrap();
                         f.await
                 }
             }
             WGPUStrategy::Relaxed => {
                 // Relaxed strategy allows access from any thread
-                c(unsafe { take.get_mut() }).await
+                Self::verify_thread();
+                let guard = self.shared.as_ref().unwrap().mutex.lock().unwrap();
+                let r = c(unsafe {self.shared.as_ref().unwrap().inner.as_ref().unwrap().get().get()});
+                drop(guard);
+                r
             }
         }
     }
@@ -237,8 +257,16 @@ impl<T> WgpuCell<T> {
     {
         unsafe {
             //fine to do directly because T: Copy
+            //need to hold the lock for Sync though
+            let guard = self.shared.as_ref().unwrap().mutex.lock().unwrap();
+            let t = *self.shared.as_ref().unwrap().inner.as_ref().unwrap().get().get();
+            drop(guard);
+            let inner = UnsafeSendCell::new(UnsafeSyncCell::new(t));
             WgpuCell {
-                inner: Some(UnsafeSendCell::new_unchecked(*self.get())),
+                shared: Some(Arc::new(Shared {
+                    inner: Some(inner),
+                    mutex: Mutex::new(()),
+                })),
             }
         }
     }
@@ -247,52 +275,32 @@ impl<T> WgpuCell<T> {
 unsafe impl<T> Send for WgpuCell<T> {}
 
 
+
 impl<T: Future> WgpuCell<T> {
     pub fn into_future(mut self) -> WgpuFuture<T> {
+        let shared = self.shared.take().expect("WgpuCell value missing");
+        let shared = match Arc::try_unwrap(shared){
+            Ok(shared) => shared,
+            Err(_) => {
+                panic!("WgpuCell::into_future called on an exclusive lock");
+            }
+        };
         WgpuFuture {
-            inner: self.inner.take().expect("WgpuCell value missing"),
+            inner: shared,
         }
     }
 }
 
-impl<T> Drop for WgpuCell<T> {
-    fn drop(&mut self) {
-        if std::mem::needs_drop::<T>() {
-            Self::verify_thread();
-        }
-    }
-}
 
 impl<T: Debug> Debug for WgpuCell<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.get().fmt(f)
+        f.debug_struct("WgpuCell")
+            .finish()
     }
 }
 
-impl<T> AsRef<T> for WgpuCell<T> {
-    fn as_ref(&self) -> &T {
-        self.get()
-    }
-}
 
-impl<T> AsMut<T> for WgpuCell<T> {
-    fn as_mut(&mut self) -> &mut T {
-        self.get_mut()
-    }
-}
 
-impl<T> Deref for WgpuCell<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        self.get()
-    }
-}
-
-impl<T> DerefMut for WgpuCell<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.get_mut()
-    }
-}
 
 impl<T: Default> Default for WgpuCell<T> {
     fn default() -> Self {
@@ -307,8 +315,8 @@ impl<T> From<T> for WgpuCell<T> {
 }
 
 #[derive(Debug)]
-pub struct WgpuFuture<T> {
-    inner: UnsafeSendCell<T>,
+pub struct WgpuFuture<T: 'static> {
+    inner: Shared<T>,
 }
 
 unsafe impl<T> Send for WgpuFuture<T> {}
@@ -335,11 +343,10 @@ impl<T: Future> Future for WgpuFuture<T> {
                 // No verification needed
             }
         }
-
-        // SAFETY: After thread verification, we can safely poll the inner future
         let inner = unsafe {
             let self_mut = self.get_unchecked_mut();
-            Pin::new_unchecked(self_mut.inner.get_mut())
+            let lock = self_mut.inner.mutex.lock().unwrap();
+            Pin::new_unchecked(self_mut.inner.inner.as_mut().unwrap().get_mut().get_mut())
         };
         inner.poll(cx)
     }
