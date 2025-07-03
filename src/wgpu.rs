@@ -18,7 +18,7 @@ use r#continue::continuation;
 
 pub mod thread_cell;
 
-pub use thread_cell::{WgpuCell, WgpuFuture};
+pub use thread_cell::{WgpuCell, WgpuGuard, WgpuFuture};
 
 /**
 Describes the preferred strategy for interacting with wgpu on this platform.

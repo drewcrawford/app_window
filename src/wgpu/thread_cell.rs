@@ -3,13 +3,13 @@
 use send_cells::UnsafeSendCell;
 use std::fmt::{Debug, Formatter};
 use std::future::Future;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll};
 use send_cells::unsafe_sync_cell::UnsafeSyncCell;
 use crate::application::on_main_thread;
-use crate::executor::on_main_thread_async;
 use crate::sys;
 use crate::wgpu::{WGPU_STRATEGY, WGPUStrategy, wgpu_begin_context};
 
@@ -28,6 +28,33 @@ impl<T> Drop for Shared<T> {
             drop(take);
         })
 
+    }
+}
+
+pub struct WgpuGuard<'a, T: 'static> {
+    _guard: MutexGuard<'a, ()>,
+    value: &'a mut T,
+}
+
+impl<'a, T> Deref for WgpuGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.value }
+    }
+}
+
+impl<'a, T> DerefMut for WgpuGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *self.value }
+    }
+}
+
+impl<'a, T: Debug> Debug for WgpuGuard<'a, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WgpuGuard")
+            .field("value", unsafe { &*self.value })
+            .finish()
     }
 }
 
@@ -56,9 +83,11 @@ impl<T> WgpuCell<T> {
     #[inline]
     pub fn new(t: T) -> Self {
         //I don't think we actually need to verify the thread here?
+        //we promise drop is correctly handled
+        let cell = unsafe { UnsafeSendCell::new_unchecked(UnsafeSyncCell::new(t))};
         WgpuCell {
             shared: Some(Arc::new(Shared {
-                inner: Some(UnsafeSendCell::new(UnsafeSyncCell::new(t))),
+                inner: Some(cell),
                 mutex: Mutex::new(()),
             })),
         }
@@ -82,6 +111,19 @@ impl<T> WgpuCell<T> {
             WGPUStrategy::Relaxed => {
                 // No verification needed
             }
+        }
+    }
+
+    pub fn lock(&self) -> WgpuGuard<'_, T> {
+        Self::verify_thread();
+        let guard = self.shared.as_ref().unwrap().mutex.lock().unwrap();
+        let value = unsafe { 
+            let inner = self.shared.as_ref().unwrap().inner.as_ref().unwrap();
+            inner.get().get_mut_unchecked()
+        };
+        WgpuGuard {
+            _guard: guard,
+            value,
         }
     }
 
@@ -345,7 +387,7 @@ impl<T: Future> Future for WgpuFuture<T> {
         }
         let inner = unsafe {
             let self_mut = self.get_unchecked_mut();
-            let lock = self_mut.inner.mutex.lock().unwrap();
+            let _lock = self_mut.inner.mutex.lock().unwrap();
             Pin::new_unchecked(self_mut.inner.inner.as_mut().unwrap().get_mut().get_mut())
         };
         inner.poll(cx)
@@ -453,6 +495,79 @@ mod tests {
         let _cell = WgpuCell::new(42);
         let _cell_from: WgpuCell<i32> = 42.into();
         let _cell_default: WgpuCell<i32> = Default::default();
+    }
+
+    // Test guard functionality on platforms where we can access from any thread (Relaxed strategy)
+    #[cfg(target_os = "windows")]
+    mod guard_tests {
+        use super::*;
+
+        #[test]
+        fn test_guard_basic_operations() {
+            let cell = WgpuCell::new(42);
+            
+            // Test that we can lock and access the value
+            {
+                let guard = cell.lock();
+                assert_eq!(*guard, 42);
+            }
+            
+            // Test that we can lock again after the guard is dropped
+            {
+                let mut guard = cell.lock();
+                *guard = 100;
+                assert_eq!(*guard, 100);
+            }
+            
+            // Verify the value was actually changed
+            {
+                let guard = cell.lock();
+                assert_eq!(*guard, 100);
+            }
+        }
+
+        #[test]
+        fn test_guard_debug_impl() {
+            let cell = WgpuCell::new(42);
+            let guard = cell.lock();
+            let debug_str = format!("{:?}", guard);
+            assert!(debug_str.contains("WgpuGuard"));
+            assert!(debug_str.contains("42"));
+        }
+
+        #[test]
+        fn test_guard_drop_behavior() {
+            use std::sync::Arc;
+            use std::sync::atomic::{AtomicBool, Ordering};
+            use std::thread;
+            
+            let cell = Arc::new(WgpuCell::new(42));
+            let locked = Arc::new(AtomicBool::new(false));
+            
+            let cell_clone = cell.clone();
+            let locked_clone = locked.clone();
+            
+            // Spawn a thread that tries to lock the cell
+            let handle = thread::spawn(move || {
+                let _guard = cell_clone.lock();
+                locked_clone.store(true, Ordering::SeqCst);
+                // Hold the lock for a bit
+                thread::sleep(std::time::Duration::from_millis(10));
+            });
+            
+            // Give the other thread time to acquire the lock
+            thread::sleep(std::time::Duration::from_millis(5));
+            
+            // This should block until the other thread releases the lock
+            let start = std::time::Instant::now();
+            let _guard = cell.lock();
+            let elapsed = start.elapsed();
+            
+            // We should have waited at least 5ms (remaining time from the 10ms sleep)
+            assert!(elapsed.as_millis() >= 4); // Using 4ms to account for timing variations
+            
+            handle.join().unwrap();
+        }
     }
 
 }
