@@ -224,41 +224,46 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
 /// This function loops while there are pollable tasks, handling new tasks
 /// that may be added during polling without losing them.
 fn main_executor_iter() {
-    loop {
-        // Pop off a pollable task 
-        let mut swap_pollable = POLLABLE.take();
-        let poll = swap_pollable.pop();
-        POLLABLE.replace(swap_pollable);
-        match poll {
-            None => {
-                // No more pollable tasks, exit the loop
-                break;
-            }
-            Some(task) => {
-                // Get the task from RUNNING
-                let mut running = RUNNING.take().unwrap_or_default();
-                let mut task = running.remove(&task).unwrap();
-                RUNNING.replace(Some(running));
-                
-                //with that out of the way, we can poll the task
-                let waker = Waker {
-                    inner: task.wake_inner.clone(),
-                };
-                let into_waker = waker.into_waker();
-                let mut context = Context::from_waker(&into_waker);
-                let poll_result = task.future.as_mut().poll(&mut context);
-                match poll_result {
-                    std::task::Poll::Ready(()) => {
-                        // Task completed, don't put it back
-                    }
-                    std::task::Poll::Pending => {
-                        // Task is still running, put it back in RUNNING
-                        let mut running = RUNNING.take().unwrap_or_default();
-                        running.insert(task.id, task);
-                        RUNNING.replace(Some(running));
-                    }
+    // Pop off a pollable task
+    let mut swap_pollable = POLLABLE.take();
+    let poll = swap_pollable.pop();
+    POLLABLE.replace(swap_pollable);
+    match poll {
+        None => {
+            //No more pollable tasks, nothing to do.
+        }
+        Some(task) => {
+            // Get the task from RUNNING
+            let mut running = RUNNING.take().unwrap_or_default();
+            let mut task = running.remove(&task).unwrap();
+            RUNNING.replace(Some(running));
+
+            //with that out of the way, we can poll the task
+            let waker = Waker {
+                inner: task.wake_inner.clone(),
+            };
+            let into_waker = waker.into_waker();
+            let parent = logwise::context::Context::current();
+            let new_context = logwise::context::Context::new_task(Some(parent), "main_executor_iter");
+            let new_id = new_context.context_id();
+            new_context.set_current();
+            logwise::info_sync!("Polling task {id}",id=task.id);
+            let mut context = Context::from_waker(&into_waker);
+            let poll_result = task.future.as_mut().poll(&mut context);
+            logwise::context::Context::pop(new_id);
+            match poll_result {
+                std::task::Poll::Ready(()) => {
+                    // Task completed, don't put it back
+                }
+                std::task::Poll::Pending => {
+                    // Task is still running, put it back in RUNNING
+                    let mut running = RUNNING.take().unwrap_or_default();
+                    running.insert(task.id, task);
+                    RUNNING.replace(Some(running));
                 }
             }
+            //there MAY be more pollable tasks.  However, we want to yield here
+            sys::on_main_thread(main_executor_iter)
         }
     }
 }

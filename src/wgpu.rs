@@ -14,6 +14,7 @@ use crate::sys;
 use some_executor::observer::Observer;
 use some_executor::task::{Configuration, Task};
 use std::future::Future;
+use r#continue::continuation;
 
 pub mod thread_cell;
 
@@ -101,7 +102,9 @@ where
                 already_on_main_thread_submit(f);
             } else {
                 // If we're not on the main thread, we need to run it on the main thread executor.
+                let hop_on_main_thread = logwise::perfwarn_begin!("wgpu_begin_context hop_on_main_thread");
                 sys::on_main_thread(|| {
+                    drop(hop_on_main_thread);
                     already_on_main_thread_submit(f);
                 })
             }
@@ -226,6 +229,21 @@ where
             }
         }
     }
+}
+
+pub async fn wgpu_smuggle<F,C,R>(c: C) -> R
+where F: Future<Output = R> + 'static,
+C: FnOnce() -> F + Send + 'static,
+R: Send + 'static {
+    let (s,r) = continuation();
+    wgpu_begin_context(async move {
+        wgpu_in_context(async move {
+            let f = c();
+            let r = f.await;
+            s.send(r)
+        })
+    });
+    r.await
 }
 
 #[cfg(test)]
