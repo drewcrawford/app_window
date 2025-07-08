@@ -270,4 +270,5 @@ fn main_executor_iter() {
             submit_to_main_thread(main_executor_iter);
         }
     }
+    drop(iter);
 }

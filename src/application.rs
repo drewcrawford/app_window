@@ -24,6 +24,10 @@
 //! ```
 
 use std::sync::atomic::AtomicBool;
+#[cfg(target_arch="wasm32")]
+use web_time as time;
+#[cfg(not(target_arch="wasm32"))]
+use std::time as time;
 
 use crate::sys;
 
@@ -191,14 +195,21 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let bt = std::backtrace::Backtrace::capture();
     let perf = move ||{
-        let start = std::time::Instant::now();
+        let start = time::Instant::now();
         closure();
         let duration = start.elapsed();
-        if duration > std::time::Duration::from_millis(10) {
+        if duration > time::Duration::from_millis(10) {
             
             logwise::warn_sync!("Main thread operation took too long: {duration}\nBacktrace:\n{bt}",duration=logwise::privacy::LogIt(duration),bt=logwise::privacy::LogIt(format!("{}",bt)));
         }
     };
     sys::on_main_thread(perf);
     // sys::on_main_thread(closure);
+}
+
+/**
+Checks if the current thread is the main thread.
+*/
+pub fn is_main_thread() -> bool {
+    sys::is_main_thread()
 }

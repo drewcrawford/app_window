@@ -2,7 +2,7 @@
 
 use crate::coordinates::Size;
 use crate::sys;
-use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{DisplayHandle, RawDisplayHandle, RawWindowHandle, WindowHandle};
 
 /// A type that can be drawn on, e.g. by wgpu.
 ///
@@ -120,6 +120,11 @@ impl Surface {
         self.sys.raw_window_handle()
     }
 
+    pub fn window_handle(&self) -> WindowHandle {
+        //should be safe because we own the raw handle
+        unsafe{WindowHandle::borrow_raw(self.raw_window_handle())}
+    }
+
     /// Returns the raw display handle for this surface.
     ///
     /// This handle represents the display or connection that owns the window. It's required
@@ -139,6 +144,11 @@ impl Surface {
     /// See [`raw_window_handle()`](Self::raw_window_handle) for usage with graphics APIs.
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
         self.sys.raw_display_handle()
+    }
+    
+    pub fn display_handle(&self) -> DisplayHandle {
+        //should be safe because we own the raw handle
+        unsafe{DisplayHandle::borrow_raw(self.raw_display_handle())}
     }
     /// Registers a callback to be invoked when the surface is resized.
     ///
@@ -180,6 +190,7 @@ impl Surface {
     pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, update: F) {
         self.sys.size_update(update)
     }
+
 }
 
 #[cfg(test)]
