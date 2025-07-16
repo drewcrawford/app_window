@@ -24,7 +24,9 @@ When the `some_executor` feature is enabled, this executor can be wrapped with
 `crate::some_executor::MainThreadExecutor` to provide a `some_executor::SomeExecutor`
 implementation.
 */
+use crate::application::submit_to_main_thread;
 use crate::sys;
+use logwise::perfwarn_begin;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::future::Future;
@@ -32,8 +34,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, RawWaker, RawWakerVTable};
-use logwise::perfwarn_begin;
-use crate::application::submit_to_main_thread;
 
 /// Static counter for generating unique task IDs.
 static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(1);
@@ -209,7 +209,7 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
 
     // Add task to POLLABLE queue
     let mut pollable = POLLABLE.take();
-    logwise::info_sync!("Submitting task {id} to main executor", id=task_id);
+    logwise::info_sync!("Submitting task {id} to main executor", id = task_id);
     pollable.push(task_id);
     POLLABLE.replace(pollable);
 
@@ -248,10 +248,11 @@ fn main_executor_iter() {
             };
             let into_waker = waker.into_waker();
             let parent = logwise::context::Context::current();
-            let new_context = logwise::context::Context::new_task(Some(parent), "main_executor_iter");
+            let new_context =
+                logwise::context::Context::new_task(Some(parent), "main_executor_iter");
             let new_id = new_context.context_id();
             new_context.set_current();
-            logwise::info_sync!("Polling task {id}",id=task.id);
+            logwise::info_sync!("Polling task {id}", id = task.id);
             let mut context = Context::from_waker(&into_waker);
             let poll_result = task.future.as_mut().poll(&mut context);
             logwise::context::Context::pop(new_id);

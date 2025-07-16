@@ -13,7 +13,7 @@ use std::ffi::c_void;
 use std::fmt::{Debug, Display, Formatter};
 use std::ptr::NonNull;
 use std::sync::{Arc, Weak};
-use swift_rs::{SRString, swift, SwiftRet};
+use swift_rs::{SRString, SwiftRet, swift};
 
 #[derive(Debug)]
 pub struct FullscreenError;
@@ -40,15 +40,14 @@ swift!(fn SwiftAppWindow_WindowSurface(ctx: *mut c_void, window: *mut c_void, re
 
 swift!(fn SwiftAppWindow_OnMainThread(ctx: *mut c_void, c_fn: *mut c_void)  -> ());
 
-#[repr(C)] struct SwiftSizeScale {
+#[repr(C)]
+struct SwiftSizeScale {
     width: f64,
     height: f64,
     scale_factor: f64,
 }
-impl SwiftRet for SwiftSizeScale {
-}
+impl SwiftRet for SwiftSizeScale {}
 swift!(fn SwiftAppWindow_SurfaceSizeMain(surface: *mut c_void) -> SwiftSizeScale);
-
 
 pub fn is_main_thread() -> bool {
     unsafe { SwiftAppWindowIsMainThread() }
@@ -193,7 +192,10 @@ impl Surface {
     }
     pub fn size_main(&self) -> (Size, f64) {
         let size_scale = unsafe { SwiftAppWindow_SurfaceSizeMain(self.imp) };
-        (Size::new(size_scale.width, size_scale.height), size_scale.scale_factor)
+        (
+            Size::new(size_scale.width, size_scale.height),
+            size_scale.scale_factor,
+        )
     }
     pub fn raw_window_handle(&self) -> RawWindowHandle {
         let ptr = unsafe { SwiftAppWindow_SurfaceRawHandle(self.imp) };

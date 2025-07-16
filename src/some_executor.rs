@@ -6,11 +6,12 @@ Implements the some_executor traits for the main thread executor
 
 use crate::application::submit_to_main_thread;
 use crate::executor::already_on_main_thread_submit;
-use some_executor::observer::{FinishedObservation, Observer, ObserverNotified};
+use some_executor::observer::{ExecutorNotified, FinishedObservation, Observer, ObserverNotified};
 use some_executor::task::Task;
 use some_executor::{
-    BoxedSendObserverFuture, DynExecutor, LocalExecutorExt, ObjSafeTask, SomeExecutor,
-    SomeExecutorExt, SomeLocalExecutor,
+    BoxedSendObserverFuture, BoxedStaticObserver, BoxedStaticObserverFuture, DynExecutor,
+    DynStaticExecutor, LocalExecutorExt, ObjSafeStaticTask, ObjSafeTask, SomeExecutor,
+    SomeExecutorExt, SomeLocalExecutor, SomeStaticExecutor,
 };
 use std::any::Any;
 use std::convert::Infallible;
@@ -199,3 +200,72 @@ impl SomeExecutor for MainThreadExecutor {
 }
 
 impl SomeExecutorExt for MainThreadExecutor {}
+
+impl SomeStaticExecutor for MainThreadExecutor {
+    type ExecutorNotifier = Box<dyn ExecutorNotified>;
+
+    fn spawn_static<F: Future, Notifier: ObserverNotified<F::Output>>(
+        &mut self,
+        task: Task<F, Notifier>,
+    ) -> impl Observer<Value = F::Output>
+    where
+        Self: Sized,
+        F: 'static,
+        <F as Future>::Output: Unpin,
+        <F as Future>::Output: 'static,
+    {
+        let (s, o) = task.spawn_static(self);
+        already_on_main_thread_submit(async {
+            s.into_future().await;
+        });
+        o
+    }
+
+    fn spawn_static_async<F: Future, Notifier: ObserverNotified<F::Output>>(
+        &mut self,
+        task: Task<F, Notifier>,
+    ) -> impl Future<Output = impl Observer<Value = F::Output>>
+    where
+        Self: Sized,
+        F: 'static,
+        <F as Future>::Output: Unpin,
+        <F as Future>::Output: 'static,
+    {
+        let (s, o) = task.spawn_static(self);
+        async move {
+            already_on_main_thread_submit(async {
+                s.into_future().await;
+            });
+            o
+        }
+    }
+
+    fn spawn_static_objsafe(&mut self, task: ObjSafeStaticTask) -> BoxedStaticObserver {
+        let (s, o) = task.spawn_static_objsafe(self);
+        already_on_main_thread_submit(async {
+            s.into_future().await;
+        });
+        Box::new(o)
+    }
+
+    fn spawn_static_objsafe_async<'s>(
+        &'s mut self,
+        task: ObjSafeStaticTask,
+    ) -> BoxedStaticObserverFuture<'s> {
+        Box::new(async {
+            let (s, o) = task.spawn_static_objsafe(self);
+            already_on_main_thread_submit(async {
+                s.into_future().await;
+            });
+            Box::new(o) as BoxedStaticObserver
+        })
+    }
+
+    fn clone_box(&self) -> Box<DynStaticExecutor> {
+        Box::new(MainThreadExecutor {})
+    }
+
+    fn executor_notifier(&mut self) -> Option<Self::ExecutorNotifier> {
+        None
+    }
+}

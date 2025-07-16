@@ -9,8 +9,8 @@ mod gpu {
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
 
-    use wgpu::{Device, Queue, SurfaceTargetUnsafe};
     use app_window::WGPUStrategy;
+    use wgpu::{Device, Queue, SurfaceTargetUnsafe};
 
     enum Message {
         SizeChanged,
@@ -190,32 +190,46 @@ mod gpu {
     }
     pub fn main() {
         //set up main thread
-        app_window::application::main(|| {
-            match app_window::WGPU_STRATEGY {
-                WGPUStrategy::MainThread => {
-                    app_window::application::submit_to_main_thread(|| {
-                        some_executor::task::Task::without_notifications("gpu_main".to_string(), Configuration::default(), async {
+        app_window::application::main(|| match app_window::WGPU_STRATEGY {
+            WGPUStrategy::MainThread => {
+                app_window::application::submit_to_main_thread(|| {
+                    some_executor::task::Task::without_notifications(
+                        "gpu_main".to_string(),
+                        Configuration::default(),
+                        async {
                             wgpu_run(Window::default().await).await;
-                        }).spawn_thread_local();
-                    });
-                }
-                WGPUStrategy::NotMainThread => {
-                    std::thread::Builder::new()
-                        .name("gpu_main".to_string())
-                        .spawn(||{
-                            some_executor::task::Task::without_notifications("gpu_main".to_string(), Configuration::default(), async {
+                        },
+                    )
+                    .spawn_current_static();
+                });
+            }
+            WGPUStrategy::NotMainThread => {
+                std::thread::Builder::new()
+                    .name("gpu_main".to_string())
+                    .spawn(|| {
+                        some_executor::task::Task::without_notifications(
+                            "gpu_main".to_string(),
+                            Configuration::default(),
+                            async {
                                 wgpu_run(Window::default().await).await;
-                            }).spawn_thread_local();
-                        }).unwrap();
-                }
-                WGPUStrategy::Relaxed => {
-                    some_executor::task::Task::without_notifications("gpu_main".to_string(), Configuration::default(), async {
+                            },
+                        )
+                        .spawn_current_static()
+                    })
+                    .unwrap();
+            }
+            WGPUStrategy::Relaxed => {
+                some_executor::task::Task::without_notifications(
+                    "gpu_main".to_string(),
+                    Configuration::default(),
+                    async {
                         wgpu_run(Window::default().await).await;
-                    }).spawn_thread_local();
-                }
-                _ => {
-                    panic!("Unsupported WGPU strategy: {:?}", app_window::WGPU_STRATEGY);
-                }
+                    },
+                )
+                .spawn_current_static();
+            }
+            _ => {
+                panic!("Unsupported WGPU strategy: {:?}", app_window::WGPU_STRATEGY);
             }
         });
     }

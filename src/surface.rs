@@ -79,9 +79,12 @@ impl Surface {
     pub async fn size_scale(&self) -> (Size, f64) {
         self.sys.size_scale().await
     }
-    
+
     pub fn size_main(&self) -> (Size, f64) {
-        assert!(sys::is_main_thread(), "`size_main` must be called from the main thread");
+        assert!(
+            sys::is_main_thread(),
+            "`size_main` must be called from the main thread"
+        );
         self.sys.size_main()
     }
 
@@ -122,7 +125,7 @@ impl Surface {
 
     pub fn window_handle(&self) -> WindowHandle {
         //should be safe because we own the raw handle
-        unsafe{WindowHandle::borrow_raw(self.raw_window_handle())}
+        unsafe { WindowHandle::borrow_raw(self.raw_window_handle()) }
     }
 
     /// Returns the raw display handle for this surface.
@@ -145,10 +148,10 @@ impl Surface {
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
         self.sys.raw_display_handle()
     }
-    
+
     pub fn display_handle(&self) -> DisplayHandle {
         //should be safe because we own the raw handle
-        unsafe{DisplayHandle::borrow_raw(self.raw_display_handle())}
+        unsafe { DisplayHandle::borrow_raw(self.raw_display_handle()) }
     }
     /// Registers a callback to be invoked when the surface is resized.
     ///
@@ -190,7 +193,6 @@ impl Surface {
     pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, update: F) {
         self.sys.size_update(update)
     }
-
 }
 
 #[cfg(test)]
