@@ -50,9 +50,12 @@ wasm-bindgen-futures = "0.4.49"
 ampsc = "0.2.0"
 web-time = "1"
 
+
 [target.'cfg(target_arch="wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.7"
 wasm_thread = "0.3.3"
+wasm-bindgen-test = "0.3"
+
 
 # windows
 
