@@ -53,6 +53,7 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
         <F as Future>::Output: 'static,
     {
         let (s, o) = task.spawn_local(self);
+        #[allow(clippy::async_yields_async)]
         async move {
             already_on_main_thread_submit(async {
                 s.into_future().await;
@@ -96,6 +97,7 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
                 >,
             > + 's,
     > {
+        #[allow(clippy::async_yields_async)]
         Box::new(async {
             let (s, o) = task.spawn_local_objsafe(self);
             already_on_main_thread_submit(async {
@@ -135,23 +137,21 @@ impl SomeExecutor for MainThreadExecutor {
         o
     }
 
-    fn spawn_async<'s, F: Future + Send + 'static, Notifier: ObserverNotified<F::Output> + Send>(
+    async fn spawn_async<'s, F: Future + Send + 'static, Notifier: ObserverNotified<F::Output> + Send>(
         &'s mut self,
         task: Task<F, Notifier>,
-    ) -> impl Future<Output = impl Observer<Value = F::Output>> + Send + 's
+    ) -> impl Observer<Value = F::Output>
     where
         Self: Sized,
         F::Output: Send + Unpin,
     {
-        async move {
-            let (s, o) = task.spawn(self);
-            submit_to_main_thread(|| {
-                already_on_main_thread_submit(async {
-                    s.into_future().await;
-                });
+        let (s, o) = task.spawn(self);
+        submit_to_main_thread(|| {
+            already_on_main_thread_submit(async {
+                s.into_future().await;
             });
-            o
-        }
+        });
+        o
     }
 
     fn spawn_objsafe(
@@ -167,6 +167,7 @@ impl SomeExecutor for MainThreadExecutor {
         Box::new(o)
     }
     fn spawn_objsafe_async<'s>(&'s mut self, task: ObjSafeTask) -> BoxedSendObserverFuture<'s> {
+        #[allow(clippy::async_yields_async)]
         Box::new(async {
             let (s, o) = task.spawn_objsafe(self);
             submit_to_main_thread(|| {
@@ -226,6 +227,7 @@ impl SomeStaticExecutor for MainThreadExecutor {
         <F as Future>::Output: 'static,
     {
         let (s, o) = task.spawn_static(self);
+        #[allow(clippy::async_yields_async)]
         async move {
             already_on_main_thread_submit(async {
                 s.into_future().await;
@@ -246,6 +248,7 @@ impl SomeStaticExecutor for MainThreadExecutor {
         &'s mut self,
         task: ObjSafeStaticTask,
     ) -> BoxedStaticObserverFuture<'s> {
+        #[allow(clippy::async_yields_async)]
         Box::new(async {
             let (s, o) = task.spawn_static_objsafe(self);
             already_on_main_thread_submit(async {
