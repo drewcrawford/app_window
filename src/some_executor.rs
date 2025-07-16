@@ -25,13 +25,12 @@ pub struct MainThreadExecutor {}
 impl SomeLocalExecutor<'static> for MainThreadExecutor {
     type ExecutorNotifier = Infallible;
 
-    fn spawn_local<F: Future, Notifier: ObserverNotified<F::Output>>(
+    fn spawn_local<F: Future + 'static, Notifier: ObserverNotified<F::Output>>(
         &mut self,
         task: Task<F, Notifier>,
     ) -> impl Observer<Value = F::Output>
     where
         Self: Sized,
-        F: 'static,
         <F as Future>::Output: Unpin,
         <F as Future>::Output: 'static,
     {
@@ -42,13 +41,12 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
         o
     }
 
-    fn spawn_local_async<F: Future, Notifier: ObserverNotified<F::Output>>(
+    fn spawn_local_async<F: Future + 'static, Notifier: ObserverNotified<F::Output>>(
         &mut self,
         task: Task<F, Notifier>,
     ) -> impl Future<Output = impl Observer<Value = F::Output>>
     where
         Self: Sized,
-        F: 'static,
         <F as Future>::Output: Unpin,
         <F as Future>::Output: 'static,
     {
@@ -137,8 +135,8 @@ impl SomeExecutor for MainThreadExecutor {
         o
     }
 
-    async fn spawn_async<'s, F: Future + Send + 'static, Notifier: ObserverNotified<F::Output> + Send>(
-        &'s mut self,
+    async fn spawn_async<F: Future + Send + 'static, Notifier: ObserverNotified<F::Output> + Send>(
+        &mut self,
         task: Task<F, Notifier>,
     ) -> impl Observer<Value = F::Output>
     where
@@ -199,13 +197,12 @@ impl SomeExecutorExt for MainThreadExecutor {}
 impl SomeStaticExecutor for MainThreadExecutor {
     type ExecutorNotifier = Box<dyn ExecutorNotified>;
 
-    fn spawn_static<F: Future, Notifier: ObserverNotified<F::Output>>(
+    fn spawn_static<F: Future + 'static, Notifier: ObserverNotified<F::Output>>(
         &mut self,
         task: Task<F, Notifier>,
     ) -> impl Observer<Value = F::Output>
     where
         Self: Sized,
-        F: 'static,
         <F as Future>::Output: Unpin,
         <F as Future>::Output: 'static,
     {
@@ -216,13 +213,12 @@ impl SomeStaticExecutor for MainThreadExecutor {
         o
     }
 
-    fn spawn_static_async<F: Future, Notifier: ObserverNotified<F::Output>>(
+    fn spawn_static_async<F: Future + 'static, Notifier: ObserverNotified<F::Output>>(
         &mut self,
         task: Task<F, Notifier>,
     ) -> impl Future<Output = impl Observer<Value = F::Output>>
     where
         Self: Sized,
-        F: 'static,
         <F as Future>::Output: Unpin,
         <F as Future>::Output: 'static,
     {
