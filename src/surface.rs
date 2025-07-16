@@ -123,7 +123,7 @@ impl Surface {
         self.sys.raw_window_handle()
     }
 
-    pub fn window_handle(&self) -> WindowHandle {
+    pub fn window_handle(&self) -> WindowHandle<'_> {
         //should be safe because we own the raw handle
         unsafe { WindowHandle::borrow_raw(self.raw_window_handle()) }
     }
@@ -149,7 +149,7 @@ impl Surface {
         self.sys.raw_display_handle()
     }
 
-    pub fn display_handle(&self) -> DisplayHandle {
+    pub fn display_handle(&self) -> DisplayHandle<'_> {
         //should be safe because we own the raw handle
         unsafe { DisplayHandle::borrow_raw(self.raw_display_handle()) }
     }

@@ -65,15 +65,13 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
         &mut self,
         task: Task<
             Pin<Box<dyn Future<Output = Box<dyn Any>>>>,
-            Box<dyn ObserverNotified<(dyn Any + 'static)>>,
+            Box<dyn ObserverNotified<dyn Any + 'static>>,
         >,
     ) -> Box<
-        (
-            dyn Observer<
-                    Output = FinishedObservation<Box<(dyn Any + 'static)>>,
-                    Value = Box<(dyn Any + 'static)>,
-                > + 'static
-        ),
+        dyn Observer<
+                Output = FinishedObservation<Box<dyn Any + 'static>>,
+                Value = Box<dyn Any + 'static>,
+            > + 'static,
     > {
         let (s, o) = task.spawn_local_objsafe(self);
         already_on_main_thread_submit(async {
@@ -86,21 +84,17 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
         &'s mut self,
         task: Task<
             Pin<Box<dyn Future<Output = Box<dyn Any>>>>,
-            Box<dyn ObserverNotified<(dyn Any + 'static)>>,
+            Box<dyn ObserverNotified<dyn Any + 'static>>,
         >,
     ) -> Box<
-        (
-            dyn std::future::Future<
-                    Output = Box<
-                        (
-                            dyn Observer<
-                                    Output = FinishedObservation<Box<(dyn Any + 'static)>>,
-                                    Value = Box<(dyn Any + 'static)>,
-                                > + 'static
-                        ),
-                    >,
-                > + 's
-        ),
+        dyn std::future::Future<
+                Output = Box<
+                    dyn Observer<
+                            Output = FinishedObservation<Box<dyn Any + 'static>>,
+                            Value = Box<dyn Any + 'static>,
+                        > + 'static,
+                >,
+            > + 's,
     > {
         Box::new(async {
             let (s, o) = task.spawn_local_objsafe(self);
