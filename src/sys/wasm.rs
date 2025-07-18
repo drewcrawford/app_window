@@ -215,6 +215,17 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let push_context = Context::current();
     let push_context_2 = push_context.clone();
 
+    logwise::info_sync!("wasm_thread WILL spawn");
+
+    wasm_thread::spawn(|| {
+        logwise::info_sync!("wasm_thread spawn");
+        let new_context = Context::new_task(Some(push_context_2), "app_window after MT context");
+        let new_id = new_context.context_id();
+        new_context.set_current();
+        closure();
+        Context::pop(new_id);
+    });
+
     let event_loop_context = Context::new_task(Some(Context::current()), "main thread eventloop");
     wasm_bindgen_futures::spawn_local(logwise::context::ApplyContext::new(
         event_loop_context,
@@ -229,13 +240,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
             }
         },
     ));
-    wasm_thread::spawn(|| {
-        let new_context = Context::new_task(Some(push_context_2), "app_window after MT context");
-        let new_id = new_context.context_id();
-        new_context.set_current();
-        closure();
-        Context::pop(new_id);
-    });
+
 }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {

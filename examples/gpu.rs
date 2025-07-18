@@ -200,7 +200,7 @@ mod gpu {
                             wgpu_run(Window::default().await).await;
                         },
                     )
-                    .spawn_current_static();
+                        .spawn_static_current()
                 });
             }
             WGPUStrategy::NotMainThread => {
@@ -214,7 +214,7 @@ mod gpu {
                                 wgpu_run(Window::default().await).await;
                             },
                         )
-                        .spawn_current_static()
+                            .spawn_static_current()
                     })
                     .unwrap();
             }
@@ -226,7 +226,7 @@ mod gpu {
                         wgpu_run(Window::default().await).await;
                     },
                 )
-                .spawn_current_static();
+                    .spawn_static_current()
             }
             _ => {
                 panic!("Unsupported WGPU strategy: {:?}", app_window::WGPU_STRATEGY);

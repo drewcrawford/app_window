@@ -96,13 +96,13 @@ pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
     let old = IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Release);
 
     assert!(!old, "Do not call main more than once.");
-    {
-        use crate::some_executor::MainThreadExecutor;
-        some_executor::thread_executor::set_thread_local_executor_adapting_notifier(
-            MainThreadExecutor {},
-        );
-        some_executor::thread_executor::set_thread_static_executor_adapting_notifier(MainThreadExecutor {});
-    }
+
+    use crate::some_executor::MainThreadExecutor;
+    some_executor::thread_executor::set_thread_local_executor_adapting_notifier(
+        MainThreadExecutor {},
+    );
+    some_executor::thread_executor::set_thread_static_executor_adapting_notifier(MainThreadExecutor {});
+
     sys::run_main_thread(closure);
 }
 
