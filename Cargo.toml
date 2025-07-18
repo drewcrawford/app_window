@@ -55,6 +55,7 @@ web-time = "1"
 console_error_panic_hook = "0.1.7"
 wasm_thread = "0.3.3"
 wasm-bindgen-test = "0.3"
+web-time = "1.1"
 
 
 # windows

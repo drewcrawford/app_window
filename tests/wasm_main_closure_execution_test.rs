@@ -29,10 +29,14 @@ use std::thread;
 #[cfg(target_arch = "wasm32")]
 use wasm_thread as thread;
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn main() {
+    test_executors::sleep_on(test())
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn test() {
     let (s,r) = std::sync::mpsc::channel();
-    let (s2, r2) = std::sync::mpsc::channel();
+    let (s2, r2) = r#continue::continuation();
 
     thread::spawn(move || {
         //one message received here
@@ -42,11 +46,9 @@ fn main() {
     app_window::application::main(move || {
         //send two messages to the channel
         s.send(()).unwrap();
-        s2.send(()).unwrap();
+        s2.send(());
     });
-
-    r2.recv_timeout(Duration::from_millis(500)).unwrap();
-
+    r2.await;
 
 }
 

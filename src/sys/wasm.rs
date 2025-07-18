@@ -19,6 +19,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::js_sys::Promise;
 use web_sys::js_sys::TypeError;
 use web_sys::{HtmlCanvasElement, window};
+use web_time;
 
 #[derive(Debug)]
 pub struct Window {}
@@ -227,7 +228,7 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     });
 
     let event_loop_context = Context::new_task(Some(Context::current()), "main thread eventloop");
-    wasm_bindgen_futures::spawn_local(logwise::context::ApplyContext::new(
+    let apply_context = logwise::context::ApplyContext::new(
         event_loop_context,
         async move {
             loop {
@@ -239,8 +240,8 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
                 }
             }
         },
-    ));
-
+    );
+    wasm_bindgen_futures::spawn_local(apply_context);
 }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {

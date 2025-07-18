@@ -23,7 +23,10 @@
 use app_window::executor::already_on_main_thread_submit;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
+#[cfg(target_arch = "wasm32")]
+use web_time::Duration;
 
 fn main() {
     println!("=== Testing Main Thread Executor Nested Submission Bug ===\n");
