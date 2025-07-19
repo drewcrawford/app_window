@@ -29,6 +29,12 @@ use std::thread;
 #[cfg(target_arch = "wasm32")]
 use wasm_thread as thread;
 
+//for the time being, wasm_thread only works in browser
+//see https://github.com/rustwasm/wasm-bindgen/issues/4534,
+//though we also need wasm_thread support.
+#[cfg(target_arch = "wasm32")]
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
 fn main() {
     test_executors::sleep_on(test())
 }
