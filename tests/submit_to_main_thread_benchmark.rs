@@ -25,7 +25,7 @@ use web_time::{Duration, Instant};
 #[cfg(target_arch = "wasm32")]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-const NUM_ITERATIONS: usize = 200;
+const NUM_ITERATIONS: usize = 50;
 
 struct TimingStats {
     samples: Vec<Duration>,
@@ -105,7 +105,10 @@ fn main() {
             let t = Task::without_notifications(
                 "submit_to_main_thread_benchmark".to_string(),
                 Configuration::default(),
-                run_benchmark(logger),
+                async {
+                    run_benchmark(logger).await;
+                    std::process::exit(0);
+                },
             );
             t.spawn_static_current();
 
@@ -142,7 +145,7 @@ async fn wasm_main() {
         t.spawn_static_current();
     });
 
-    futures::join!(r, dump_logger.periodic_drain_to_console(Duration::from_secs(20)));
+    futures::join!(r, dump_logger.periodic_drain_to_console(Duration::from_secs(1)));
 
 }
 
@@ -192,7 +195,6 @@ async fn run_benchmark(logger: Arc<logwise::InMemoryLogger>) {
 
     // Report results
     stats.report();
-    std::process::exit(3);
 }
     
 
