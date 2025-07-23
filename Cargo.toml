@@ -31,6 +31,9 @@ wgpu = "~25"
 ampsc = "0.2.0"
 test_executors = "0.3.4" # gpu example
 
+# needed for submit_to_main_thread_benchmark
+futures = "0.3"
+
 
 # macos
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -47,7 +50,7 @@ web-sys = { version = "0.3.76", features=["CssStyleDeclaration","HtmlCanvasEleme
 wasm-bindgen = "0.2.99"
 wasm_thread = "0.3.3"
 wasm-bindgen-futures = "0.4.49"
-ampsc = "0.2.0"
+continue_stream = {path = "../continue_stream"}
 web-time = "1"
 
 
@@ -98,6 +101,12 @@ name = "wasm_main_closure_execution_test"
 path = "tests/wasm_main_closure_execution_test.rs"
 harness = false
 
+[[test]]
+name = "submit_to_main_thread_benchmark"
+path = "tests/submit_to_main_thread_benchmark.rs"
+harness = false
+
 [patch.crates-io]
 send_cells = { path = "../send_cells" }
 some_executor = { path = "../some_executor" }
+logwise = { path = "../logwise" }

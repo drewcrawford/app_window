@@ -32,7 +32,7 @@ enum MainThreadEvent {
     Execute(Box<dyn FnOnce() + Send + 'static>),
 }
 
-static MAIN_THREAD_SENDER: OnceLock<ampsc::ChannelProducer<MainThreadEvent>> = OnceLock::new();
+static MAIN_THREAD_SENDER: OnceLock<continue_stream::Sender<MainThreadEvent>> = OnceLock::new();
 
 struct CanvasHolder {
     handle: WebWindowHandle,
@@ -204,7 +204,7 @@ pub fn is_main_thread() -> bool {
     web_sys::window().is_some()
 }
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
-    let (sender, mut receiver) = ampsc::channel();
+    let (sender, mut receiver) = continue_stream::continuation();
 
     let mut sent = false;
     MAIN_THREAD_SENDER.get_or_init(|| {
@@ -253,25 +253,10 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
             .expect(crate::application::CALL_MAIN)
             .clone();
         let boxed_closure = Box::new(closure) as Box<dyn FnOnce() -> () + Send + 'static>;
-        let send_task = some_executor::task::Task::new_objsafe(
-            "send to main thread".into(),
-            Box::new(async move {
-                mt_sender
-                    .send(MainThreadEvent::Execute(boxed_closure))
-                    .await
-                    .expect("Can't send");
-                mt_sender.async_drop().await;
-                Box::new(()) as Box<dyn std::any::Any + Send>
-            }),
-            Configuration::new(
-                Hint::Unknown,
-                some_executor::Priority::UserInitiated,
-                some_executor::Instant::now(),
-            ),
-            None,
-        );
-        let o = some_executor::current_executor::current_executor().spawn_objsafe(send_task);
-        o.detach();
+        let perf = logwise::perfwarn_begin!("starting SEND task");
+
+        mt_sender
+            .send(MainThreadEvent::Execute(boxed_closure));
     }
 }
 
