@@ -25,6 +25,7 @@ pub(crate) use windows as sys;
 pub(crate) use linux as sys;
 
 use crate::input::Window;
+use crate::application::is_main_thread_running;
 use atomic_float::AtomicF64;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
@@ -33,7 +34,7 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_LEFT};
 ///
 /// let mouse = Mouse::coalesced();
@@ -45,7 +46,7 @@ pub const MOUSE_BUTTON_LEFT: u8 = 0;
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_RIGHT};
 ///
 /// let mouse = Mouse::coalesced();
@@ -57,7 +58,7 @@ pub const MOUSE_BUTTON_RIGHT: u8 = 1;
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_MIDDLE};
 ///
 /// let mouse = Mouse::coalesced();
@@ -72,7 +73,7 @@ pub const MOUSE_BUTTON_MIDDLE: u8 = 2;
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use app_window::input::mouse::Mouse;
 ///
 /// let mouse = Mouse::coalesced();
@@ -113,7 +114,7 @@ impl MouseWindowLocation {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// # use app_window::input::mouse::Mouse;
     /// # let mouse = Mouse::coalesced();
     /// if let Some(location) = mouse.window_pos() {
@@ -131,7 +132,7 @@ impl MouseWindowLocation {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// # use app_window::input::mouse::Mouse;
     /// # let mouse = Mouse::coalesced();
     /// if let Some(location) = mouse.window_pos() {
@@ -147,7 +148,7 @@ impl MouseWindowLocation {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// # use app_window::input::mouse::Mouse;
     /// # let mouse = Mouse::coalesced();
     /// if let Some(location) = mouse.window_pos() {
@@ -163,7 +164,7 @@ impl MouseWindowLocation {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// # use app_window::input::mouse::Mouse;
     /// # let mouse = Mouse::coalesced();
     /// if let Some(location) = mouse.window_pos() {
@@ -242,7 +243,7 @@ impl Shared {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_LEFT};
 ///
 /// let mouse = Mouse::coalesced();
@@ -278,13 +279,14 @@ impl Mouse {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use app_window::input::mouse::Mouse;
     ///
     /// let mouse = Mouse::coalesced();
     /// // Now you can query mouse state
     /// ```
     pub fn coalesced() -> Self {
+        assert!(is_main_thread_running(), "Main thread must be started before creating coalesced mouse");
         let shared = Arc::new(Shared::new());
         let coalesced = sys::PlatformCoalescedMouse::new(&shared);
         Mouse {
@@ -324,7 +326,7 @@ impl Mouse {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT};
     ///
     /// let mouse = Mouse::coalesced();
@@ -354,7 +356,7 @@ impl Mouse {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use app_window::input::mouse::Mouse;
     ///
     /// let mut mouse = Mouse::coalesced();
@@ -391,7 +393,7 @@ impl Default for Mouse {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use app_window::input::mouse::Mouse;
     ///
     /// let mouse = Mouse::default();

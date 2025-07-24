@@ -14,7 +14,7 @@
 //!
 //! # Example
 //!
-//! ```
+//! ```no_run
 //! use app_window::input::keyboard::{Keyboard, key::KeyboardKey};
 //!
 //! let keyboard = Keyboard::coalesced();
@@ -64,6 +64,7 @@ pub(crate) use linux as sys;
 
 use crate::input::keyboard::key::KeyboardKey;
 use crate::input::keyboard::sys::PlatformCoalescedKeyboard;
+use crate::application::is_main_thread_running;
 
 /// Internal shared state for keyboard tracking.
 ///
@@ -116,7 +117,7 @@ impl Shared {
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use app_window::input::keyboard::{Keyboard, key::KeyboardKey};
 ///
 /// let keyboard = Keyboard::coalesced();
@@ -143,13 +144,14 @@ impl Keyboard {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use app_window::input::keyboard::Keyboard;
     ///
     /// let keyboard = Keyboard::coalesced();
     /// // The keyboard is now ready to track key states
     /// ```
     pub fn coalesced() -> Self {
+        assert!(is_main_thread_running(), "Main thread must be started before creating coalesced keyboard");
         let shared = Arc::new(Shared::new());
         let _platform_coalesced_keyboard = PlatformCoalescedKeyboard::new(&shared);
         Self {
@@ -175,7 +177,7 @@ impl Keyboard {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use app_window::input::keyboard::{Keyboard, key::KeyboardKey};
     ///
     /// let keyboard = Keyboard::coalesced();
@@ -218,7 +220,7 @@ impl Default for Keyboard {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// use app_window::input::keyboard::Keyboard;
     ///
     /// let keyboard = Keyboard::default();
