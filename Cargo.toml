@@ -113,6 +113,10 @@ harness = false
 name = "platform_coalesced_mouse_test"
 path = "tests/platform_coalesced_mouse_test.rs"
 harness = false
+[[test]]
+name = "platform_coalesced_keyboard_test"
+path = "tests/platform_coalesced_keyboard_test.rs"
+harness = false
 
 [patch.crates-io]
 send_cells = { path = "../send_cells" }
