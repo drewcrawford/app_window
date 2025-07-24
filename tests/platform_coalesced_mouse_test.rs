@@ -89,27 +89,28 @@ async fn test_platform_coalesced_mouse_creation() {
         logwise::info_sync!("Non-main thread started, creating PlatformCoalescedMouse");
 
         // This is the main test: creating a PlatformCoalescedMouse from a non-main thread
-        let result = std::panic::catch_unwind(|| {
-            let mouse = app_window::input::mouse::Mouse::coalesced();
-            logwise::info_sync!("Successfully created PlatformCoalescedMouse from non-main thread");
-            mouse
-        });
+        // Note: Since Mouse::coalesced() is now async, we spawn an async task
+        let spawn_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let task = Task::without_notifications(
+                "mouse_creation_test".to_string(),
+                Configuration::default(),
+                async move {
+                    // Try to create the mouse - this will now happen on the main thread via MainThreadCell
+                    match app_window::input::mouse::Mouse::coalesced().await {
+                        mouse => {
+                            logwise::info_sync!("Successfully created PlatformCoalescedMouse");
+                            logwise::warn_sync!(
+                                "✅ SUCCESS: PlatformCoalescedMouse created successfully"
+                            );
+                            tx.send(true);
+                        }
+                    }
+                },
+            );
+            task.spawn_static_current();
+        }));
 
-        match result {
-            Ok(_mouse) => {
-                logwise::warn_sync!(
-                    "✅ SUCCESS: PlatformCoalescedMouse created successfully from non-main thread"
-                );
-                tx.send(true);
-            }
-            Err(e) => {
-                logwise::error_sync!(
-                    "❌ FAILURE: Failed to create PlatformCoalescedMouse from non-main thread: {error}",
-                    error = logwise::privacy::LogIt(&e)
-                );
-                tx.send(false);
-            }
-        }
+        spawn_result.unwrap();
     });
 
     // Wait for the result

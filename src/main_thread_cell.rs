@@ -238,7 +238,7 @@ impl<T> MainThreadCell<T> {
         T: 'static,
     {
         let shared = self.shared.clone();
-        
+
         // First, get the future from the closure on the main thread
         let future = application::on_main_thread(move || {
             Self::verify_main_thread();
@@ -248,7 +248,7 @@ impl<T> MainThreadCell<T> {
             future
         })
         .await;
-        
+
         // Then await the future (this can happen on any thread since F: Send)
         future.await
     }
@@ -303,12 +303,10 @@ impl<T> From<T> for MainThreadCell<T> {
 mod tests {
     use super::*;
     use std::sync::Arc;
-    #[cfg(target_arch = "wasm32")]
-    use wasm_thread as thread;
     #[cfg(not(target_arch = "wasm32"))]
     use std::thread;
-
-
+    #[cfg(target_arch = "wasm32")]
+    use wasm_thread as thread;
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
     #[test]
@@ -325,11 +323,10 @@ mod tests {
         let cell1 = MainThreadCell::new(42);
         let cell2 = cell1.clone();
         let cell3 = MainThreadCell::new(42);
-        
+
         assert_eq!(cell1, cell2); // Same underlying Arc
         assert_ne!(cell1, cell3); // Different Arc instances
     }
-
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
     #[test]
@@ -344,20 +341,18 @@ mod tests {
         //for the time being, wasm_thread only works in browser
         //see https://github.com/rustwasm/wasm-bindgen/issues/4534,
         //though we also need wasm_thread support.
-        #[cfg(target_arch="wasm32")]
+        #[cfg(target_arch = "wasm32")]
         wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
         let cell = MainThreadCell::new(42);
-        let (c,f) = r#continue::continuation();
-        
+        let (c, f) = r#continue::continuation();
+
         // Verify we can send the cell to another thread
         thread::spawn(move || {
             // We can hold the cell in another thread, just not access it
             let _held_cell = cell;
             c.send(());
         });
-        
+
         f.await;
     }
-
-
 }

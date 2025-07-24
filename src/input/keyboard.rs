@@ -62,9 +62,9 @@ pub(crate) use windows as sys;
 #[cfg(target_os = "linux")]
 pub(crate) use linux as sys;
 
+use crate::application::is_main_thread_running;
 use crate::input::keyboard::key::KeyboardKey;
 use crate::input::keyboard::sys::PlatformCoalescedKeyboard;
-use crate::application::is_main_thread_running;
 
 /// Internal shared state for keyboard tracking.
 ///
@@ -151,7 +151,10 @@ impl Keyboard {
     /// // The keyboard is now ready to track key states
     /// ```
     pub fn coalesced() -> Self {
-        assert!(is_main_thread_running(), "Main thread must be started before creating coalesced keyboard");
+        assert!(
+            is_main_thread_running(),
+            "Main thread must be started before creating coalesced keyboard"
+        );
         let shared = Arc::new(Shared::new());
         let _platform_coalesced_keyboard = PlatformCoalescedKeyboard::new(&shared);
         Self {

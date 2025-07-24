@@ -189,7 +189,7 @@ pub(crate) fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM
 pub(super) struct PlatformCoalescedMouse {}
 
 impl PlatformCoalescedMouse {
-    pub(crate) fn new(shared: &Arc<Shared>) -> PlatformCoalescedMouse {
+    pub(crate) async fn new(shared: &Arc<Shared>) -> PlatformCoalescedMouse {
         MOUSE_STATE
             .get_or_init(Mutex::default)
             .lock()

@@ -24,8 +24,8 @@ pub(crate) use windows as sys;
 #[cfg(target_os = "linux")]
 pub(crate) use linux as sys;
 
-use crate::input::Window;
 use crate::application::is_main_thread_running;
+use crate::input::Window;
 use atomic_float::AtomicF64;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
@@ -35,10 +35,12 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 /// # Examples
 ///
 /// ```no_run
+/// # async fn example() {
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_LEFT};
 ///
-/// let mouse = Mouse::coalesced();
+/// let mouse = Mouse::coalesced().await;
 /// let left_pressed = mouse.button_state(MOUSE_BUTTON_LEFT);
+/// # }
 /// ```
 pub const MOUSE_BUTTON_LEFT: u8 = 0;
 
@@ -47,10 +49,12 @@ pub const MOUSE_BUTTON_LEFT: u8 = 0;
 /// # Examples
 ///
 /// ```no_run
+/// # async fn example() {
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_RIGHT};
 ///
-/// let mouse = Mouse::coalesced();
+/// let mouse = Mouse::coalesced().await;
 /// let right_pressed = mouse.button_state(MOUSE_BUTTON_RIGHT);
+/// # }
 /// ```
 pub const MOUSE_BUTTON_RIGHT: u8 = 1;
 
@@ -59,10 +63,12 @@ pub const MOUSE_BUTTON_RIGHT: u8 = 1;
 /// # Examples
 ///
 /// ```no_run
+/// # async fn example() {
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_MIDDLE};
 ///
-/// let mouse = Mouse::coalesced();
+/// let mouse = Mouse::coalesced().await;
 /// let middle_pressed = mouse.button_state(MOUSE_BUTTON_MIDDLE);
+/// # }
 /// ```
 pub const MOUSE_BUTTON_MIDDLE: u8 = 2;
 
@@ -74,13 +80,15 @@ pub const MOUSE_BUTTON_MIDDLE: u8 = 2;
 /// # Examples
 ///
 /// ```no_run
+/// # async fn example() {
 /// use app_window::input::mouse::Mouse;
 ///
-/// let mouse = Mouse::coalesced();
+/// let mouse = Mouse::coalesced().await;
 /// if let Some(location) = mouse.window_pos() {
 ///     println!("Mouse at ({}, {})", location.pos_x(), location.pos_y());
 ///     println!("Window size: {}x{}", location.window_width(), location.window_height());
 /// }
+/// # }
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct MouseWindowLocation {
@@ -115,12 +123,14 @@ impl MouseWindowLocation {
     /// # Examples
     ///
     /// ```no_run
+    /// # async fn example() {
     /// # use app_window::input::mouse::Mouse;
-    /// # let mouse = Mouse::coalesced();
+    /// # let mouse = Mouse::coalesced().await;
     /// if let Some(location) = mouse.window_pos() {
     ///     let x = location.pos_x();
     ///     println!("Mouse X: {}", x);
     /// }
+    /// # }
     /// ```
     pub fn pos_x(&self) -> f64 {
         self.pos_x
@@ -133,12 +143,14 @@ impl MouseWindowLocation {
     /// # Examples
     ///
     /// ```no_run
+    /// # async fn example() {
     /// # use app_window::input::mouse::Mouse;
-    /// # let mouse = Mouse::coalesced();
+    /// # let mouse = Mouse::coalesced().await;
     /// if let Some(location) = mouse.window_pos() {
     ///     let y = location.pos_y();
     ///     println!("Mouse Y: {}", y);
     /// }
+    /// # }
     /// ```
     pub fn pos_y(&self) -> f64 {
         self.pos_y
@@ -149,12 +161,14 @@ impl MouseWindowLocation {
     /// # Examples
     ///
     /// ```no_run
+    /// # async fn example() {
     /// # use app_window::input::mouse::Mouse;
-    /// # let mouse = Mouse::coalesced();
+    /// # let mouse = Mouse::coalesced().await;
     /// if let Some(location) = mouse.window_pos() {
     ///     let width = location.window_width();
     ///     println!("Window width: {}", width);
     /// }
+    /// # }
     /// ```
     pub fn window_width(&self) -> f64 {
         self.window_width
@@ -165,12 +179,14 @@ impl MouseWindowLocation {
     /// # Examples
     ///
     /// ```no_run
+    /// # async fn example() {
     /// # use app_window::input::mouse::Mouse;
-    /// # let mouse = Mouse::coalesced();
+    /// # let mouse = Mouse::coalesced().await;
     /// if let Some(location) = mouse.window_pos() {
     ///     let height = location.window_height();
     ///     println!("Window height: {}", height);
     /// }
+    /// # }
     /// ```
     pub fn window_height(&self) -> f64 {
         self.window_height
@@ -244,9 +260,10 @@ impl Shared {
 /// # Examples
 ///
 /// ```no_run
+/// # async fn example() {
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_LEFT};
 ///
-/// let mouse = Mouse::coalesced();
+/// let mouse = Mouse::coalesced().await;
 ///
 /// // Check if left button is pressed
 /// if mouse.button_state(MOUSE_BUTTON_LEFT) {
@@ -257,6 +274,7 @@ impl Shared {
 /// if let Some(pos) = mouse.window_pos() {
 ///     println!("Mouse at ({}, {})", pos.pos_x(), pos.pos_y());
 /// }
+/// # }
 /// ```
 ///
 /// # Platform-specific behavior
@@ -280,15 +298,20 @@ impl Mouse {
     /// # Examples
     ///
     /// ```no_run
+    /// # async fn example() {
     /// use app_window::input::mouse::Mouse;
     ///
-    /// let mouse = Mouse::coalesced();
+    /// let mouse = Mouse::coalesced().await;
     /// // Now you can query mouse state
+    /// # }
     /// ```
-    pub fn coalesced() -> Self {
-        assert!(is_main_thread_running(), "Main thread must be started before creating coalesced mouse");
+    pub async fn coalesced() -> Self {
+        assert!(
+            is_main_thread_running(),
+            "Main thread must be started before creating coalesced mouse"
+        );
         let shared = Arc::new(Shared::new());
-        let coalesced = sys::PlatformCoalescedMouse::new(&shared);
+        let coalesced = sys::PlatformCoalescedMouse::new(&shared).await;
         Mouse {
             shared,
             _sys: coalesced,
@@ -327,9 +350,10 @@ impl Mouse {
     /// # Examples
     ///
     /// ```no_run
+    /// # async fn example() {
     /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT};
     ///
-    /// let mouse = Mouse::coalesced();
+    /// let mouse = Mouse::coalesced().await;
     ///
     /// if mouse.button_state(MOUSE_BUTTON_LEFT) {
     ///     println!("Left button is pressed");
@@ -338,6 +362,7 @@ impl Mouse {
     /// if mouse.button_state(MOUSE_BUTTON_RIGHT) {
     ///     println!("Right button is pressed");
     /// }
+    /// # }
     /// ```
     pub fn button_state(&self, button: u8) -> bool {
         self.shared.buttons[button as usize].load(Ordering::Relaxed)
@@ -357,15 +382,17 @@ impl Mouse {
     /// # Examples
     ///
     /// ```no_run
+    /// # async fn example() {
     /// use app_window::input::mouse::Mouse;
     ///
-    /// let mut mouse = Mouse::coalesced();
+    /// let mut mouse = Mouse::coalesced().await;
     ///
     /// // In your update loop:
     /// let (scroll_x, scroll_y) = mouse.load_clear_scroll_delta();
     /// if scroll_y != 0.0 {
     ///     println!("Scrolled vertically by {}", scroll_y);
     /// }
+    /// # }
     /// ```
     pub fn load_clear_scroll_delta(&mut self) -> (f64, f64) {
         let x = self.shared.scroll_delta_x.swap(0.0, Ordering::Relaxed);
@@ -385,22 +412,6 @@ impl Eq for Mouse {}
 impl Hash for Mouse {
     fn hash<H: Hasher>(&self, state: &mut H) {
         Arc::as_ptr(&self.shared).hash(state);
-    }
-}
-
-impl Default for Mouse {
-    /// Creates a default `Mouse` instance using [`Mouse::coalesced()`].
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use app_window::input::mouse::Mouse;
-    ///
-    /// let mouse = Mouse::default();
-    /// // Equivalent to Mouse::coalesced()
-    /// ```
-    fn default() -> Self {
-        Mouse::coalesced()
     }
 }
 

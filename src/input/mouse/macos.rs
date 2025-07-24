@@ -79,7 +79,7 @@ unsafe extern "C" {
 }
 
 impl PlatformCoalescedMouse {
-    pub fn new(shared: &Arc<Shared>) -> Self {
+    pub async fn new(shared: &Arc<Shared>) -> Self {
         let weak = Arc::downgrade(shared);
         let weak_raw = Weak::into_raw(weak) as *const c_void;
         PlatformCoalescedMouse {

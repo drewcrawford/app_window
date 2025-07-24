@@ -143,7 +143,7 @@ pub fn axis_event(_time: u32, axis: u32, value: f64, window: ObjectId) {
 static MOUSE_STATE: OnceLock<Mutex<MouseState>> = OnceLock::new();
 
 impl PlatformCoalescedMouse {
-    pub fn new(shared: &Arc<Shared>) -> Self {
+    pub async fn new(shared: &Arc<Shared>) -> Self {
         MOUSE_STATE
             .get_or_init(Mutex::default)
             .lock()
