@@ -101,7 +101,9 @@ pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
     some_executor::thread_executor::set_thread_local_executor_adapting_notifier(
         MainThreadExecutor {},
     );
-    some_executor::thread_executor::set_thread_static_executor_adapting_notifier(MainThreadExecutor {});
+    some_executor::thread_executor::set_thread_static_executor_adapting_notifier(
+        MainThreadExecutor {},
+    );
 
     sys::run_main_thread(closure);
 }

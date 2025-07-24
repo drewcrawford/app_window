@@ -2,7 +2,7 @@
 
 //! Test to verify that the closure passed to app_window::application::main() actually executes.
 //!
-//! This test reproduces the bug where the closure passed to `application::main()` 
+//! This test reproduces the bug where the closure passed to `application::main()`
 //! is never executed on WASM, causing the program to return immediately without
 //! running the user's initialization code.
 //!
@@ -17,8 +17,8 @@
 //!
 //! Run with: `cargo test --test wasm_main_closure_execution_test`
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
 #[cfg(target_arch = "wasm32")]
@@ -41,7 +41,7 @@ fn main() {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn test() {
-    let (s,r) = std::sync::mpsc::channel();
+    let (s, r) = std::sync::mpsc::channel();
     let (s2, r2) = r#continue::continuation();
 
     thread::spawn(move || {
@@ -55,6 +55,4 @@ async fn test() {
         s2.send(());
     });
     r2.await;
-
 }
-

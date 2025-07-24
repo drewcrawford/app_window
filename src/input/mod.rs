@@ -83,7 +83,9 @@ unsafe impl Send for Window {}
 #[cfg(target_os = "linux")]
 pub mod linux {
     pub use crate::input::keyboard::linux::wl_keyboard_event;
-    pub use crate::input::mouse::linux::{button_event, motion_event, xdg_toplevel_configure_event};
+    pub use crate::input::mouse::linux::{
+        button_event, motion_event, xdg_toplevel_configure_event,
+    };
 }
 
 #[cfg(target_os = "windows")]

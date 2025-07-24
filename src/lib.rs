@@ -219,6 +219,36 @@ pub mod executor;
 /// the `some_executor` abstraction.
 pub mod some_executor;
 
+/// Thread-safe cell for main-thread-only values.
+///
+/// This module provides [`main_thread_cell::MainThreadCell`], which allows sharing
+/// values across threads while ensuring all access happens on the main thread.
+/// This is useful for platform-specific resources that have main-thread requirements.
+///
+/// # Example
+/// ```no_run
+/// # async fn example() {
+/// use app_window::main_thread_cell::MainThreadCell;
+///
+/// // Create a cell (can be called from any thread)
+/// let cell = MainThreadCell::new(42);
+///
+/// // Access from main thread directly
+/// if app_window::application::is_main_thread() {
+///     let guard = cell.lock();
+///     println!("Value: {}", *guard);
+/// }
+///
+/// // Access from any thread via async dispatch
+/// let result = cell.with(|value| {
+///     // This runs on the main thread
+///     *value * 2
+/// }).await;
+/// assert_eq!(result, 84);
+/// # }
+/// ```
+pub mod main_thread_cell;
+
 /**
 Describes the preferred strategy for interacting with wgpu on this platform.
 */

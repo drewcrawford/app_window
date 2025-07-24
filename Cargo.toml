@@ -109,6 +109,11 @@ name = "submit_to_main_thread_benchmark"
 path = "tests/submit_to_main_thread_benchmark.rs"
 harness = false
 
+[[test]]
+name = "platform_coalesced_mouse_test"
+path = "tests/platform_coalesced_mouse_test.rs"
+harness = false
+
 [patch.crates-io]
 send_cells = { path = "../send_cells" }
 some_executor = { path = "../some_executor" }

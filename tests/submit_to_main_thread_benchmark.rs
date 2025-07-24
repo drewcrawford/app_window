@@ -11,14 +11,14 @@
 //! Run on WASM with: CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' cargo +nightly test --target wasm32-unknown-unknown -Z build-std=std,panic_abort
 
 use std::sync::{Arc, Mutex};
-#[cfg(not(target_arch="wasm32"))]
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
-#[cfg(target_arch="wasm32")]
+#[cfg(target_arch = "wasm32")]
 use wasm_thread as thread;
 
+use some_executor::task::{Configuration, Task};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
-use some_executor::task::{Configuration, Task};
 #[cfg(target_arch = "wasm32")]
 use web_time::{Duration, Instant};
 
@@ -33,7 +33,9 @@ struct TimingStats {
 
 impl TimingStats {
     fn new() -> Self {
-        Self { samples: Vec::new() }
+        Self {
+            samples: Vec::new(),
+        }
     }
 
     fn add_sample(&mut self, duration: Duration) {
@@ -48,26 +50,35 @@ impl TimingStats {
 
         let total: Duration = self.samples.iter().sum();
         let avg = total / self.samples.len() as u32;
-        
+
         let min = self.samples.iter().min().unwrap();
         let max = self.samples.iter().max().unwrap();
 
         let avg_micros = avg.as_micros() as f64;
-        let variance = self.samples.iter()
+        let variance = self
+            .samples
+            .iter()
             .map(|d| {
                 let diff = d.as_micros() as f64 - avg_micros;
                 diff * diff
             })
-            .sum::<f64>() / self.samples.len() as f64;
+            .sum::<f64>()
+            / self.samples.len() as f64;
         let std_dev = variance.sqrt();
 
         logwise::warn_sync!("=== Timing Statistics ===");
         logwise::warn_sync!("Samples: {samples}", samples = self.samples.len());
         logwise::warn_sync!("Average: {avg}µs", avg = format!("{:.3}", avg_micros));
-        logwise::warn_sync!("Min: {min}µs", min = format!("{:.3}", min.as_micros() as f64));
-        logwise::warn_sync!("Max: {max}µs", max = format!("{:.3}", max.as_micros() as f64));
+        logwise::warn_sync!(
+            "Min: {min}µs",
+            min = format!("{:.3}", min.as_micros() as f64)
+        );
+        logwise::warn_sync!(
+            "Max: {max}µs",
+            max = format!("{:.3}", max.as_micros() as f64)
+        );
         logwise::warn_sync!("Std Dev: {std_dev}µs", std_dev = format!("{:.3}", std_dev));
-        
+
         // Show distribution
         logwise::warn_sync!("Distribution:");
         let buckets = [
@@ -78,9 +89,11 @@ impl TimingStats {
             (500.0, 1000.0, "500µs-1ms"),
             (1000.0, f64::INFINITY, "  >1ms"),
         ];
-        
+
         for (min_us, max_us, label) in &buckets {
-            let count = self.samples.iter()
+            let count = self
+                .samples
+                .iter()
                 .filter(|d| {
                     let us = d.as_micros() as f64;
                     us >= *min_us && us < *max_us
@@ -88,7 +101,12 @@ impl TimingStats {
                 .count();
             if count > 0 {
                 let percentage = (count as f64 / self.samples.len() as f64) * 100.0;
-                logwise::warn_sync!("{label}: {count} ({percentage}%)", label = *label, count = format!("{:3}", count), percentage = format!("{:5.1}", percentage));
+                logwise::warn_sync!(
+                    "{label}: {count} ({percentage}%)",
+                    label = *label,
+                    count = format!("{:3}", count),
+                    percentage = format!("{:5.1}", percentage)
+                );
             }
         }
     }
@@ -111,7 +129,6 @@ fn main() {
                 },
             );
             t.spawn_static_current();
-
         });
     });
 }
@@ -121,14 +138,12 @@ fn main() {}
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn wasm_main() {
-
     assert!(app_window::application::is_main_thread());
     // back up logger
     let logger = Arc::new(logwise::InMemoryLogger::new());
     let dump_logger = logger.clone();
     logwise::set_global_logger(logger.clone());
-    let (c,r) = r#continue::continuation();
-
+    let (c, r) = r#continue::continuation();
 
     app_window::application::main(move || {
         logwise::warn_sync!("=== submit_to_main_thread_benchmark ===");
@@ -145,15 +160,17 @@ async fn wasm_main() {
         t.spawn_static_current();
     });
 
-    futures::join!(r, dump_logger.periodic_drain_to_console(Duration::from_secs(1)));
-
+    futures::join!(
+        r,
+        dump_logger.periodic_drain_to_console(Duration::from_secs(1))
+    );
 }
 
-
 async fn run_benchmark(logger: Arc<logwise::InMemoryLogger>) {
-
-
-    logwise::warn_sync!("\nRunning {iterations} iterations...", iterations = NUM_ITERATIONS);
+    logwise::warn_sync!(
+        "\nRunning {iterations} iterations...",
+        iterations = NUM_ITERATIONS
+    );
 
     let mut stats = TimingStats::new();
 
@@ -167,8 +184,7 @@ async fn run_benchmark(logger: Arc<logwise::InMemoryLogger>) {
 
     thread::spawn(move || {
         logwise::info_sync!("Thread up");
-        for (s,sender) in senders.drain(..).enumerate() {
-
+        for (s, sender) in senders.drain(..).enumerate() {
             // Record time just before submission
             let start_time = Instant::now();
 
@@ -185,7 +201,6 @@ async fn run_benchmark(logger: Arc<logwise::InMemoryLogger>) {
         }
     });
 
-
     // Collect results
     for recv in futures {
         logwise::warn_sync!("Will await next result...");
@@ -196,5 +211,3 @@ async fn run_benchmark(logger: Arc<logwise::InMemoryLogger>) {
     // Report results
     stats.report();
 }
-    
-

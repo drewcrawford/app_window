@@ -228,19 +228,16 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     });
 
     let event_loop_context = Context::new_task(Some(Context::current()), "main thread eventloop");
-    let apply_context = logwise::context::ApplyContext::new(
-        event_loop_context,
-        async move {
-            loop {
-                logwise::debuginternal_sync!("Waiting for main thread event");
-                let event = receiver.receive().await.expect("Can't receive event");
-                logwise::debuginternal_sync!("Received main thread event");
-                match event {
-                    MainThreadEvent::Execute(f) => f(),
-                }
+    let apply_context = logwise::context::ApplyContext::new(event_loop_context, async move {
+        loop {
+            logwise::debuginternal_sync!("Waiting for main thread event");
+            let event = receiver.receive().await.expect("Can't receive event");
+            logwise::debuginternal_sync!("Received main thread event");
+            match event {
+                MainThreadEvent::Execute(f) => f(),
             }
-        },
-    );
+        }
+    });
     wasm_bindgen_futures::spawn_local(apply_context);
 }
 
@@ -255,8 +252,7 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
         let boxed_closure = Box::new(closure) as Box<dyn FnOnce() -> () + Send + 'static>;
         let perf = logwise::perfwarn_begin!("starting SEND task");
 
-        mt_sender
-            .send(MainThreadEvent::Execute(boxed_closure));
+        mt_sender.send(MainThreadEvent::Execute(boxed_closure));
     }
 }
 
