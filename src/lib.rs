@@ -83,7 +83,9 @@ assert_eq!(result, 42);
 
 # Cargo features
 * `wgpu` - Helper functions for creating a wgpu surface.
-* `app_input` - Created windows are configured to receive input via [`app_input`](https://sealedabstract.com/code/app_input) crate.
+
+# Input handling
+This crate includes built-in cross-platform input handling for keyboard and mouse events. See the [`input`] module for details.
 
 # Supported platforms
 | Platform | Backend                  |
@@ -175,6 +177,22 @@ pub mod coordinates;
 /// # }
 /// ```
 pub mod surface;
+
+/// Cross-platform mouse and keyboard input handling.
+///
+/// This module provides keyboard and mouse input functionality that integrates
+/// with app_window. It handles platform-specific input events and provides
+/// a unified API across Windows, macOS, Linux, and WebAssembly.
+///
+/// # Example
+/// ```no_run
+/// use app_window::input::{keyboard::Keyboard, mouse::Mouse};
+///
+/// // Create input handlers
+/// let keyboard = Keyboard::coalesced();
+/// let mouse = Mouse::coalesced();
+/// ```
+pub mod input;
 
 /// Main thread executor for async operations.
 ///

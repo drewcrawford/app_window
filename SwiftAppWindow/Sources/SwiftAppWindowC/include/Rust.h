@@ -1,10 +1,10 @@
-typedef struct {
-    double width;
-    double height;
-    double scale;
-} SwiftAppWindowSurfaceSize;
-
-// Input handling functions from app_input
+// SPDX-License-Identifier: MPL-2.0
+//
+//  Rust.h
+//  SwiftRawInput
+//
+//  Created by Drew Crawford on 12/16/24.
+//
 #include <stdbool.h>
 #include <stdint.h>
 
