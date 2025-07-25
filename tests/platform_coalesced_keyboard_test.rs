@@ -95,8 +95,8 @@ async fn test_platform_coalesced_keyboard_creation() {
                 "keyboard_creation_test".to_string(),
                 Configuration::default(),
                 async move {
-                    // Try to create the keyboard - this should work since it's synchronous
-                    let keyboard = app_window::input::keyboard::Keyboard::coalesced();
+                    // Try to create the keyboard - this should work since it's async
+                    let keyboard = app_window::input::keyboard::Keyboard::coalesced().await;
                     logwise::info_sync!("Successfully created PlatformCoalescedKeyboard");
                     logwise::warn_sync!(
                         "✅ SUCCESS: PlatformCoalescedKeyboard created successfully"

@@ -60,7 +60,7 @@ impl Default for KeyboardState {
 #[derive(Debug)]
 pub(super) struct PlatformCoalescedKeyboard {}
 impl PlatformCoalescedKeyboard {
-    pub fn new(shared: &Arc<Shared>) -> Self {
+    pub async fn new(shared: &Arc<Shared>) -> Self {
         KEYBOARD_STATE
             .get_or_init(Mutex::default)
             .lock()

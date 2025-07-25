@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 use crate::input::keyboard::Shared;
 use crate::input::keyboard::key::KeyboardKey;
+use crate::main_thread_cell::MainThreadCell;
 use std::ffi::c_void;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -8,53 +9,56 @@ use web_sys::KeyboardEvent;
 
 #[derive(Debug)]
 pub(super) struct PlatformCoalescedKeyboard {
-    _key_down: JsValue,
-    _key_up: JsValue,
+    _key_down: MainThreadCell<JsValue>,
+    _key_up: MainThreadCell<JsValue>,
 }
 
-unsafe impl Send for PlatformCoalescedKeyboard {}
-unsafe impl Sync for PlatformCoalescedKeyboard {}
 
 pub(crate) const ARBITRARY_WINDOW_PTR: *mut c_void = 0x01 as *mut c_void;
 
 impl PlatformCoalescedKeyboard {
-    pub fn new(shared: &Arc<Shared>) -> Self {
-        let weak = Arc::downgrade(shared);
-        let weak_up = weak.clone();
-        let window = web_sys::window().expect("no global window exists");
-        let document = window.document().expect("no document on window");
-        let keydown_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-            let key = event.key();
-            let code = event.code();
+    pub async fn new(shared: &Arc<Shared>) -> Self {
+        let shared = shared.clone();
 
-            if let Some(shared) = weak.upgrade() {
-                let key = KeyboardKey::from_js_code(&code)
-                    .expect(format!("Unknown key: {}", key).as_str());
+        crate::application::on_main_thread(move || {
+            let weak = Arc::downgrade(&shared);
+            let weak_up = weak.clone();
+            let window = web_sys::window().expect("no global window exists");
+            let document = window.document().expect("no document on window");
+            let keydown_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
+                let key = event.key();
+                let code = event.code();
 
-                shared.set_key_state(key, true, ARBITRARY_WINDOW_PTR);
+                if let Some(shared) = weak.upgrade() {
+                    let key = KeyboardKey::from_js_code(&code)
+                        .expect(format!("Unknown key: {}", key).as_str());
+
+                    shared.set_key_state(key, true, ARBITRARY_WINDOW_PTR);
+                }
+            }) as Box<dyn FnMut(KeyboardEvent)>);
+            document
+                .add_event_listener_with_callback("keydown", keydown_callback.as_ref().unchecked_ref())
+                .expect("Can't add event listener");
+
+            let keyup_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
+                let key = event.key();
+                let code = event.code();
+                if let Some(shared) = weak_up.upgrade() {
+                    let key = KeyboardKey::from_js_code(&code)
+                        .expect(format!("Unknown key: {}", key).as_str());
+                    shared.set_key_state(key, false, ARBITRARY_WINDOW_PTR);
+                }
+            }) as Box<dyn FnMut(KeyboardEvent)>);
+            document
+                .add_event_listener_with_callback("keyup", keyup_callback.as_ref().unchecked_ref())
+                .expect("Can't add event listener");
+
+            PlatformCoalescedKeyboard {
+                _key_down: MainThreadCell::new(keydown_callback.into_js_value()),
+                _key_up: MainThreadCell::new(keyup_callback.into_js_value()),
             }
-        }) as Box<dyn FnMut(KeyboardEvent)>);
-        document
-            .add_event_listener_with_callback("keydown", keydown_callback.as_ref().unchecked_ref())
-            .expect("Can't add event listener");
-
-        let keyup_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-            let key = event.key();
-            let code = event.code();
-            if let Some(shared) = weak_up.upgrade() {
-                let key = KeyboardKey::from_js_code(&code)
-                    .expect(format!("Unknown key: {}", key).as_str());
-                shared.set_key_state(key, false, ARBITRARY_WINDOW_PTR);
-            }
-        }) as Box<dyn FnMut(KeyboardEvent)>);
-        document
-            .add_event_listener_with_callback("keyup", keyup_callback.as_ref().unchecked_ref())
-            .expect("Can't add event listener");
-
-        Self {
-            _key_down: keydown_callback.into_js_value(),
-            _key_up: keyup_callback.into_js_value(),
-        }
+        })
+        .await
     }
 }
 

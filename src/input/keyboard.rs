@@ -15,13 +15,15 @@
 //! # Example
 //!
 //! ```no_run
+//! # async fn example() {
 //! use app_window::input::keyboard::{Keyboard, key::KeyboardKey};
 //!
-//! let keyboard = Keyboard::coalesced();
+//! let keyboard = Keyboard::coalesced().await;
 //!
 //! // Initially, keys are not pressed
 //! assert_eq!(keyboard.is_pressed(KeyboardKey::A), false);
 //! assert_eq!(keyboard.is_pressed(KeyboardKey::Shift), false);
+//! # }
 //! ```
 //!
 //! # Platform Requirements
@@ -118,9 +120,10 @@ impl Shared {
 /// # Example
 ///
 /// ```no_run
+/// # async fn example() {
 /// use app_window::input::keyboard::{Keyboard, key::KeyboardKey};
 ///
-/// let keyboard = Keyboard::coalesced();
+/// let keyboard = Keyboard::coalesced().await;
 ///
 /// // Check various key states
 /// let is_a_pressed = keyboard.is_pressed(KeyboardKey::A);
@@ -129,6 +132,7 @@ impl Shared {
 ///
 /// // Keys start in unpressed state
 /// assert_eq!(is_a_pressed, false);
+/// # }
 /// ```
 #[derive(Debug)]
 pub struct Keyboard {
@@ -145,18 +149,20 @@ impl Keyboard {
     /// # Example
     ///
     /// ```no_run
+    /// # async fn example() {
     /// use app_window::input::keyboard::Keyboard;
     ///
-    /// let keyboard = Keyboard::coalesced();
+    /// let keyboard = Keyboard::coalesced().await;
     /// // The keyboard is now ready to track key states
+    /// # }
     /// ```
-    pub fn coalesced() -> Self {
+    pub async fn coalesced() -> Self {
         assert!(
             is_main_thread_running(),
             "Main thread must be started before creating coalesced keyboard"
         );
         let shared = Arc::new(Shared::new());
-        let _platform_coalesced_keyboard = PlatformCoalescedKeyboard::new(&shared);
+        let _platform_coalesced_keyboard = PlatformCoalescedKeyboard::new(&shared).await;
         Self {
             shared,
             _platform_coalesced_keyboard,
@@ -181,9 +187,10 @@ impl Keyboard {
     /// # Example
     ///
     /// ```no_run
+    /// # async fn example() {
     /// use app_window::input::keyboard::{Keyboard, key::KeyboardKey};
     ///
-    /// let keyboard = Keyboard::coalesced();
+    /// let keyboard = Keyboard::coalesced().await;
     ///
     /// // Check if specific keys are pressed
     /// if keyboard.is_pressed(KeyboardKey::Space) {
@@ -196,6 +203,7 @@ impl Keyboard {
     /// if ctrl_pressed && s_pressed {
     ///     // Handle Ctrl+S
     /// }
+    /// # }
     /// ```
     pub fn is_pressed(&self, key: KeyboardKey) -> bool {
         self.shared.key_states[key as usize].load(std::sync::atomic::Ordering::Relaxed)
@@ -218,21 +226,7 @@ impl Hash for Keyboard {
     }
 }
 
-impl Default for Keyboard {
-    /// Creates a default keyboard instance using [`Keyboard::coalesced()`].
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use app_window::input::keyboard::Keyboard;
-    ///
-    /// let keyboard = Keyboard::default();
-    /// // Equivalent to Keyboard::coalesced()
-    /// ```
-    fn default() -> Self {
-        Self::coalesced()
-    }
-}
+// Note: Default trait implementation removed because Keyboard::coalesced() is now async
 
 #[cfg(test)]
 mod test {

@@ -186,11 +186,13 @@ pub mod surface;
 ///
 /// # Example
 /// ```no_run
+/// # async fn example() {
 /// use app_window::input::{keyboard::Keyboard, mouse::Mouse};
 ///
 /// // Create input handlers
-/// let keyboard = Keyboard::coalesced();
-/// let mouse = Mouse::coalesced();
+/// let keyboard = Keyboard::coalesced().await;
+/// let mouse = Mouse::coalesced().await;
+/// # }
 /// ```
 pub mod input;
 
