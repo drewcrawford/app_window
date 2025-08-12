@@ -73,7 +73,7 @@ match Window::fullscreen("Fullscreen App".to_string()).await {
 use app_window::application;
 
 // From any thread:
-let result = application::on_main_thread(|| {
+let result = application::on_main_thread("ex",|| {
     // This runs on the main thread
     42
 }).await;
@@ -208,7 +208,7 @@ pub mod input;
 /// # application::main(|| {
 /// # async fn my_async_function() -> i32 { 42 }
 /// // Run an async function on the main thread
-/// let result = executor::on_main_thread_async(my_async_function());
+/// let result = executor::on_main_thread_async("ex",my_async_function());
 /// # });
 /// ```
 pub mod executor;

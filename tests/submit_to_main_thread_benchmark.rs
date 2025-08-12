@@ -180,7 +180,7 @@ async fn run_benchmark() {
             // Record time just before submission
             let start_time = Instant::now();
 
-            app_window::application::submit_to_main_thread(move || {
+            app_window::application::submit_to_main_thread("t1", move || {
                 // Record time when closure starts executing
                 let elapsed = start_time.elapsed();
 

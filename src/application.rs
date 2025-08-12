@@ -147,7 +147,7 @@ pub(crate) fn is_main_thread_running() -> bool {
 /// use app_window::application;
 ///
 /// // Execute a UI operation on the main thread
-/// let result = application::on_main_thread(|| {
+/// let result = application::on_main_thread("ex",|| {
 ///     println!("Running on main thread!");
 ///     42
 /// }).await;
@@ -163,21 +163,21 @@ pub(crate) fn is_main_thread_running() -> bool {
 /// use app_window::application;
 ///
 /// // Many UI operations must happen on the main thread
-/// let window_title = application::on_main_thread(|| {
+/// let window_title = application::on_main_thread("ex",|| {
 ///     // Platform-specific window operations would go here
 ///     "Main Window".to_string()
 /// }).await;
 /// # Ok(())
 /// # }
 /// ```
-pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(closure: F) -> R {
+pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(debug_label: &str, closure: F) -> R {
     let (sender, receiver) = r#continue::continuation();
     let block = move || {
         let r = closure();
         sender.send(r);
     };
 
-    submit_to_main_thread(block);
+    submit_to_main_thread(debug_label, block);
     receiver.await
 }
 
@@ -195,17 +195,16 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 ///
 /// This function handles platform-specific details of main thread execution and may
 /// install a main thread executor if necessary for the current platform.
-pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
-    let bt = std::backtrace::Backtrace::capture();
+pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: &str, closure: F) {
     let perf = move || {
         let start = time::Instant::now();
         closure();
         let duration = start.elapsed();
         if duration > time::Duration::from_millis(10) {
             logwise::warn_sync!(
-                "Main thread operation took too long: {duration}\nBacktrace:\n{bt}",
+                "Main thread operation took too long: {duration}\nlabel: {debug_label}",
                 duration = logwise::privacy::LogIt(duration),
-                bt = logwise::privacy::LogIt(format!("{}", bt))
+                debug_label = logwise::privacy::IPromiseItsNotPrivate(debug_label)
             );
         }
     };

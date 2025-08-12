@@ -127,7 +127,8 @@ impl SomeExecutor for MainThreadExecutor {
         F::Output: Send + Unpin,
     {
         let (s, o) = task.spawn(self);
-        submit_to_main_thread(|| {
+        let task_label = s.label().to_string();
+        submit_to_main_thread(&task_label, || {
             already_on_main_thread_submit(async {
                 s.into_future().await;
             });
@@ -144,7 +145,8 @@ impl SomeExecutor for MainThreadExecutor {
         F::Output: Send + Unpin,
     {
         let (s, o) = task.spawn(self);
-        submit_to_main_thread(|| {
+        let task_label = s.label().to_string();
+        submit_to_main_thread(&task_label, || {
             already_on_main_thread_submit(async {
                 s.into_future().await;
             });
@@ -157,7 +159,8 @@ impl SomeExecutor for MainThreadExecutor {
         task: some_executor::ObjSafeTask,
     ) -> some_executor::BoxedSendObserver {
         let (s, o) = task.spawn_objsafe(self);
-        submit_to_main_thread(|| {
+        let task_label = s.label().to_string();
+        submit_to_main_thread(&task_label, || {
             already_on_main_thread_submit(async {
                 s.into_future().await;
             });
@@ -168,7 +171,9 @@ impl SomeExecutor for MainThreadExecutor {
         #[allow(clippy::async_yields_async)]
         Box::new(async {
             let (s, o) = task.spawn_objsafe(self);
-            submit_to_main_thread(|| {
+            let task_label = s.label().to_string();
+
+            submit_to_main_thread(&task_label, || {
                 already_on_main_thread_submit(async {
                     s.into_future().await;
                 });

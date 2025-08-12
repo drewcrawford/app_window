@@ -104,7 +104,7 @@ struct Task {
 /// This function handles the wake notification for a specific task ID.
 fn wake_task(task_id: usize) {
     // Schedule main executor iteration on the main thread
-    crate::application::submit_to_main_thread(move || {
+    crate::application::submit_to_main_thread("wake_task", move || {
         // Add the task to the pollable queue
         let mut pollable = POLLABLE.take();
         pollable.push(task_id);
@@ -138,7 +138,7 @@ thread_local! {
 /// # fn test() -> impl Future<Output = ()> {
 /// # async {
 /// // Call from any thread to compute on the main thread
-/// let result = app_window::executor::on_main_thread_async(async {
+/// let result = app_window::executor::on_main_thread_async("ex",async {
 ///     // This code runs on the main thread
 ///     // Perform computation that needs main thread access
 ///     2 + 2
@@ -154,10 +154,11 @@ thread_local! {
 /// On all supported platforms, this ensures the future runs on the thread that owns
 /// the native event loop, which is required for UI operations.
 pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Send + 'static>(
+    debug_label: &'static str,
     future: F,
 ) -> R {
     let (sender, fut) = r#continue::continuation();
-    crate::application::submit_to_main_thread(|| {
+    crate::application::submit_to_main_thread(debug_label, || {
         already_on_main_thread_submit(async move {
             let r = future.await;
             sender.send(r);
@@ -271,7 +272,7 @@ fn main_executor_iter() {
                 }
             }
             //there MAY be more pollable tasks.  However, we want to yield here
-            submit_to_main_thread(main_executor_iter);
+            submit_to_main_thread("main_executor_iter", main_executor_iter);
         }
     }
     // drop(iter);
