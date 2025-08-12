@@ -289,3 +289,5 @@ Describes the preferred strategy for interacting with wgpu on this platform.
 */
 #[cfg(any(target_arch = "wasm32", target_os = "macos"))]
 pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
+
+logwise::declare_logging_domain!();

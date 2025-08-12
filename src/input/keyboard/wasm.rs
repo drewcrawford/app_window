@@ -9,8 +9,7 @@ use web_sys::KeyboardEvent;
 
 #[derive(Debug)]
 pub(super) struct PlatformCoalescedKeyboard {
-    _key_down: MainThreadCell<JsValue>,
-    _key_up: MainThreadCell<JsValue>,
+
 }
 
 
@@ -39,6 +38,7 @@ impl PlatformCoalescedKeyboard {
             document
                 .add_event_listener_with_callback("keydown", keydown_callback.as_ref().unchecked_ref())
                 .expect("Can't add event listener");
+            keydown_callback.forget();
 
             let keyup_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
                 let key = event.key();
@@ -52,10 +52,9 @@ impl PlatformCoalescedKeyboard {
             document
                 .add_event_listener_with_callback("keyup", keyup_callback.as_ref().unchecked_ref())
                 .expect("Can't add event listener");
+            keyup_callback.forget();
 
             PlatformCoalescedKeyboard {
-                _key_down: MainThreadCell::new(keydown_callback.into_js_value()),
-                _key_up: MainThreadCell::new(keyup_callback.into_js_value()),
             }
         })
         .await

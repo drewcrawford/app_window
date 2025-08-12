@@ -93,7 +93,8 @@ impl Waker {
 ///
 /// Each task contains a pinned future, unique ID, and shared state for wake notifications.
 struct Task {
-    id: usize,
+    context: logwise::context::Context,
+    our_task_id: usize,
     future: Pin<Box<dyn Future<Output = ()> + 'static>>,
     wake_inner: Arc<Inner>,
 }
@@ -201,15 +202,20 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
 
     // Create task with unique ID
     let wake_inner = Arc::new(Inner::new(task_id));
+    let parent_context = logwise::context::Context::current();
+    //creating a task is a bit heavyweight, particularly on the main thread.
+    let new_context = logwise::context::Context::from_parent(parent_context);
+
     let task = Task {
-        id: task_id,
+        our_task_id: task_id,
+        context: new_context,
         future: Box::pin(future),
         wake_inner,
     };
 
     // Add task to POLLABLE queue
     let mut pollable = POLLABLE.take();
-    logwise::info_sync!("Submitting task {id} to main executor", id = task_id);
+    // logwise::info_sync!("Submitting task {id} to main executor", id = task_id);
     pollable.push(task_id);
     POLLABLE.replace(pollable);
 
@@ -228,7 +234,7 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
 /// that may be added during polling without losing them.
 fn main_executor_iter() {
     // Pop off a pollable task
-    let iter = perfwarn_begin!("main_executor_iter");
+    // let iter = perfwarn_begin!("main_executor_iter");
     let mut swap_pollable = POLLABLE.take();
     let poll = swap_pollable.pop();
     POLLABLE.replace(swap_pollable);
@@ -248,14 +254,11 @@ fn main_executor_iter() {
             };
             let into_waker = waker.into_waker();
             let parent = logwise::context::Context::current();
-            let new_context =
-                logwise::context::Context::new_task(Some(parent), "main_executor_iter");
-            let new_id = new_context.context_id();
-            new_context.set_current();
-            logwise::info_sync!("Polling task {id}", id = task.id);
+            task.context.clone().set_current();
+            // logwise::info_sync!("Polling task {id}", id = task.id);
             let mut context = Context::from_waker(&into_waker);
             let poll_result = task.future.as_mut().poll(&mut context);
-            logwise::context::Context::pop(new_id);
+            parent.set_current();
             match poll_result {
                 std::task::Poll::Ready(()) => {
                     // Task completed, don't put it back
@@ -263,7 +266,7 @@ fn main_executor_iter() {
                 std::task::Poll::Pending => {
                     // Task is still running, put it back in RUNNING
                     let mut running = RUNNING.take().unwrap_or_default();
-                    running.insert(task.id, task);
+                    running.insert(task.our_task_id, task);
                     RUNNING.replace(Some(running));
                 }
             }
@@ -271,5 +274,5 @@ fn main_executor_iter() {
             submit_to_main_thread(main_executor_iter);
         }
     }
-    drop(iter);
+    // drop(iter);
 }

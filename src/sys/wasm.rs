@@ -36,7 +36,6 @@ static MAIN_THREAD_SENDER: OnceLock<continue_stream::Sender<MainThreadEvent>> = 
 
 struct CanvasHolder {
     handle: WebWindowHandle,
-    _closure: Closure<dyn FnMut()>,
     canvas: Rc<HtmlCanvasElement>,
     closure_box: Arc<Mutex<Option<Box<dyn Fn(Size) + Send>>>>,
 }
@@ -73,7 +72,7 @@ impl CanvasHolder {
             .expect("Can't set data-raw-handle");
         let canvas_rc = Rc::new(canvas);
         let canvas_weak = Rc::downgrade(&canvas_rc);
-        let closure = Closure::new(move || {
+        let closure = Closure::<dyn FnMut()>::new(move || {
             match canvas_weak.upgrade() {
                 None => { /* deallocated? */ }
                 Some(canvas) => {
@@ -87,8 +86,10 @@ impl CanvasHolder {
                 }
             }
         });
+
         //I think this is safe??
         window.set_onresize(Some(closure.as_ref().unchecked_ref()));
+        closure.forget();
 
         document
             .body()
@@ -97,7 +98,6 @@ impl CanvasHolder {
             .expect("Can't append canvas to body");
         CanvasHolder {
             handle: WebWindowHandle::new(1),
-            _closure: closure,
             canvas: canvas_rc,
             closure_box,
         }
@@ -216,10 +216,10 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let push_context = Context::current();
     let push_context_2 = push_context.clone();
 
-    logwise::info_sync!("wasm_thread WILL spawn");
+    // logwise::info_sync!("wasm_thread WILL spawn");
 
     wasm_thread::spawn(|| {
-        logwise::info_sync!("wasm_thread spawn");
+        // logwise::info_sync!("wasm_thread spawn");
         let new_context = Context::new_task(Some(push_context_2), "app_window after MT context");
         let new_id = new_context.context_id();
         new_context.set_current();
@@ -230,9 +230,9 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let event_loop_context = Context::new_task(Some(Context::current()), "main thread eventloop");
     let apply_context = logwise::context::ApplyContext::new(event_loop_context, async move {
         loop {
-            logwise::debuginternal_sync!("Waiting for main thread event");
+            // logwise::debuginternal_sync!("Waiting for main thread event");
             let event = receiver.receive().await.expect("Can't receive event");
-            logwise::debuginternal_sync!("Received main thread event");
+            // logwise::debuginternal_sync!("Received main thread event");
             match event {
                 MainThreadEvent::Execute(f) => f(),
             }
@@ -250,7 +250,7 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
             .expect(crate::application::CALL_MAIN)
             .clone();
         let boxed_closure = Box::new(closure) as Box<dyn FnOnce() -> () + Send + 'static>;
-        let perf = logwise::perfwarn_begin!("starting SEND task");
+        // let perf = logwise::perfwarn_begin!("starting SEND task");
 
         mt_sender.send(MainThreadEvent::Execute(boxed_closure));
     }

@@ -19,10 +19,6 @@ fn js_button_to_rust(button: i16) -> u8 {
 
 #[derive(Debug)]
 pub(super) struct PlatformCoalescedMouse {
-    _mouse_listener: MainThreadCell<JsValue>,
-    _mousedown_listener: MainThreadCell<JsValue>,
-    _mouseup_listener: MainThreadCell<JsValue>,
-    _wheel_listener: MainThreadCell<JsValue>,
 }
 
 impl PlatformCoalescedMouse {
@@ -71,6 +67,7 @@ impl PlatformCoalescedMouse {
                     mousemove_callback.as_ref().unchecked_ref(),
                 )
                 .expect("Can't add event listener");
+            mousemove_callback.forget();
 
             let mousedown_callback = Closure::wrap(Box::new(move |event: MouseEvent| {
                 if let Some(shared) = weak_down.upgrade() {
@@ -87,6 +84,7 @@ impl PlatformCoalescedMouse {
                     mousedown_callback.as_ref().unchecked_ref(),
                 )
                 .expect("Can't add event listener");
+            mousedown_callback.forget();
 
             let mouseup_callback = Closure::wrap(Box::new(move |event: MouseEvent| {
                 if let Some(shared) = weak_up.upgrade() {
@@ -103,6 +101,7 @@ impl PlatformCoalescedMouse {
                     mouseup_callback.as_ref().unchecked_ref(),
                 )
                 .expect("Can't add event listener");
+            mouseup_callback.forget();
 
             let wheel_callback = Closure::wrap(Box::new(move |event: WheelEvent| {
                 let raw_x = event.delta_x();
@@ -121,12 +120,9 @@ impl PlatformCoalescedMouse {
             document
                 .add_event_listener_with_callback("wheel", wheel_callback.as_ref().unchecked_ref())
                 .expect("Can't add event listener");
+            wheel_callback.forget();
 
             PlatformCoalescedMouse {
-                _mouse_listener: MainThreadCell::new(mousemove_callback.into_js_value()),
-                _mousedown_listener: MainThreadCell::new(mousedown_callback.into_js_value()),
-                _mouseup_listener: MainThreadCell::new(mouseup_callback.into_js_value()),
-                _wheel_listener: MainThreadCell::new(wheel_callback.into_js_value()),
             }
         })
         .await

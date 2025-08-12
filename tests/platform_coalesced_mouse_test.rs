@@ -53,9 +53,6 @@ fn main() {}
 async fn wasm_main() {
     assert!(app_window::application::is_main_thread());
 
-    let logger = Arc::new(logwise::InMemoryLogger::new());
-    let dump_logger = logger.clone();
-    logwise::set_global_logger(logger.clone());
     let (c, r) = r#continue::continuation();
 
     app_window::application::main(move || {
@@ -73,10 +70,7 @@ async fn wasm_main() {
         t.spawn_static_current();
     });
 
-    futures::join!(
-        r,
-        dump_logger.periodic_drain_to_console(Duration::from_secs(1))
-    );
+    r.await;
 }
 
 async fn test_platform_coalesced_mouse_creation() {

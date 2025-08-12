@@ -114,7 +114,6 @@ impl TimingStats {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    let logger = Arc::new(logwise::InMemoryLogger::new());
 
     logwise::warn_sync!("=== submit_to_main_thread Latency Benchmark ===");
 
@@ -124,7 +123,7 @@ fn main() {
                 "submit_to_main_thread_benchmark".to_string(),
                 Configuration::default(),
                 async {
-                    run_benchmark(logger).await;
+                    run_benchmark().await;
                     std::process::exit(0);
                 },
             );
@@ -139,10 +138,6 @@ fn main() {}
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn wasm_main() {
     assert!(app_window::application::is_main_thread());
-    // back up logger
-    let logger = Arc::new(logwise::InMemoryLogger::new());
-    let dump_logger = logger.clone();
-    logwise::set_global_logger(logger.clone());
     let (c, r) = r#continue::continuation();
 
     app_window::application::main(move || {
@@ -153,20 +148,17 @@ async fn wasm_main() {
             Configuration::default(),
             async move {
                 logwise::info_sync!("WASM main thread started");
-                run_benchmark(logger).await;
+                run_benchmark().await;
                 c.send(());
             },
         );
         t.spawn_static_current();
     });
 
-    futures::join!(
-        r,
-        dump_logger.periodic_drain_to_console(Duration::from_secs(1))
-    );
+    r.await;
 }
 
-async fn run_benchmark(logger: Arc<logwise::InMemoryLogger>) {
+async fn run_benchmark() {
     logwise::warn_sync!(
         "\nRunning {iterations} iterations...",
         iterations = NUM_ITERATIONS
