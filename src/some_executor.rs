@@ -35,7 +35,8 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
         <F as Future>::Output: 'static,
     {
         let (s, o) = task.spawn_local(self);
-        already_on_main_thread_submit(async {
+        let task_label = s.label().to_string();
+        already_on_main_thread_submit(task_label, async {
             s.into_future().await;
         });
         o
@@ -51,9 +52,10 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
         <F as Future>::Output: 'static,
     {
         let (s, o) = task.spawn_local(self);
+        let task_label = s.label().to_string();
         #[allow(clippy::async_yields_async)]
         async move {
-            already_on_main_thread_submit(async {
+            already_on_main_thread_submit(task_label, async {
                 s.into_future().await;
             });
             o
@@ -73,7 +75,8 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
             > + 'static,
     > {
         let (s, o) = task.spawn_local_objsafe(self);
-        already_on_main_thread_submit(async {
+        let task_label = s.label().to_string();
+        already_on_main_thread_submit(task_label, async {
             s.into_future().await;
         });
         Box::new(o)
@@ -98,7 +101,8 @@ impl SomeLocalExecutor<'static> for MainThreadExecutor {
         #[allow(clippy::async_yields_async)]
         Box::new(async {
             let (s, o) = task.spawn_local_objsafe(self);
-            already_on_main_thread_submit(async {
+            let task_label = s.label().to_string();
+            already_on_main_thread_submit(task_label, async {
                 s.into_future().await;
             });
             Box::new(o)
@@ -128,8 +132,8 @@ impl SomeExecutor for MainThreadExecutor {
     {
         let (s, o) = task.spawn(self);
         let task_label = s.label().to_string();
-        submit_to_main_thread(&task_label, || {
-            already_on_main_thread_submit(async {
+        submit_to_main_thread(task_label.clone(), || {
+            already_on_main_thread_submit(task_label, async {
                 s.into_future().await;
             });
         });
@@ -146,8 +150,8 @@ impl SomeExecutor for MainThreadExecutor {
     {
         let (s, o) = task.spawn(self);
         let task_label = s.label().to_string();
-        submit_to_main_thread(&task_label, || {
-            already_on_main_thread_submit(async {
+        submit_to_main_thread(task_label.clone(), || {
+            already_on_main_thread_submit(task_label, async {
                 s.into_future().await;
             });
         });
@@ -160,8 +164,8 @@ impl SomeExecutor for MainThreadExecutor {
     ) -> some_executor::BoxedSendObserver {
         let (s, o) = task.spawn_objsafe(self);
         let task_label = s.label().to_string();
-        submit_to_main_thread(&task_label, || {
-            already_on_main_thread_submit(async {
+        submit_to_main_thread(task_label.clone(), || {
+            already_on_main_thread_submit(task_label, async {
                 s.into_future().await;
             });
         });
@@ -173,8 +177,8 @@ impl SomeExecutor for MainThreadExecutor {
             let (s, o) = task.spawn_objsafe(self);
             let task_label = s.label().to_string();
 
-            submit_to_main_thread(&task_label, || {
-                already_on_main_thread_submit(async {
+            submit_to_main_thread(task_label.clone(), || {
+                already_on_main_thread_submit(task_label, async {
                     s.into_future().await;
                 });
             });
@@ -212,7 +216,8 @@ impl SomeStaticExecutor for MainThreadExecutor {
         <F as Future>::Output: 'static,
     {
         let (s, o) = task.spawn_static(self);
-        already_on_main_thread_submit(async {
+        let task_label = s.label().to_string();
+        already_on_main_thread_submit(task_label, async {
             s.into_future().await;
         });
         o
@@ -228,9 +233,10 @@ impl SomeStaticExecutor for MainThreadExecutor {
         <F as Future>::Output: 'static,
     {
         let (s, o) = task.spawn_static(self);
+        let task_label = s.label().to_string();
         #[allow(clippy::async_yields_async)]
         async move {
-            already_on_main_thread_submit(async {
+            already_on_main_thread_submit(task_label, async {
                 s.into_future().await;
             });
             o
@@ -239,7 +245,8 @@ impl SomeStaticExecutor for MainThreadExecutor {
 
     fn spawn_static_objsafe(&mut self, task: ObjSafeStaticTask) -> BoxedStaticObserver {
         let (s, o) = task.spawn_static_objsafe(self);
-        already_on_main_thread_submit(async {
+        let task_label = s.label().to_string();
+        already_on_main_thread_submit(task_label, async {
             s.into_future().await;
         });
         Box::new(o)
@@ -252,7 +259,8 @@ impl SomeStaticExecutor for MainThreadExecutor {
         #[allow(clippy::async_yields_async)]
         Box::new(async {
             let (s, o) = task.spawn_static_objsafe(self);
-            already_on_main_thread_submit(async {
+            let task_label = s.label().to_string();
+            already_on_main_thread_submit(task_label, async {
                 s.into_future().await;
             });
             Box::new(o) as BoxedStaticObserver

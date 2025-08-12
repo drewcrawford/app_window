@@ -19,7 +19,7 @@ impl PlatformCoalescedKeyboard {
     pub async fn new(shared: &Arc<Shared>) -> Self {
         let shared = shared.clone();
 
-        crate::application::on_main_thread(move || {
+        crate::application::on_main_thread("PlatformCoalescedKeyboard::setup".to_string(), move || {
             let weak = Arc::downgrade(&shared);
             let weak_up = weak.clone();
             let window = web_sys::window().expect("no global window exists");

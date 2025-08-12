@@ -25,7 +25,7 @@ impl PlatformCoalescedMouse {
     pub async fn new(shared: &Arc<crate::input::mouse::Shared>) -> Self {
         let shared = shared.clone();
 
-        crate::application::on_main_thread(move || {
+        crate::application::on_main_thread("PlatformCoalescedMouse setup".to_string(), move || {
             let window = web_sys::window().expect("no global window exists");
             let document = window.document().expect("no document on window");
 

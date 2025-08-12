@@ -25,9 +25,9 @@
 
 use std::sync::atomic::AtomicBool;
 #[cfg(not(target_arch = "wasm32"))]
-use std::time;
+pub(crate) use std::time;
 #[cfg(target_arch = "wasm32")]
-use web_time as time;
+pub(crate) use web_time as time;
 
 use crate::sys;
 
@@ -147,7 +147,7 @@ pub(crate) fn is_main_thread_running() -> bool {
 /// use app_window::application;
 ///
 /// // Execute a UI operation on the main thread
-/// let result = application::on_main_thread("ex",|| {
+/// let result = application::on_main_thread("ex".to_owned(),|| {
 ///     println!("Running on main thread!");
 ///     42
 /// }).await;
@@ -163,14 +163,14 @@ pub(crate) fn is_main_thread_running() -> bool {
 /// use app_window::application;
 ///
 /// // Many UI operations must happen on the main thread
-/// let window_title = application::on_main_thread("ex",|| {
+/// let window_title = application::on_main_thread("ex".to_owned(),|| {
 ///     // Platform-specific window operations would go here
 ///     "Main Window".to_string()
 /// }).await;
 /// # Ok(())
 /// # }
 /// ```
-pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(debug_label: &str, closure: F) -> R {
+pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(debug_label: String, closure: F) -> R {
     let (sender, receiver) = r#continue::continuation();
     let block = move || {
         let r = closure();
@@ -195,14 +195,19 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 ///
 /// This function handles platform-specific details of main thread execution and may
 /// install a main thread executor if necessary for the current platform.
-pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: &str, closure: F) {
+pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, closure: F) {
     let perf = move || {
         let start = time::Instant::now();
+        let prior = logwise::context::Context::current();
+        let c = logwise::context::Context::new_task(Some(prior.clone()), debug_label.clone());
+        c.set_current();
         closure();
+        prior.set_current();
+
         let duration = start.elapsed();
         if duration > time::Duration::from_millis(10) {
             logwise::warn_sync!(
-                "Main thread operation took too long: {duration}\nlabel: {debug_label}",
+                "Main thread operation took too long: {duration}\n",
                 duration = logwise::privacy::LogIt(duration),
                 debug_label = logwise::privacy::IPromiseItsNotPrivate(debug_label)
             );

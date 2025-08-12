@@ -73,7 +73,7 @@ match Window::fullscreen("Fullscreen App".to_string()).await {
 use app_window::application;
 
 // From any thread:
-let result = application::on_main_thread("ex",|| {
+let result = application::on_main_thread("ex".to_owned(),|| {
     // This runs on the main thread
     42
 }).await;
@@ -208,7 +208,7 @@ pub mod input;
 /// # application::main(|| {
 /// # async fn my_async_function() -> i32 { 42 }
 /// // Run an async function on the main thread
-/// let result = executor::on_main_thread_async("ex",my_async_function());
+/// let result = executor::on_main_thread_async("ex".to_owned(),my_async_function());
 /// # });
 /// ```
 pub mod executor;
@@ -284,10 +284,33 @@ Describes the preferred strategy for interacting with wgpu on this platform.
 #[cfg(target_os = "windows")]
 pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
 
+#[cfg(target_os = "macos")]
+pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
+
 /**
 Describes the preferred strategy for interacting with wgpu on this platform.
 */
-#[cfg(any(target_arch = "wasm32", target_os = "macos"))]
+#[cfg(target_arch = "wasm32")]
 pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
+
+
+
+/**
+Describes the preferred strategy for interacting with wgpu surfaces on this platform.
+*/
+#[cfg(target_os = "linux")]
+pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::NotMainThread;
+
+/**
+Describes the preferred strategy for interacting with wgpu on this platform.
+*/
+#[cfg(target_os = "windows")]
+pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
+
+#[cfg(any(target_os="macos"))]
+pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
+#[cfg(any(target_arch = "wasm32"))]
+pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
+
 
 logwise::declare_logging_domain!();

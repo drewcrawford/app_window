@@ -91,8 +91,8 @@ fn test_nested_main_thread_submit_bug() -> bool {
             // This inner call should complete properly, but the bug may cause it to be dropped
             let inner_counter = counter_clone.clone();
             let inner_log = log_clone.clone();
-            app_window::application::submit_to_main_thread("executor_bug_test", move || {
-                already_on_main_thread_submit(async move {
+            app_window::application::submit_to_main_thread("executor_bug_test".to_owned(), move || {
+                already_on_main_thread_submit("executor_bug_test".to_owned(), async move {
                     {
                         let mut log = inner_log.lock().unwrap();
                         log.push("inner_future_executing".to_string());
@@ -110,8 +110,8 @@ fn test_nested_main_thread_submit_bug() -> bool {
         };
 
         // Submit the nested future
-        app_window::application::submit_to_main_thread("executor_bug_test_2", move || {
-            already_on_main_thread_submit(nested_future);
+        app_window::application::submit_to_main_thread("executor_bug_test_2".to_owned(), move || {
+            already_on_main_thread_submit("2".to_owned(), nested_future);
         });
 
         // Wait a bit for async execution to complete
@@ -174,8 +174,8 @@ fn test_deep_nested_submissions() -> bool {
         fn create_nested_task(depth: usize, max_depth: usize, counter: Arc<AtomicUsize>) {
             if depth < max_depth {
                 let counter_clone = counter.clone();
-                app_window::application::submit_to_main_thread("executor_bug_test_3", move || {
-                    already_on_main_thread_submit(async move {
+                app_window::application::submit_to_main_thread("executor_bug_test_3".to_owned(), move || {
+                    already_on_main_thread_submit("3".to_owned(), async move {
                         counter_clone.fetch_add(1, Ordering::Relaxed);
                         create_nested_task(depth + 1, max_depth, counter_clone);
                     });
@@ -232,13 +232,13 @@ fn test_debug_output_pattern() -> bool {
         // This test documents the expected behavior vs the bug
         // The actual debug prints are in the already_on_main_thread_submit function
 
-        app_window::application::submit_to_main_thread("executor_bug_test_5", move || {
-            already_on_main_thread_submit(async {
+        app_window::application::submit_to_main_thread("executor_bug_test_5".to_owned(), move || {
+            already_on_main_thread_submit("5".to_owned(), async {
                 // This should trigger the debug pattern:
                 // "before tasks 0"
                 // "pushed task 1"
-                app_window::application::submit_to_main_thread("executor_bug_test_4", move || {
-                    already_on_main_thread_submit(async {
+                app_window::application::submit_to_main_thread("executor_bug_test_4".to_owned(), move || {
+                    already_on_main_thread_submit("4".to_owned(), async {
                         // This inner call should show:
                         // "before tasks 0" (problematic - should not be 0 if outer task is running)
                         // "pushed task 1"
@@ -279,14 +279,14 @@ fn test_concurrent_submissions() -> bool {
         // Submit multiple tasks that each submit additional tasks
         for _i in 0..num_tasks {
             let counter = completion_counter.clone();
-            app_window::application::submit_to_main_thread("t2", move || {
-                already_on_main_thread_submit(async move {
+            app_window::application::submit_to_main_thread("t2".to_owned(), move || {
+                already_on_main_thread_submit("t2".to_owned(),  async move {
                     counter.fetch_add(1, Ordering::Relaxed);
 
                     // Each task submits one more task
                     let inner_counter = counter.clone();
-                    app_window::application::submit_to_main_thread("executor_bug_test_6", move || {
-                        already_on_main_thread_submit(async move {
+                    app_window::application::submit_to_main_thread("executor_bug_test_6".to_owned(), move || {
+                        already_on_main_thread_submit("6".to_owned(), async move {
                             inner_counter.fetch_add(1, Ordering::Relaxed);
                         });
                     });

@@ -192,7 +192,7 @@ mod gpu {
         //set up main thread
         app_window::application::main(|| match app_window::WGPU_STRATEGY {
             WGPUStrategy::MainThread => {
-                app_window::application::submit_to_main_thread("gpu",|| {
+                app_window::application::submit_to_main_thread("gpu".to_owned(),|| {
                     some_executor::task::Task::without_notifications(
                         "gpu_main".to_string(),
                         Configuration::default(),

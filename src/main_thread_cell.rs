@@ -53,7 +53,7 @@ impl<T> Drop for Shared<T> {
                 "MainThreadCell::drop({})",
                 std::any::type_name::<T>()
             );
-            application::submit_to_main_thread(&drop_shared, || {
+            application::submit_to_main_thread(drop_shared, || {
                 drop(take);
             });
         }
@@ -214,7 +214,7 @@ impl<T> MainThreadCell<T> {
     {
         let shared = self.shared.clone();
         let main_thread_cell = format!("MainThreadCell({})", std::any::type_name::<T>());
-        application::on_main_thread(&main_thread_cell, move || {
+        application::on_main_thread(main_thread_cell, move || {
             Self::verify_main_thread();
             let guard = shared.as_ref().unwrap().mutex.lock().unwrap();
             let r = c(unsafe { shared.as_ref().unwrap().inner.as_ref().unwrap().get().get() });
@@ -246,7 +246,7 @@ impl<T> MainThreadCell<T> {
 
         let main_thread_cell = format!("MainThreadCell({})", std::any::type_name::<T>());
         // First, get the future from the closure on the main thread
-        let future = application::on_main_thread(&main_thread_cell, move || {
+        let future = application::on_main_thread(main_thread_cell, move || {
             Self::verify_main_thread();
             let guard = shared.as_ref().unwrap().mutex.lock().unwrap();
             let future = c(unsafe { shared.as_ref().unwrap().inner.as_ref().unwrap().get().get() });
@@ -270,7 +270,7 @@ impl<T> MainThreadCell<T> {
     {
         logwise::info_sync!("MainThreadCell::new_on_main_thread() started");
         let new_on_main_thread = format!("MainThreadCell::new_on_main_thread({})", std::any::type_name::<T>());
-        let value = application::on_main_thread(&new_on_main_thread,  || async move {
+        let value = application::on_main_thread(new_on_main_thread,  || async move {
             logwise::info_sync!("Inside main thread closure");
             let f = c();
             logwise::info_sync!("Calling provided closure f()...");

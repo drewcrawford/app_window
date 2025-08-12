@@ -126,7 +126,7 @@ impl Window {
         let (sender, fut) = r#continue::continuation();
         let sender_mutex = Arc::new(Mutex::new(Some(sender)));
         let sender_mutex_error = sender_mutex.clone();
-        let main_thread_job = crate::application::on_main_thread(move || {
+        let main_thread_job = crate::application::on_main_thread("Window::fullscreen".to_string(),  move || {
             let strong_closure = Closure::once(move |_| {
                 let lock = sender_mutex.lock().unwrap().take().expect("already sent?");
                 lock.send(Ok(()));
@@ -156,7 +156,7 @@ impl Window {
         logwise::warn_sync!("Waiting for fut...");
         let fullscreen_result = fut.await;
         //drop our closures
-        crate::application::on_main_thread(move || {
+        crate::application::on_main_thread("Drop fs".to_string(), move || {
             drop(closures);
         })
         .await;
@@ -166,7 +166,7 @@ impl Window {
         }
     }
     pub async fn new(_position: Position, _size: Size, title: String) -> Self {
-        let f = crate::application::on_main_thread(move || {
+        let f = crate::application::on_main_thread("Window::new".to_string(), move || {
             let window = window().expect("Can't get window");
             let doc = window.document().expect("Can't get document");
             doc.set_title(&title);
@@ -177,7 +177,7 @@ impl Window {
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
-        let sys_surface = crate::application::on_main_thread(|| {
+        let sys_surface = crate::application::on_main_thread("surface".to_string(), || {
             let surface = CANVAS_HOLDER.with_borrow_mut(|canvas| {
                 let canvas = canvas.as_ref().expect("no canvas");
                 Surface {
@@ -220,14 +220,14 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
 
     wasm_thread::spawn(|| {
         // logwise::info_sync!("wasm_thread spawn");
-        let new_context = Context::new_task(Some(push_context_2), "app_window after MT context");
+        let new_context = Context::new_task(Some(push_context_2), "app_window after MT context".to_string());
         let new_id = new_context.context_id();
         new_context.set_current();
         closure();
         Context::pop(new_id);
     });
 
-    let event_loop_context = Context::new_task(Some(Context::current()), "main thread eventloop");
+    let event_loop_context = Context::new_task(Some(Context::current()), "main thread eventloop".to_string());
     let apply_context = logwise::context::ApplyContext::new(event_loop_context, async move {
         loop {
             // logwise::debuginternal_sync!("Waiting for main thread event");
@@ -271,7 +271,7 @@ pub struct Surface {
 }
 impl Surface {
     pub async fn size_scale(&self) -> (Size, f64) {
-        crate::application::on_main_thread(|| {
+        crate::application::on_main_thread("size_scale".to_string(), || {
             let w = window().expect("No window?");
             let width = w
                 .inner_width()

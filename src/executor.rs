@@ -26,7 +26,7 @@ implementation.
 */
 use crate::application::submit_to_main_thread;
 use crate::sys;
-use logwise::perfwarn_begin;
+use logwise::{debuginternal_sync, perfwarn_begin};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::future::Future;
@@ -104,7 +104,7 @@ struct Task {
 /// This function handles the wake notification for a specific task ID.
 fn wake_task(task_id: usize) {
     // Schedule main executor iteration on the main thread
-    crate::application::submit_to_main_thread("wake_task", move || {
+    crate::application::submit_to_main_thread("wake_task".to_string(), move || {
         // Add the task to the pollable queue
         let mut pollable = POLLABLE.take();
         pollable.push(task_id);
@@ -138,7 +138,7 @@ thread_local! {
 /// # fn test() -> impl Future<Output = ()> {
 /// # async {
 /// // Call from any thread to compute on the main thread
-/// let result = app_window::executor::on_main_thread_async("ex",async {
+/// let result = app_window::executor::on_main_thread_async("ex".to_owned(),async {
 ///     // This code runs on the main thread
 ///     // Perform computation that needs main thread access
 ///     2 + 2
@@ -154,12 +154,12 @@ thread_local! {
 /// On all supported platforms, this ensures the future runs on the thread that owns
 /// the native event loop, which is required for UI operations.
 pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Send + 'static>(
-    debug_label: &'static str,
+    debug_label: String,
     future: F,
 ) -> R {
     let (sender, fut) = r#continue::continuation();
-    crate::application::submit_to_main_thread(debug_label, || {
-        already_on_main_thread_submit(async move {
+    crate::application::submit_to_main_thread(debug_label.clone(), || {
+        already_on_main_thread_submit(debug_label, async move {
             let r = future.await;
             sender.send(r);
         })
@@ -182,7 +182,7 @@ pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Sen
 /// # use std::future::Future;
 /// # fn setup_main_thread() {
 /// // This code must run on the main thread
-/// app_window::executor::already_on_main_thread_submit(async {
+/// app_window::executor::already_on_main_thread_submit("ex".to_owned(), async {
 ///     println!("Running async task on main thread");
 ///     // Perform async operations that yield to the event loop
 /// });
@@ -195,7 +195,7 @@ pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Sen
 /// (when the `some_executor` feature is enabled) when spawning tasks, but can be used
 /// directly when you're already on the main thread and want to submit work to be
 /// executed asynchronously.
-pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F) {
+pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(debug_label: String, future: F) {
     assert!(sys::is_main_thread());
 
     // Generate unique task ID
@@ -205,8 +205,11 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
     let wake_inner = Arc::new(Inner::new(task_id));
     let parent_context = logwise::context::Context::current();
     //creating a task is a bit heavyweight, particularly on the main thread.
-    let new_context = logwise::context::Context::from_parent(parent_context);
-
+    // let new_context = logwise::context::Context::from_parent(parent_context);
+    let new_context = logwise::context::Context::new_task(Some(parent_context), debug_label.clone());
+    
+    logwise::info_sync!("Creating task {id} {label}", id = logwise::privacy::IPromiseItsNotPrivate(new_context.task_id()), label = logwise::privacy::LogIt(debug_label));
+    // debuginternal_sync!("Creating task {id}", id = logwise::privacy::IPromiseItsNotPrivate(new_context.task_id()));
     let task = Task {
         our_task_id: task_id,
         context: new_context,
@@ -234,6 +237,7 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(future: F
 /// This function loops while there are pollable tasks, handling new tasks
 /// that may be added during polling without losing them.
 fn main_executor_iter() {
+    let begin_iter = crate::application::time::Instant::now();
     // Pop off a pollable task
     // let iter = perfwarn_begin!("main_executor_iter");
     let mut swap_pollable = POLLABLE.take();
@@ -247,6 +251,7 @@ fn main_executor_iter() {
             // Get the task from RUNNING
             let mut running = RUNNING.take().unwrap_or_default();
             let mut task = running.remove(&task).unwrap();
+            let task_id = task.context.task_id();
             RUNNING.replace(Some(running));
 
             //with that out of the way, we can poll the task
@@ -272,7 +277,10 @@ fn main_executor_iter() {
                 }
             }
             //there MAY be more pollable tasks.  However, we want to yield here
-            submit_to_main_thread("main_executor_iter", main_executor_iter);
+            submit_to_main_thread("main_executor_iter".to_string(), main_executor_iter);
+            if begin_iter.elapsed() > crate::application::time::Duration::from_millis(10) {
+                logwise::warn_sync!("main_executor_iter {task} took too long: {duration}", task = logwise::privacy::IPromiseItsNotPrivate(task_id), duration = logwise::privacy::IPromiseItsNotPrivate(begin_iter.elapsed()));
+            }
         }
     }
     // drop(iter);
