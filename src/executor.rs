@@ -26,7 +26,6 @@ implementation.
 */
 use crate::application::submit_to_main_thread;
 use crate::sys;
-use logwise::{debuginternal_sync, perfwarn_begin};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::future::Future;

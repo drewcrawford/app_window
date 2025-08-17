@@ -309,7 +309,6 @@ impl<T> From<T> for MainThreadCell<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     #[cfg(not(target_arch = "wasm32"))]
     use std::thread;
     #[cfg(target_arch = "wasm32")]
