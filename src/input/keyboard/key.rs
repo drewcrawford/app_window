@@ -1,27 +1,117 @@
 // SPDX-License-Identifier: MPL-2.0
+/// A key on the keyboard.
+///
+/// This enum represents physical keys on a keyboard, mapped from platform-specific
+/// scancodes to a unified representation. Each variant corresponds to a specific
+/// physical key, independent of the keyboard layout or locale settings.
+///
+/// # Physical vs Logical Keys
+///
+/// `KeyboardKey` represents *physical* keys rather than *logical* characters.
+/// For example, the `A` variant represents the physical key labeled 'A' on a
+/// QWERTY keyboard, regardless of what character it produces when pressed.
+/// This makes it ideal for game controls and shortcuts, but not for text input.
+///
+/// # Platform Mapping
+///
+/// Keys are mapped from platform-specific scancodes:
+/// - **Windows**: Virtual key codes (VK_*)
+/// - **macOS**: Hardware key codes from NSEvent
+/// - **Linux**: Wayland keycodes
+/// - **WebAssembly**: KeyboardEvent.code values
+///
+/// # Examples
+///
+/// ```
+/// use app_window::input::keyboard::key::KeyboardKey;
+///
+/// // Keys can be compared
+/// assert_eq!(KeyboardKey::A, KeyboardKey::A);
+/// assert_ne!(KeyboardKey::A, KeyboardKey::B);
+///
+/// // Keys are Copy types
+/// let key = KeyboardKey::Space;
+/// let key_copy = key;
+/// assert_eq!(key, key_copy);
+///
+/// // Keys can be used in match expressions
+/// match key {
+///     KeyboardKey::Space => println!("Spacebar"),
+///     KeyboardKey::Escape => println!("Escape"),
+///     _ => println!("Other key"),
+/// }
+/// ```
+///
+/// # Special Keys
+///
+/// ```
+/// use app_window::input::keyboard::key::KeyboardKey;
+///
+/// // Modifier keys
+/// let modifiers = [
+///     KeyboardKey::Shift,
+///     KeyboardKey::Control,
+///     KeyboardKey::Option,    // Alt key
+///     KeyboardKey::Command,   // Cmd/Windows key
+/// ];
+///
+/// // Function keys
+/// let function_keys = [
+///     KeyboardKey::F1,
+///     KeyboardKey::F2,
+///     KeyboardKey::F3,
+///     // ... up to F24
+/// ];
+///
+/// // Navigation keys
+/// let nav_keys = [
+///     KeyboardKey::UpArrow,
+///     KeyboardKey::DownArrow,
+///     KeyboardKey::LeftArrow,
+///     KeyboardKey::RightArrow,
+///     KeyboardKey::Home,
+///     KeyboardKey::End,
+///     KeyboardKey::PageUp,
+///     KeyboardKey::PageDown,
+/// ];
+/// ```
 #[repr(usize)]
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-/**
-A key on the keyboard.  Maps to an OS scancode.
-*/
 pub enum KeyboardKey {
+    /// The 'A' key on the main keyboard area.
     A,
+    /// The 'S' key on the main keyboard area.
     S,
+    /// The 'D' key on the main keyboard area.
     D,
+    /// The 'F' key on the main keyboard area.
     F,
+    /// The 'H' key on the main keyboard area.
     H,
+    /// The 'G' key on the main keyboard area.
     G,
+    /// The 'Z' key on the main keyboard area.
     Z,
+    /// The 'X' key on the main keyboard area.
     X,
+    /// The 'C' key on the main keyboard area.
     C,
+    /// The 'V' key on the main keyboard area.
     V,
+    /// The 'B' key on the main keyboard area.
     B,
+    /// The 'Q' key on the main keyboard area.
     Q,
+    /// The 'W' key on the main keyboard area (common for forward movement in games).
     W,
+    /// The 'E' key on the main keyboard area (common for interact/use in games).
     E,
+    /// The 'R' key on the main keyboard area (common for reload in games).
     R,
+    /// The 'Y' key on the main keyboard area.
     Y,
+    /// The 'T' key on the main keyboard area.
     T,
     Num1,
     Num2,
@@ -71,20 +161,35 @@ pub enum KeyboardKey {
     Keypad7,
     Keypad8,
     Keypad9,
+    /// The Return/Enter key.
     Return,
+    /// The Tab key (typically used for indentation or field navigation).
     Tab,
+    /// The Space bar.
     Space,
+    /// The Delete/Backspace key (deletes to the left of cursor).
     Delete,
+    /// The Escape key (often used to cancel operations or open menus).
     Escape,
+    /// The Command key on macOS, Windows key on PC keyboards.
     Command,
+    /// The left Shift key (modifier for uppercase and alternate characters).
     Shift,
+    /// The Caps Lock key (toggles uppercase letter input).
     CapsLock,
+    /// The Option/Alt key (left side).
     Option,
+    /// The left Control key (modifier for shortcuts).
     Control,
+    /// The right Command key on macOS, right Windows key on PC keyboards.
     RightCommand,
+    /// The right Shift key.
     RightShift,
+    /// The right Option/Alt key.
     RightOption,
+    /// The right Control key.
     RightControl,
+    /// The Function (Fn) key found on many laptop keyboards.
     Function,
     F17,
     VolumeUp,
@@ -116,9 +221,13 @@ pub enum KeyboardKey {
     F2,
     PageDown,
     F1,
+    /// The left arrow key (navigation).
     LeftArrow,
+    /// The right arrow key (navigation).
     RightArrow,
+    /// The down arrow key (navigation).
     DownArrow,
+    /// The up arrow key (navigation).
     UpArrow,
     ISOSection,
     JISYen,
@@ -169,9 +278,64 @@ pub enum KeyboardKey {
 }
 
 impl KeyboardKey {
-    /**
-        Returns all keys supported by the library.
-    */
+    /// Returns all keys supported by the library.
+    ///
+    /// This method returns a vector containing every variant of the `KeyboardKey` enum.
+    /// It's useful for iterating over all possible keys, for example when creating
+    /// a key binding configuration UI or when debugging keyboard input.
+    ///
+    /// # Performance Note
+    ///
+    /// This method allocates a new `Vec` on each call. If you need to iterate over
+    /// all keys frequently, consider caching the result.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use app_window::input::keyboard::key::KeyboardKey;
+    ///
+    /// let all_keys = KeyboardKey::all_keys();
+    /// 
+    /// // Check that we have a reasonable number of keys
+    /// assert!(all_keys.len() > 50);
+    /// assert!(all_keys.len() < 200);
+    /// 
+    /// // Verify specific keys are included
+    /// assert!(all_keys.contains(&KeyboardKey::A));
+    /// assert!(all_keys.contains(&KeyboardKey::Space));
+    /// assert!(all_keys.contains(&KeyboardKey::Escape));
+    /// ```
+    ///
+    /// ## Iterating Over All Keys
+    ///
+    /// ```
+    /// use app_window::input::keyboard::key::KeyboardKey;
+    /// 
+    /// // Count specific types of keys
+    /// let all_keys = KeyboardKey::all_keys();
+    /// 
+    /// let function_keys = all_keys.iter()
+    ///     .filter(|k| matches!(k, 
+    ///         KeyboardKey::F1 | KeyboardKey::F2 | KeyboardKey::F3 | 
+    ///         KeyboardKey::F4 | KeyboardKey::F5 | KeyboardKey::F6 |
+    ///         KeyboardKey::F7 | KeyboardKey::F8 | KeyboardKey::F9 |
+    ///         KeyboardKey::F10 | KeyboardKey::F11 | KeyboardKey::F12
+    ///     ))
+    ///     .count();
+    /// 
+    /// assert!(function_keys >= 12);
+    /// 
+    /// let letter_keys = all_keys.iter()
+    ///     .filter(|k| matches!(k,
+    ///         KeyboardKey::A | KeyboardKey::B | KeyboardKey::C |
+    ///         KeyboardKey::D | KeyboardKey::E | KeyboardKey::F |
+    ///         KeyboardKey::G | KeyboardKey::H | KeyboardKey::I
+    ///         // ... and so on
+    ///     ))
+    ///     .count();
+    /// 
+    /// assert!(letter_keys > 0);
+    /// ```
     pub fn all_keys() -> Vec<KeyboardKey> {
         vec![
             KeyboardKey::A,
