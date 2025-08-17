@@ -18,9 +18,9 @@ atomic_float = "1.1.0"
 raw-window-handle = "0.6.2"
 logwise = "0.3"
 thiserror = "2.0.9"
-some_executor = "0.5.1"
+some_executor = "0.6.0"
 continue = "0.1"
-send_cells = "0.1"
+send_cells = "0.2"
 
 [dev-dependencies]
 # needed for gpu example
@@ -119,7 +119,7 @@ path = "tests/platform_coalesced_keyboard_test.rs"
 harness = false
 
 [patch.crates-io]
-send_cells = { path = "../send_cells" }
-some_executor = { path = "../some_executor" }
-logwise = { path = "../logwise" }
-test_executors = { path = "../test_executors" }
+#send_cells = { path = "../send_cells" }
+#some_executor = { path = "../some_executor" }
+#logwise = { path = "../logwise" }
+#test_executors = { path = "../test_executors" }
