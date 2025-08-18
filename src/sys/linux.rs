@@ -57,7 +57,7 @@ impl Default for OutputInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 struct AllocatedBuffer {
     buffer: WlBuffer,
     width: i32,
@@ -103,12 +103,16 @@ impl AllocatedBuffer {
 
         let pool = shm.create_pool(file.as_fd(), width * height * 4, queue_handle, ());
         let mmap = Arc::new(mmap);
-        let release_info = BufferReleaseInfo {
-            opt: Mutex::new(Some(ReleaseOpt {
+        let release_opt = Arc::new(Mutex::new(Some(
+            ReleaseOpt {
                 _file: file,
                 _mmap: mmap.clone(),
-                window_internal,
-            })),
+                allocated_buffer: None,
+                window_internal: window_internal.clone(),
+            })
+        ));
+        let release_info = BufferReleaseInfo {
+            opt: release_opt.clone(),
             decor: false,
         };
 
@@ -121,11 +125,13 @@ impl AllocatedBuffer {
             queue_handle,
             release_info,
         );
-        AllocatedBuffer {
+        let allocated_buffer = AllocatedBuffer {
             buffer: buf,
             width,
             height,
-        }
+        };
+        release_opt.lock().unwrap().as_mut().unwrap().allocated_buffer = Some(allocated_buffer.clone());
+        allocated_buffer
     }
 
 }
@@ -569,8 +575,6 @@ struct WindowInternal {
     xdg_toplevel: Option<XdgToplevel>,
     wl_surface: Option<WlSurface>,
     xdg_surface: Option<XdgSurface>,
-    //a buffer that is unreleased (e.g we cannot drop it per Wayland protocol)
-    compositor_owned_buffer: Option<AllocatedBuffer>,
     //a buffer that is available to us for drawing operations
     drawable_buffer: Option<AllocatedBuffer>,
     requested_maximize: bool,
@@ -603,7 +607,6 @@ impl WindowInternal {
             xdg_toplevel: None,
             wl_surface: None,
             requested_maximize: false,
-            compositor_owned_buffer: None,
             drawable_buffer: None,
             adapter: None,
             size_update_notify: None,
@@ -860,12 +863,13 @@ impl AppState {
 }
 
 struct BufferReleaseInfo {
-    opt: Mutex<Option<ReleaseOpt>>,
+    opt: Arc<Mutex<Option<ReleaseOpt>>>,
     decor: bool,
 }
 struct ReleaseOpt {
     _file: File,
     _mmap: Arc<MmapMut>,
+    allocated_buffer: Option<AllocatedBuffer>,
     window_internal: Arc<Mutex<WindowInternal>>,
 }
 
@@ -873,7 +877,7 @@ fn create_shm_buffer_decor(
     shm: &WlShm,
     queue_handle: &QueueHandle<App>,
     window_internal: Arc<Mutex<WindowInternal>>,
-) -> WlBuffer {
+) -> AllocatedBuffer {
     let decor = include_bytes!("../../linux_assets/decor.png");
     let mut decode_decor = zune_png::PngDecoder::new(decor);
     let decode = decode_decor.decode().expect("Can't decode decor");
@@ -914,16 +918,20 @@ fn create_shm_buffer_decor(
         queue_handle,
         (),
     );
-    let release_info = BufferReleaseInfo {
-        opt: Mutex::new(Some(ReleaseOpt {
-            window_internal,
+    let release_opt = Arc::new(Mutex::new(Some(
+        ReleaseOpt {
             _file: file,
             _mmap: Arc::new(mmap),
-        })),
+            allocated_buffer: None,
+            window_internal: window_internal.clone(),
+        }
+    )));
+    let release_info = BufferReleaseInfo {
+        opt: release_opt.clone(),
         decor: true,
     };
 
-    pool.create_buffer(
+    let buf = pool.create_buffer(
         0,
         dimensions.0 as i32,
         dimensions.1 as i32,
@@ -931,7 +939,15 @@ fn create_shm_buffer_decor(
         Format::Argb8888,
         queue_handle,
         release_info,
-    )
+    );
+    let allocated_buffer = AllocatedBuffer {
+        buffer: buf,
+        width: dimensions.0 as i32,
+        height: dimensions.1 as i32,
+    };
+    release_opt.lock().unwrap().as_mut().unwrap().allocated_buffer = Some(allocated_buffer.clone());
+    allocated_buffer
+
 }
 
 
@@ -1099,7 +1115,6 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                             0,
                             0,
                         );
-                        locked_data.compositor_owned_buffer = Some(buffer);
                         locked_data.wl_surface.as_ref().expect("No surface").commit();
                     }
                 }
@@ -1167,9 +1182,9 @@ impl Dispatch<WlBuffer, BufferReleaseInfo> for App {
                     return;
                 }
                 let release = data.opt.lock().unwrap().take().expect("No release info");
-                //drop any existing buffer in there, we're done with it
+                let buf = release.allocated_buffer.expect("No allocated buffer");
+
                 let mut lock = release.window_internal.lock().unwrap();
-                let buf = lock.compositor_owned_buffer.take().expect("Releasing non-existent buffer");
                 if buf.width == lock.applied_configure.as_ref().unwrap().width && buf.height == lock.applied_configure.as_ref().unwrap().height {
                     //re-use the buffer
                     lock.drawable_buffer = Some(buf);
@@ -1548,7 +1563,7 @@ impl Window {
                 &info.queue_handle,
                 window_internal.clone(),
             );
-            decor_surface.attach(Some(&decor_buffer), 0, 0);
+            decor_surface.attach(Some(&decor_buffer.buffer), 0, 0);
             decor_surface.commit();
             decor_subsurface.set_position(
                 size.width() as i32 - info.app_state.decor_dimensions.0 as i32,
@@ -1592,7 +1607,6 @@ impl Window {
                 0,
                 0,
             );
-            lock.compositor_owned_buffer = Some(drawable_buffer);
             drop(lock);
             surface.commit();
 

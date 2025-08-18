@@ -26,7 +26,12 @@ mod gpu {
                 f
             }
             WGPUStrategy::NotMainThread => {
-                todo!("Not yet implemented")
+                if app_window::application::is_main_thread() {
+                    todo!()
+                }
+                else { //effectively relaxed
+                    for_closure()
+                }
             }
             _ => todo!("Unsupported WGPU strategy: {:?}", strategy),
         }
