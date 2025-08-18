@@ -8,7 +8,7 @@
 //!
 //! # Example
 //!
-//! ```no_run
+//! ```
 //! # async fn example() {
 //! use app_window::main_thread_cell::MainThreadCell;
 //!
