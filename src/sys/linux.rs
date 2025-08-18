@@ -1,6 +1,5 @@
 //SPDX-License-Identifier: MPL-2.0
 use crate::coordinates::{Position, Size};
-use crate::executor::on_main_thread_async;
 use accesskit::NodeId;
 use libc::{
     EFD_SEMAPHORE, MFD_ALLOW_SEALING, MFD_CLOEXEC, SYS_gettid, c_char, eventfd, getpid,
@@ -56,6 +55,79 @@ impl Default for OutputInfo {
     fn default() -> Self {
         Self { scale_factor: 1.0 }
     }
+}
+
+#[derive(Debug)]
+struct AllocatedBuffer {
+    buffer: WlBuffer,
+    width: i32,
+    height: i32,
+}
+
+impl AllocatedBuffer {
+    fn new(
+        width: i32,
+        height: i32,
+        shm: &WlShm,
+        queue_handle: &QueueHandle<App>,
+        window_internal: Arc<Mutex<WindowInternal>>,
+    ) -> AllocatedBuffer {
+        eprintln!("Creating shm buffer width {width}, height {height}");
+        let file = unsafe {
+            memfd_create(
+                b"mem_fd\0" as *const _ as *const c_char,
+                MFD_ALLOW_SEALING | MFD_CLOEXEC,
+            )
+        };
+        if file < 0 {
+            panic!(
+                "Failed to create memfd: {err}",
+                err = unsafe { *libc::__errno_location() }
+            );
+        }
+        let file = unsafe { File::from_raw_fd(file) };
+
+        let r = unsafe { libc::ftruncate(file.as_raw_fd(), (width * height * 4) as i64) };
+        if r < 0 {
+            panic!(
+                "Failed to truncate memfd: {err}",
+                err = unsafe { *libc::__errno_location() }
+            );
+        }
+
+        let mut mmap = unsafe { MmapMut::map_mut(&file) }.unwrap();
+        const DEFAULT_COLOR: [u8; 4] = [0, 0, 0xFF, 0xFF];
+        for pixel in mmap.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&DEFAULT_COLOR); //I guess due to endiannness we are actually BGRA?
+        }
+
+        let pool = shm.create_pool(file.as_fd(), width * height * 4, queue_handle, ());
+        let mmap = Arc::new(mmap);
+        let release_info = BufferReleaseInfo {
+            opt: Mutex::new(Some(ReleaseOpt {
+                _file: file,
+                _mmap: mmap.clone(),
+                window_internal,
+            })),
+            decor: false,
+        };
+
+        let buf = pool.create_buffer(
+            0,
+            width,
+            height,
+            width * 4,
+            Format::Argb8888,
+            queue_handle,
+            release_info,
+        );
+        AllocatedBuffer {
+            buffer: buf,
+            width,
+            height,
+        }
+    }
+
 }
 
 mod ax {
@@ -497,7 +569,10 @@ struct WindowInternal {
     xdg_toplevel: Option<XdgToplevel>,
     wl_surface: Option<WlSurface>,
     xdg_surface: Option<XdgSurface>,
-    buffer: Option<WlBuffer>,
+    //a buffer that is unreleased (e.g we cannot drop it per Wayland protocol)
+    compositor_owned_buffer: Option<AllocatedBuffer>,
+    //a buffer that is available to us for drawing operations
+    drawable_buffer: Option<AllocatedBuffer>,
     requested_maximize: bool,
     adapter: Option<accesskit_unix::Adapter>,
     size_update_notify: Option<DebugWrapper>,
@@ -528,7 +603,8 @@ impl WindowInternal {
             xdg_toplevel: None,
             wl_surface: None,
             requested_maximize: false,
-            buffer: None,
+            compositor_owned_buffer: None,
+            drawable_buffer: None,
             adapter: None,
             size_update_notify: None,
             decor_subsurface: None,
@@ -542,14 +618,8 @@ impl WindowInternal {
                 _aximpl.clone(),
                 _aximpl.clone(),
             ));
-            let buffer = create_shm_buffer(
-                size.width() as i32,
-                size.height() as i32,
-                &app_state.shm,
-                queue_handle,
-                window_internal.clone(),
-            );
-            window_internal.lock().unwrap().buffer = Some(buffer);
+            let buffer = AllocatedBuffer::new(size.width() as i32, size.height() as i32, &app_state.shm, queue_handle, window_internal.clone());
+            window_internal.lock().unwrap().drawable_buffer = Some(buffer);
             window_internal.lock().unwrap().adapter = adapter;
         }
         window_internal
@@ -791,6 +861,7 @@ impl AppState {
 
 struct BufferReleaseInfo {
     opt: Mutex<Option<ReleaseOpt>>,
+    decor: bool,
 }
 struct ReleaseOpt {
     _file: File,
@@ -849,6 +920,7 @@ fn create_shm_buffer_decor(
             _file: file,
             _mmap: Arc::new(mmap),
         })),
+        decor: true,
     };
 
     pool.create_buffer(
@@ -862,61 +934,6 @@ fn create_shm_buffer_decor(
     )
 }
 
-fn create_shm_buffer(
-    width: i32,
-    height: i32,
-    shm: &WlShm,
-    queue_handle: &QueueHandle<App>,
-    window_internal: Arc<Mutex<WindowInternal>>,
-) -> WlBuffer {
-    let file = unsafe {
-        memfd_create(
-            b"mem_fd\0" as *const _ as *const c_char,
-            MFD_ALLOW_SEALING | MFD_CLOEXEC,
-        )
-    };
-    if file < 0 {
-        panic!(
-            "Failed to create memfd: {err}",
-            err = unsafe { *libc::__errno_location() }
-        );
-    }
-    let file = unsafe { File::from_raw_fd(file) };
-
-    let r = unsafe { libc::ftruncate(file.as_raw_fd(), (width * height * 4) as i64) };
-    if r < 0 {
-        panic!(
-            "Failed to truncate memfd: {err}",
-            err = unsafe { *libc::__errno_location() }
-        );
-    }
-
-    let mut mmap = unsafe { MmapMut::map_mut(&file) }.unwrap();
-    const DEFAULT_COLOR: [u8; 4] = [0, 0, 0xFF, 0xFF];
-    for pixel in mmap.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&DEFAULT_COLOR); //I guess due to endiannness we are actually BGRA?
-    }
-
-    let pool = shm.create_pool(file.as_fd(), width * height * 4, queue_handle, ());
-    let mmap = Arc::new(mmap);
-    let release_info = BufferReleaseInfo {
-        opt: Mutex::new(Some(ReleaseOpt {
-            _file: file,
-            _mmap: mmap.clone(),
-            window_internal,
-        })),
-    };
-
-    pool.create_buffer(
-        0,
-        width,
-        height,
-        width * 4,
-        Format::Argb8888,
-        queue_handle,
-        release_info,
-    )
-}
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for App {
     fn event(
@@ -1039,6 +1056,7 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                 let proposed = locked_data.proposed_configure.take();
                 if let Some(mut configure) = proposed {
                     let app_state = locked_data.app_state.upgrade().unwrap();
+                    eprintln!("Configure width {:?} height {:?} on buffer {:?} data {:?}", configure.width, configure.height,locked_data.drawable_buffer,Arc::as_ptr(data));
                     if configure.width == 0 && configure.height == 0 {
                         //pick our own size
                         configure.width = 800;
@@ -1058,23 +1076,6 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                             .unwrap()
                             .set_position(configure.width - app_state.decor_dimensions.0 as i32, 0);
                         locked_data.applied_configure = Some(configure);
-
-                        //are we managing the buffer?
-                        if locked_data.buffer.is_some() {
-                            let size = locked_data.applied_size();
-                            let app_state = locked_data.app_state.upgrade().unwrap();
-                            let buffer = create_shm_buffer(
-                                size.width() as i32,
-                                size.height() as i32,
-                                &app_state.shm,
-                                qh,
-                                data.clone(),
-                            );
-                            let surface = locked_data.wl_surface.as_ref().unwrap();
-                            surface.attach(Some(&buffer), 0, 0);
-                            surface.commit();
-                            locked_data.buffer = Some(buffer);
-                        }
                         let title = locked_data.title.clone();
                         let applied_size = locked_data.applied_size();
                         if let Some(a) = locked_data.adapter.as_mut() {
@@ -1083,12 +1084,29 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                         if let Some(f) = locked_data.size_update_notify.as_ref() {
                             f.0(locked_data.applied_size())
                         }
+
+                        //rebuild main buffer
+                        let buffer = AllocatedBuffer::new(
+                            locked_data.applied_configure.as_ref().unwrap().width,
+                            locked_data.applied_configure.as_ref().unwrap().height,
+                            &app_state.shm,
+                            qh,
+                            data.clone(),
+                        );
+                        //attach to surface
+                        locked_data.wl_surface.as_ref().expect("No surface").attach(
+                            Some(&buffer.buffer),
+                            0,
+                            0,
+                        );
+                        locked_data.compositor_owned_buffer = Some(buffer);
+                        locked_data.wl_surface.as_ref().expect("No surface").commit();
                     }
                 }
                 proxy.ack_configure(serial);
             }
             _ => {
-                println!("got XdgSurface event {:?}", event);
+                println!("got XdgSurfaccreate_shm_buffere event {:?}", event);
             }
         }
     }
@@ -1141,17 +1159,28 @@ impl Dispatch<WlBuffer, BufferReleaseInfo> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
+        println!("got WlBuffer event {:?}", event);
         match event {
             Event::Release => {
+                if data.decor {
+                    proxy.destroy();
+                    return;
+                }
                 let release = data.opt.lock().unwrap().take().expect("No release info");
                 //drop any existing buffer in there, we're done with it
-                release.window_internal.lock().unwrap().buffer.take();
-                proxy.destroy();
-                drop(release);
+                let mut lock = release.window_internal.lock().unwrap();
+                let buf = lock.compositor_owned_buffer.take().expect("Releasing non-existent buffer");
+                if buf.width == lock.applied_configure.as_ref().unwrap().width && buf.height == lock.applied_configure.as_ref().unwrap().height {
+                    //re-use the buffer
+                    lock.drawable_buffer = Some(buf);
+                }
+                else {
+                    //discard the buffer
+                    proxy.destroy();
+                }
             }
             _ => { /* not implemented yet */ }
         }
-        println!("got WlBuffer event {:?}", event);
     }
 }
 impl Dispatch<WlSeat, ()> for App {
@@ -1553,18 +1582,18 @@ impl Window {
                 .xdg_toplevel
                 .replace(xdg_toplevel);
 
+            //convert to compositor-owned buffer
+            let mut lock = window_internal.lock().unwrap();
+            let drawable_buffer = lock.drawable_buffer.take().expect("No drawable buffer available");
             surface.attach(
                 Some(
-                    window_internal
-                        .lock()
-                        .unwrap()
-                        .buffer
-                        .as_ref()
-                        .expect("No buffer"),
+                    &drawable_buffer.buffer
                 ),
                 0,
                 0,
             );
+            lock.compositor_owned_buffer = Some(drawable_buffer);
+            drop(lock);
             surface.commit();
 
             let seat: WlSeat = info
