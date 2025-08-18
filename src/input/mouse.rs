@@ -34,7 +34,7 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_LEFT};
 ///
@@ -48,7 +48,7 @@ pub const MOUSE_BUTTON_LEFT: u8 = 0;
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_RIGHT};
 ///
@@ -62,7 +62,7 @@ pub const MOUSE_BUTTON_RIGHT: u8 = 1;
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_MIDDLE};
 ///
@@ -79,7 +79,7 @@ pub const MOUSE_BUTTON_MIDDLE: u8 = 2;
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// use app_window::input::mouse::Mouse;
 ///
@@ -122,7 +122,7 @@ impl MouseWindowLocation {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// # use app_window::input::mouse::Mouse;
     /// # let mouse = Mouse::coalesced().await;
@@ -142,7 +142,7 @@ impl MouseWindowLocation {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// # use app_window::input::mouse::Mouse;
     /// # let mouse = Mouse::coalesced().await;
@@ -160,7 +160,7 @@ impl MouseWindowLocation {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// # use app_window::input::mouse::Mouse;
     /// # let mouse = Mouse::coalesced().await;
@@ -178,7 +178,7 @@ impl MouseWindowLocation {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// # use app_window::input::mouse::Mouse;
     /// # let mouse = Mouse::coalesced().await;
@@ -259,7 +259,7 @@ impl Shared {
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_LEFT};
 ///
@@ -294,7 +294,7 @@ impl Mouse {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// use app_window::input::mouse::Mouse;
     ///
@@ -341,7 +341,7 @@ impl Mouse {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// use app_window::input::mouse::{Mouse, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT};
     ///
@@ -373,7 +373,7 @@ impl Mouse {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// use app_window::input::mouse::Mouse;
     ///

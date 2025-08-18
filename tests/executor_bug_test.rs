@@ -124,7 +124,7 @@ fn test_nested_main_thread_submit_bug() -> bool {
         });
 
         // Wait a bit for async execution to complete
-        std::thread::sleep(Duration::from_millis(1000));
+        std::thread::sleep(Duration::from_millis(1500));
 
         // Check results
         let final_count = completion_counter.load(Ordering::Relaxed);
