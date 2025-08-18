@@ -7,26 +7,35 @@ use some_executor::observer::Observer;
 pub fn main() {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
-    #[cfg(feature = "app_input")]
     #[cfg(not(target_arch = "wasm32"))]
     use std::thread;
 
-    #[cfg(feature = "app_input")]
     thread::spawn(move || {
-        let k = app_input::keyboard::Keyboard::coalesced();
-        let m = app_input::mouse::Mouse::coalesced();
-        loop {
-            for key in app_input::keyboard::key::KeyboardKey::all_keys() {
-                if k.is_pressed(key) {
-                    println!("key {:?} is pressed", key);
+        let task = some_executor::task::Task::without_notifications("input poll".into(),
+        some_executor::task::Configuration::new(
+                some_executor::hint::Hint::Unknown,
+                some_executor::Priority::UserInteractive,
+                some_executor::Instant::now(),
+            ),
+            async {
+                let k = app_window::input::keyboard::Keyboard::coalesced().await;
+                let m = app_window::input::mouse::Mouse::coalesced().await;
+                loop {
+                    for key in app_window::input::keyboard::key::KeyboardKey::all_keys() {
+                        if k.is_pressed(key) {
+                            println!("key {:?} is pressed", key);
+                        }
+                    }
+                    println!("Mouse pos {:?}", m.window_pos());
+                    if m.button_state(app_window::input::mouse::MOUSE_BUTTON_LEFT) {
+                        println!("Mouse down");
+                    }
+                    thread::sleep(std::time::Duration::from_millis(1000));
                 }
-            }
-            println!("Mouse pos {:?}", m.window_pos());
-            if m.button_state(app_input::mouse::MOUSE_BUTTON_LEFT) {
-                println!("Mouse down");
-            }
-            std::thread::sleep(std::time::Duration::from_millis(1000));
-        }
+            },
+        );
+        task.spawn_current();
+
     });
     app_window::application::main(|| {
         let task = some_executor::task::Task::without_notifications(

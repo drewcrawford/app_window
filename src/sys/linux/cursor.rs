@@ -66,7 +66,7 @@ pub struct ActiveCursor {
 }
 
 impl ActiveCursor {
-    pub fn new(
+    pub(super) fn new(
         connection: &Connection,
         shm: WlShm,
         _a: &Arc<AppState>,
@@ -107,7 +107,6 @@ impl ActiveCursor {
                             .expect("Can't get cursor");
                         let present_time = start_time.elapsed();
                         let frame_info = cursor.frame_and_duration(present_time.as_millis() as u32);
-                        // println!("frame_info: {:?}", frame_info);
                         let buffer = &cursor[frame_info.frame_index];
                         move_cursor_surface.attach(Some(buffer), 0, 0);
                         move_cursor_surface.damage_buffer(

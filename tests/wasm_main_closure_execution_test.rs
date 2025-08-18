@@ -17,10 +17,8 @@
 //!
 //! Run with: `cargo test --test wasm_main_closure_execution_test`
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 #[cfg(not(target_arch = "wasm32"))]
-use std::time::{Duration, Instant};
+use std::time::{Duration};
 #[cfg(target_arch = "wasm32")]
 use web_time::{Duration, Instant};
 

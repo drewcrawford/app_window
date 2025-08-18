@@ -46,7 +46,7 @@ impl MainThreadSender {
 
 static MAIN_THREAD_SENDER: OnceLock<MainThreadSender> = OnceLock::new();
 
-pub struct MainThreadInfo {
+pub(super) struct MainThreadInfo {
     pub globals: GlobalList,
     pub queue_handle: QueueHandle<App>,
     pub connection: Connection,
@@ -159,7 +159,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
                         .expect("Can't dispatch events");
                     event_queue.flush().expect("Failed to flush event queue");
                     //try again
-                    println!("retrying");
+                    logwise::debuginternal_sync!("Retrying");
                 }
             }
         }

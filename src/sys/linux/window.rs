@@ -24,12 +24,12 @@ impl Debug for DebugWrapper {
 }
 
 #[derive(Debug)]
-pub struct Window {
-    pub internal: Arc<Mutex<WindowInternal>>,
+pub(crate) struct Window {
+    pub(super) internal: Arc<Mutex<WindowInternal>>,
 }
 
 #[derive(Debug)]
-pub struct WindowInternal {
+pub(super) struct WindowInternal {
     pub app_state: Weak<AppState>,
     pub proposed_configure: Option<Configure>,
     pub applied_configure: Option<Configure>,
@@ -49,7 +49,7 @@ pub struct WindowInternal {
 }
 
 impl WindowInternal {
-    pub fn new(
+    fn new(
         app_state: &Arc<AppState>,
         size: Size,
         title: String,

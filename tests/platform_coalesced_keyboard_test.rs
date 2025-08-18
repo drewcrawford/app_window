@@ -9,16 +9,11 @@
 //! Run with: `cargo test --test platform_coalesced_keyboard_test`
 //! Run on WASM with: CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' cargo +nightly test --target wasm32-unknown-unknown -Z build-std=std,panic_abort
 
-use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 #[cfg(target_arch = "wasm32")]
 use wasm_thread as thread;
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::Duration;
-#[cfg(target_arch = "wasm32")]
-use web_time::Duration;
 
 use some_executor::task::{Configuration, Task};
 
@@ -27,8 +22,6 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    let logger = Arc::new(logwise::InMemoryLogger::new());
-
     logwise::warn_sync!("=== PlatformCoalescedKeyboard Non-Main Thread Test ===");
 
     app_window::application::main(|| {
@@ -49,7 +42,8 @@ fn main() {
 #[cfg(target_arch = "wasm32")]
 fn main() {}
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test::wasm_bindgen_test]
 async fn wasm_main() {
     assert!(app_window::application::is_main_thread());
 
@@ -81,7 +75,6 @@ async fn test_platform_coalesced_keyboard_creation() {
     // Spawn a non-main thread to create PlatformCoalescedKeyboard
     thread::spawn(move || {
         logwise::info_sync!("Non-main thread started, creating PlatformCoalescedKeyboard");
-
         // This is the main test: creating a PlatformCoalescedKeyboard from a non-main thread
         // Note: Unlike Mouse::coalesced(), Keyboard::coalesced() is synchronous
         let spawn_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -90,7 +83,7 @@ async fn test_platform_coalesced_keyboard_creation() {
                 Configuration::default(),
                 async move {
                     // Try to create the keyboard - this should work since it's async
-                    let keyboard = app_window::input::keyboard::Keyboard::coalesced().await;
+                    let _keyboard = app_window::input::keyboard::Keyboard::coalesced().await;
                     logwise::info_sync!("Successfully created PlatformCoalescedKeyboard");
                     logwise::warn_sync!(
                         "✅ SUCCESS: PlatformCoalescedKeyboard created successfully"

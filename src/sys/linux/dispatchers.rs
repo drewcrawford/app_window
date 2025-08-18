@@ -20,7 +20,8 @@ use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel};
 
 use crate::coordinates::Position;
-use super::{App, BufferReleaseInfo, Configure, OutputInfo, SurfaceEvents, WindowInternal};
+use crate::sys::window::WindowInternal;
+use super::{App, BufferReleaseInfo, Configure, OutputInfo, SurfaceEvents};
 use super::ax;
 use super::buffer::AllocatedBuffer;
 use super::cursor::{CursorRequest, MouseRegion};
@@ -34,7 +35,7 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for App {
         _: &Connection,
         _qh: &QueueHandle<App>,
     ) {
-        println!("Got registry event {:?}", event);
+        logwise::debuginternal_sync!("Got registry event {event}", event = logwise::privacy::LogIt(&event));
     }
 }
 
@@ -47,7 +48,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for App {
         _: &Connection,
         _qh: &QueueHandle<App>,
     ) {
-        println!("Got registry event {:?}", event);
+        logwise::debuginternal_sync!("Got registry event {event}", event = logwise::privacy::LogIt(&event));
     }
 }
 
@@ -65,7 +66,7 @@ impl Dispatch<XdgWmBase, ()> for App {
                 proxy.pong(serial);
             }
             _ => {
-                println!("Unknown XdgWmBase event: {:?}", event); // Add this line
+                logwise::debuginternal_sync!("Unknown XdgWmBase event {event}", event = logwise::privacy::LogIt(&event));
             }
         }
     }
@@ -80,7 +81,7 @@ impl Dispatch<WlCompositor, ()> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("Got compositor event {:?}", event);
+        logwise::debuginternal_sync!("Got compositor event {event}", event = logwise::privacy::LogIt(&event));
     }
 }
 
@@ -93,7 +94,7 @@ impl Dispatch<WlShm, ()> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("Got shm event {:?}", event);
+        logwise::debuginternal_sync!("Got WlShm event {event}", event = logwise::privacy::LogIt(&event));
     }
 }
 
@@ -128,7 +129,7 @@ impl Dispatch<WlSurface, SurfaceEvents> for App {
                 }
             }
             _ => {
-                println!("got WlSurface event {:?}", event);
+                logwise::debuginternal_sync!("Got WlSurface event {event}", event = logwise::privacy::LogIt(&event));
             }
         }
     }
@@ -149,7 +150,6 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                 let proposed = locked_data.proposed_configure.take();
                 if let Some(mut configure) = proposed {
                     let app_state = locked_data.app_state.upgrade().unwrap();
-                    eprintln!("Configure width {:?} height {:?} on buffer {:?} data {:?}", configure.width, configure.height,locked_data.drawable_buffer,Arc::as_ptr(data));
                     if configure.width == 0 && configure.height == 0 {
                         //pick our own size
                         configure.width = 800;
@@ -198,7 +198,7 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                 proxy.ack_configure(serial);
             }
             _ => {
-                println!("got XdgSurfaccreate_shm_buffere event {:?}", event);
+                logwise::debuginternal_sync!("got XdgSurface_shm_buffer event {event}",event = logwise::privacy::LogIt(&event));
             }
         }
     }
@@ -213,7 +213,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<XdgToplevel, A> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("got XdgToplevel event {:?}", event);
+        logwise::debuginternal_sync!("Got XdgToplevel event {event}", event = logwise::privacy::LogIt(&event));
         match event {
             xdg_toplevel::Event::Configure {
                 width,
@@ -241,7 +241,7 @@ impl Dispatch<WlShmPool, ()> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("got WlShmPool event {:?}", event);
+        logwise::debuginternal_sync!("Got WlshmPool event {event}", event = logwise::privacy::LogIt(&event));
     }
 }
 
@@ -254,7 +254,7 @@ impl Dispatch<WlBuffer, BufferReleaseInfo> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("got WlBuffer event {:?}", event);
+        logwise::debuginternal_sync!("Got WlBuffer event {event}", event = logwise::privacy::LogIt(&event));
         match event {
             Event::Release => {
                 if data.decor {
@@ -288,7 +288,7 @@ impl Dispatch<WlSeat, ()> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("got WlSeat event {:?}", event);
+        logwise::debuginternal_sync!("Got WlSeat event {event}", event = logwise::privacy::LogIt(&event));
     }
 }
 
@@ -301,7 +301,7 @@ impl Dispatch<WlSubcompositor, ()> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("got WlSubcompositor event {:?}", event);
+        logwise::debuginternal_sync!("Got WlSubcompositor event {event}", event = logwise::privacy::LogIt(&event));
     }
 }
 
@@ -314,7 +314,7 @@ impl Dispatch<WlSubsurface, ()> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("got WlSubsurface event {:?}", event);
+        logwise::debuginternal_sync!("got WlSubsurface event {event}", event = logwise::privacy::LogIt(&event));
     }
 }
 
@@ -360,7 +360,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("got WlPointer event {:?}", event);
+        logwise::debuginternal_sync!("Got WlPointer event {event}", event = logwise::privacy::LogIt(&event));
         let mut data = data.as_ref().lock().unwrap();
         match event {
             wayland_client::protocol::wl_pointer::Event::Enter {
@@ -535,7 +535,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        println!("got WlKeyboard event {:?}", event);
+        logwise::debuginternal_sync!("got WlKeyboard event {event}", event = logwise::privacy::LogIt(&event));
         match event {
             wayland_client::protocol::wl_keyboard::Event::Enter {
                 serial: _,

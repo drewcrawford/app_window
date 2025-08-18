@@ -1,8 +1,10 @@
 //SPDX-License-Identifier: MPL-2.0
 use crate::coordinates::Size;
-use super::{BUTTON_WIDTH, CLOSE_ID, MAXIMIZE_ID, MINIMIZE_ID, TITLEBAR_HEIGHT, WindowInternal};
+use super::{BUTTON_WIDTH, CLOSE_ID, MAXIMIZE_ID, MINIMIZE_ID, TITLEBAR_HEIGHT};
+
 use accesskit::{Action, ActionRequest, NodeId, Rect, Role, TreeUpdate};
 use std::sync::{Arc, Mutex};
+use crate::sys::window::WindowInternal;
 
 pub fn build_tree_update(title: String, window_size: Size) -> TreeUpdate {
     let mut window = accesskit::Node::new(Role::Window);
@@ -84,7 +86,7 @@ pub struct Inner {
 }
 
 #[derive(Clone)]
-pub struct AX {
+pub(super) struct AX {
     inner: Arc<Inner>,
     window_internal: Arc<Mutex<WindowInternal>>,
 }

@@ -10,7 +10,6 @@
 //! Run with: `cargo test --test submit_to_main_thread_benchmark`
 //! Run on WASM with: CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' cargo +nightly test --target wasm32-unknown-unknown -Z build-std=std,panic_abort
 
-use std::sync::{Arc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 #[cfg(target_arch = "wasm32")]
@@ -135,7 +134,8 @@ fn main() {
 #[cfg(target_arch = "wasm32")]
 fn main() {}
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test::wasm_bindgen_test]
 async fn wasm_main() {
     assert!(app_window::application::is_main_thread());
     let (c, r) = r#continue::continuation();
@@ -168,7 +168,7 @@ async fn run_benchmark() {
 
     let mut senders = Vec::new();
     let mut futures = Vec::new();
-    for i in 0..NUM_ITERATIONS {
+    for _ in 0..NUM_ITERATIONS {
         let (tx, rx) = r#continue::continuation();
         senders.push(tx);
         futures.push(rx);

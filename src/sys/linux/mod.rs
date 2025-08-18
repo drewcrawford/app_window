@@ -1,11 +1,10 @@
 //SPDX-License-Identifier: MPL-2.0
 
 // Re-export main types and functions
-pub use window::{Window, WindowInternal};
 pub use main_thread::{run_main_thread, on_main_thread, is_main_thread};
 pub use buffer::AllocatedBuffer;
 pub use cursor::ActiveCursor;
-
+pub(crate)  use window::Window;
 // Module declarations
 pub mod ax;
 pub mod buffer;
@@ -32,6 +31,7 @@ use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, QueueHandle, Proxy};
 use zune_png::zune_core::result::DecodingResult;
+use crate::sys::window::WindowInternal;
 
 // Constants
 const CLOSE_ID: NodeId = NodeId(3);
@@ -68,7 +68,7 @@ struct Configure {
     height: i32,
 }
 
-struct App(Arc<AppState>);
+pub(super) struct App(Arc<AppState>);
 
 enum SurfaceEvents {
     Standard(Arc<Mutex<WindowInternal>>),

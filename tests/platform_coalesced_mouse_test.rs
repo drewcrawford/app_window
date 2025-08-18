@@ -9,14 +9,11 @@
 //! Run with: `cargo test --test platform_coalesced_mouse_test`
 //! Run on WASM with: CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' cargo +nightly test --target wasm32-unknown-unknown -Z build-std=std,panic_abort
 
-use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 #[cfg(target_arch = "wasm32")]
 use wasm_thread as thread;
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::Duration;
 #[cfg(target_arch = "wasm32")]
 use web_time::Duration;
 
@@ -27,10 +24,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    let logger = Arc::new(logwise::InMemoryLogger::new());
-
     logwise::warn_sync!("=== PlatformCoalescedMouse Non-Main Thread Test ===");
-
     app_window::application::main(|| {
         thread::spawn(|| {
             let t = Task::without_notifications(
@@ -49,7 +43,8 @@ fn main() {
 #[cfg(target_arch = "wasm32")]
 fn main() {}
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test::wasm_bindgen_test]
 async fn wasm_main() {
     assert!(app_window::application::is_main_thread());
 
@@ -90,15 +85,12 @@ async fn test_platform_coalesced_mouse_creation() {
                 Configuration::default(),
                 async move {
                     // Try to create the mouse - this will now happen on the main thread via MainThreadCell
-                    match app_window::input::mouse::Mouse::coalesced().await {
-                        mouse => {
-                            logwise::info_sync!("Successfully created PlatformCoalescedMouse");
-                            logwise::warn_sync!(
+                    app_window::input::mouse::Mouse::coalesced().await;
+                    logwise::info_sync!("Successfully created PlatformCoalescedMouse");
+                    logwise::warn_sync!(
                                 "✅ SUCCESS: PlatformCoalescedMouse created successfully"
                             );
-                            tx.send(true);
-                        }
-                    }
+                    tx.send(true);
                 },
             );
             task.spawn_static_current();

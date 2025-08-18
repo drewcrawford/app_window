@@ -8,8 +8,8 @@ use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_shm::{Format, WlShm};
 use wayland_client::QueueHandle;
 use zune_png::zune_core::result::DecodingResult;
-
-use super::{App, BufferReleaseInfo, ReleaseOpt, WindowInternal};
+use crate::sys::window::WindowInternal;
+use super::{App, BufferReleaseInfo, ReleaseOpt};
 
 #[derive(Debug, Clone)]
 pub struct AllocatedBuffer {
@@ -19,14 +19,14 @@ pub struct AllocatedBuffer {
 }
 
 impl AllocatedBuffer {
-    pub fn new(
+    pub(super) fn new(
         width: i32,
         height: i32,
         shm: &WlShm,
         queue_handle: &QueueHandle<App>,
         window_internal: Arc<Mutex<WindowInternal>>,
     ) -> AllocatedBuffer {
-        eprintln!("Creating shm buffer width {width}, height {height}");
+        logwise::debuginternal_sync!("Creating shm buffer width {width}, height {height}",width=width,height=height);
         let file = unsafe {
             memfd_create(
                 b"mem_fd\0" as *const _ as *const c_char,
@@ -89,7 +89,7 @@ impl AllocatedBuffer {
     }
 }
 
-pub fn create_shm_buffer_decor(
+pub(super) fn create_shm_buffer_decor(
     shm: &WlShm,
     queue_handle: &QueueHandle<App>,
     window_internal: Arc<Mutex<WindowInternal>>,
