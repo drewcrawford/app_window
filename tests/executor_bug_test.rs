@@ -28,42 +28,51 @@ use std::time::Duration;
 #[cfg(target_arch = "wasm32")]
 use web_time::Duration;
 
+use std::thread;
+
 fn main() {
     println!("=== Testing Main Thread Executor Nested Submission Bug ===\n");
 
     app_window::application::main(|| {
-        let mut test_results = Vec::new();
+        //this can't really run on the main thread I think
+        thread::Builder::new()
+            .name("executor_bug_tests".to_string())
+            .spawn(|| {
+                let mut test_results = Vec::new();
 
-        // Test 1: Basic nested submission
-        test_results.push(("nested_submission", test_nested_main_thread_submit_bug()));
+                // Test 1: Basic nested submission
+                test_results.push(("nested_submission", test_nested_main_thread_submit_bug()));
 
-        // Test 2: Multiple nested levels
-        test_results.push(("deep_nested", test_deep_nested_submissions()));
+                // Test 2: Multiple nested levels
+                test_results.push(("deep_nested", test_deep_nested_submissions()));
 
-        // Test 3: Debug output pattern
-        test_results.push(("debug_pattern", test_debug_output_pattern()));
+                // Test 3: Debug output pattern
+                test_results.push(("debug_pattern", test_debug_output_pattern()));
 
-        // Test 4: Concurrent submissions
-        test_results.push(("concurrent", test_concurrent_submissions()));
+                // Test 4: Concurrent submissions
+                test_results.push(("concurrent", test_concurrent_submissions()));
 
-        // Report results
-        let passed = test_results.iter().filter(|(_, result)| *result).count();
-        let total = test_results.len();
+                // Report results
+                let passed = test_results.iter().filter(|(_, result)| *result).count();
+                let total = test_results.len();
 
-        println!("\n=== Test Results ===");
-        for (name, result) in &test_results {
-            let status = if *result { "PASS" } else { "FAIL" };
-            println!("{}: {}", name, status);
-        }
-        println!("\nPassed: {}/{}", passed, total);
+                println!("\n=== Test Results ===");
+                for (name, result) in &test_results {
+                    let status = if *result { "PASS" } else { "FAIL" };
+                    println!("{}: {}", name, status);
+                }
+                println!("\nPassed: {}/{}", passed, total);
 
-        if passed == total {
-            println!("All tests passed!");
-            std::process::exit(0);
-        } else {
-            println!("Some tests failed - this indicates the bug is present!");
-            std::process::exit(1);
-        }
+                if passed == total {
+                    println!("All tests passed!");
+                    std::process::exit(0);
+                } else {
+                    println!("Some tests failed - this indicates the bug is present!");
+                    std::process::exit(1);
+                }
+            })
+            .unwrap();
+
     });
 }
 

@@ -195,7 +195,7 @@ async fn run_benchmark() {
 
     // Collect results
     for recv in futures {
-        logwise::warn_sync!("Will await next result...");
+        logwise::trace_sync!("Will await next result...");
         let r = recv.await;
         stats.add_sample(r.1);
     }
