@@ -279,10 +279,7 @@ impl Shared {
 ///
 /// # Platform-specific behavior
 ///
-/// Different platforms require different integration:
-/// - **macOS** and **wasm**: Work out of the box
-/// - **Windows**: You must call `window_proc` from your window procedure
-/// - **Linux**: You must call the appropriate wayland event handlers
+/// On some platforms you must create a window before you can get mouse input.
 #[derive(Debug)]
 pub struct Mouse {
     shared: Arc<Shared>,
@@ -324,12 +321,7 @@ impl Mouse {
 
         # Platform specifics
 
-        * macOS and wasm require no special considerations.
-        * On windows, you must call [crate::window_proc] from your window.
-        * * On Linux,you must call from appropriate wayland events:
-            * [crate::input::mouse::linux::motion_event],
-            * [crate::input::mouse::linux::button_event]
-            * [crate::input::mouse::linux::xdg_toplevel_configure_event]
+        You may need to create a window first, using APIs in this crate.
     */
     pub fn window_pos(&self) -> Option<MouseWindowLocation> {
         *self.shared.window.lock().unwrap()

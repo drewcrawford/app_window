@@ -69,6 +69,18 @@ pub struct MainThreadGuard<'a, T: 'static> {
     value: &'a mut T,
 }
 
+impl<'a, T> AsRef<T> for MainThreadGuard<'a, T> {
+    fn as_ref(&self) -> &T {
+        &*self.value
+    }
+}
+
+impl<'a, T> AsMut<T> for MainThreadGuard<'a, T> {
+    fn as_mut(&mut self) -> &mut T {
+        &mut *self.value
+    }
+}
+
 impl<'a, T> Deref for MainThreadGuard<'a, T> {
     type Target = T;
 

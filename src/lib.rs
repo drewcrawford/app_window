@@ -284,6 +284,9 @@ Describes the preferred strategy for interacting with wgpu on this platform.
 #[cfg(target_os = "windows")]
 pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
 
+/**
+Describes the preferred strategy for interacting with wgpu on this platform.
+*/
 #[cfg(target_os = "macos")]
 pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
 
@@ -307,6 +310,9 @@ Describes the preferred strategy for interacting with wgpu on this platform.
 #[cfg(target_os = "windows")]
 pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
 
+/**
+Describes the preferred strategy for interacting with wgpu on this platform.
+*/
 #[cfg(any(target_os="macos"))]
 pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 #[cfg(any(target_arch = "wasm32"))]
