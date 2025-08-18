@@ -421,7 +421,8 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 ///
 /// ## Basic Fire-and-Forget
 ///
-/// ```
+/// ```no_run
+//  //main thread is not running in doctests.
 /// use app_window::application;
 ///
 /// // Update UI without waiting
@@ -458,7 +459,8 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 ///
 /// ## Event Handling
 ///
-/// ```
+/// ```no_run
+/// # // main thread is not running in doctests.
 /// use app_window::application;
 ///
 /// fn handle_user_input(input: String) {
@@ -489,6 +491,7 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 /// 4. Restores the previous context
 /// 5. Logs if execution was slow (>10ms)
 pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, closure: F) {
+    assert!(is_main_thread_running(), "{}",CALL_MAIN);
     let perf = move || {
         let start = time::Instant::now();
         let prior = logwise::context::Context::current();

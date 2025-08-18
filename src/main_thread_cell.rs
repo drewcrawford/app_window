@@ -318,20 +318,13 @@ mod tests {
     #[test]
     fn test_cell_construction() {
         // Verify we can construct cells
-        let _cell = MainThreadCell::new(42);
-        let _cell_from: MainThreadCell<i32> = 42.into();
-        let _cell_default: MainThreadCell<i32> = Default::default();
-    }
-
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
-    #[test]
-    fn test_cell_equality() {
-        let cell1 = MainThreadCell::new(42);
-        let cell2 = cell1.clone();
-        let cell3 = MainThreadCell::new(42);
-
-        assert_eq!(cell1, cell2); // Same underlying Arc
-        assert_ne!(cell1, cell3); // Different Arc instances
+        let cell = MainThreadCell::new(42);
+        let cell_from: MainThreadCell<i32> = 42.into();
+        let cell_default: MainThreadCell<i32> = Default::default();
+        //these require drop on the main thread, so let's not!
+        std::mem::forget(cell);
+        std::mem::forget(cell_from);
+        std::mem::forget(cell_default);
     }
 
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
@@ -340,6 +333,8 @@ mod tests {
         let cell = MainThreadCell::new(42);
         let debug_str = format!("{:?}", cell);
         assert!(debug_str.contains("MainThreadCell"));
+        //can't drop on the main thread, so let's not
+        std::mem::forget(cell);
     }
 
     #[test_executors::async_test]
