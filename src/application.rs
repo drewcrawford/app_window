@@ -169,23 +169,6 @@ pub(crate) const CALL_MAIN: &str = "Call app_window::application::main";
 ///     // Your app initialization here
 /// });
 /// ```
-///
-/// ## With Async Task Spawning
-///
-/// ```no_run
-/// // ALLOW_NORUN_DOCTEST: Function blocks indefinitely running the event loop
-/// use app_window::application;
-///
-/// application::main(|| {
-///     println!("Event loop started");
-///     
-///     // At this point you can:
-///     // - Create windows using Window::new()
-///     // - Spawn async tasks with your executor
-///     // - Set up event handlers
-///     // - Initialize your application state
-/// });
-/// ```
 pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
     assert!(sys::is_main_thread(), "Call main from the first thread");
     let old = IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Release);
@@ -422,7 +405,7 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 /// ## Basic Fire-and-Forget
 ///
 /// ```no_run
-//  //main thread is not running in doctests.
+//  # //main thread is not running in doctests.
 /// use app_window::application;
 ///
 /// // Update UI without waiting

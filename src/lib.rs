@@ -20,7 +20,7 @@ This crate distinguishes itself from winit in a few ways:
 
 # Quick Start
 
-```no_run
+```
 # async fn example() {
 use app_window::{application, window::Window, coordinates::{Position, Size}};
 
@@ -53,7 +53,7 @@ To handle this, we provide:
 
 ## Creating a fullscreen window
 
-```no_run
+```
 # async fn example() {
 use app_window::{application, window::Window};
 
@@ -68,7 +68,7 @@ match Window::fullscreen("Fullscreen App".to_string()).await {
 
 ## Running code on the main thread
 
-```no_run
+```
 # async fn example() {
 use app_window::application;
 
@@ -105,7 +105,7 @@ This crate includes built-in cross-platform input handling for keyboard and mous
 /// application has been initialized.
 ///
 /// # Example
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// use app_window::{window::Window, coordinates::{Position, Size}};
 ///
@@ -127,6 +127,7 @@ pub mod window;
 ///
 /// # Example
 /// ```no_run
+/// # // can't use main thread in doctests
 /// use app_window::application;
 ///
 /// fn main() {
@@ -166,7 +167,7 @@ pub mod coordinates;
 /// the `raw-window-handle` trait implementations.
 ///
 /// # Example
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// # use app_window::{application, window::Window};
 /// let mut window = Window::default().await;
@@ -185,7 +186,7 @@ pub mod surface;
 /// a unified API across Windows, macOS, Linux, and WebAssembly.
 ///
 /// # Example
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// use app_window::input::{keyboard::Keyboard, mouse::Mouse};
 ///
@@ -204,6 +205,7 @@ pub mod input;
 ///
 /// # Example
 /// ```no_run
+/// # // can't run on main thread in doctests
 /// # use app_window::{application, executor};
 /// # application::main(|| {
 /// # async fn my_async_function() -> i32 { 42 }
@@ -228,7 +230,7 @@ pub mod some_executor;
 /// This is useful for platform-specific resources that have main-thread requirements.
 ///
 /// # Example
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// use app_window::main_thread_cell::MainThreadCell;
 ///

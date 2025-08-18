@@ -177,7 +177,7 @@ pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Sen
 ///
 /// # Examples
 ///
-/// ```no_run
+/// ```
 /// # use std::future::Future;
 /// # fn setup_main_thread() {
 /// // This code must run on the main thread

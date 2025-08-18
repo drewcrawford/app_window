@@ -15,7 +15,7 @@ use raw_window_handle::{DisplayHandle, RawDisplayHandle, RawWindowHandle, Window
 /// [`Window::surface()`](crate::window::Window::surface) method. Only one Surface can
 /// be created per window.
 ///
-/// ```no_run
+/// ```
 /// # async fn example() {
 /// use app_window::window::Window;
 /// use app_window::coordinates::{Position, Size};
@@ -61,7 +61,7 @@ impl Surface {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// # use app_window::window::Window;
     /// # let mut window: Window = todo!();
@@ -96,7 +96,7 @@ impl Surface {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// # use app_window::window::Window;
     /// # let mut window: Window = todo!();
@@ -167,7 +167,7 @@ impl Surface {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```
     /// # async fn example() {
     /// # use app_window::window::Window;
     /// # use app_window::coordinates::Size;
