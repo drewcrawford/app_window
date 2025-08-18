@@ -21,6 +21,7 @@ private final class DebugWindow: NSWindow {
     MainActor.assumeIsolated {
         window = DebugWindow()
         window?.makeKeyAndOrderFront(nil)
+        NSApplication.shared.setActivationPolicy(.regular)
         
         window?.contentView = NSView(frame: .init(origin: .zero, size: .init(width: 500, height: 500)))
         NSApplication.shared.run()

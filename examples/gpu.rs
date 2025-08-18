@@ -9,8 +9,28 @@ mod gpu {
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
 
-    use app_window::WGPUStrategy;
+    use app_window::{WGPUStrategy, WGPU_SURFACE_STRATEGY};
     use wgpu::{Device, Queue, SurfaceTargetUnsafe};
+
+    async fn use_strategy<C,R>(strategy: WGPUStrategy, for_closure: C) -> R
+    where C: FnOnce() -> R + Send + 'static,
+    R: Send + 'static {
+        match strategy {
+            WGPUStrategy::Relaxed => {
+                for_closure()
+            }
+            WGPUStrategy::MainThread => {
+                let f = app_window::application::on_main_thread("use_strategy".to_string(), move || {
+                    for_closure()
+                }).await;
+                f
+            }
+            WGPUStrategy::NotMainThread => {
+                todo!("Not yet implemented")
+            }
+            _ => todo!("Unsupported WGPU strategy: {:?}", strategy),
+        }
+    }
 
     enum Message {
         SizeChanged,
@@ -92,14 +112,17 @@ mod gpu {
         let move_surface = app_surface.clone();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
 
-        let surface = unsafe {
-            instance
-                .create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
-                    raw_display_handle: move_surface.raw_display_handle(),
-                    raw_window_handle: move_surface.raw_window_handle(),
-                })
-                .expect("Can't create surface")
-        };
+        let move_instance = instance.clone();
+        let surface = use_strategy(WGPU_SURFACE_STRATEGY, move || {
+            unsafe {
+                move_instance
+                    .create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
+                        raw_display_handle: move_surface.raw_display_handle(),
+                        raw_window_handle: move_surface.raw_window_handle(),
+                    })
+                    .expect("Can't create surface")
+            }
+        }).await;
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),

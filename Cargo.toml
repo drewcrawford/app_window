@@ -12,6 +12,9 @@ categories = ["gui", "os", "wasm", "hardware-support"]
 exclude = [".*"]
 rust-version = "1.85.1"
 
+[features]
+logwise_internal = []
+
 
 [dependencies]
 atomic_float = "1.1.0"
@@ -30,7 +33,6 @@ test_executors = "0.3.4" # gpu example
 
 # needed for submit_to_main_thread_benchmark
 futures = "0.3"
-
 
 # macos
 [target.'cfg(target_os = "macos")'.dependencies]

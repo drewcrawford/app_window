@@ -10,19 +10,17 @@ async fn test_board() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     let _k = Keyboard::coalesced().await;
     let _m = Mouse::coalesced().await;
-    debug_window_show();
-    debug_window_hide();
 
-    //on wasm32 this thread completes
-    #[cfg(target_arch = "wasm32")]
-    {
-        std::mem::forget(_k);
-        std::mem::forget(_m);
-    }
+    std::mem::forget(_k);
+    std::mem::forget(_m);
 }
 
 fn main() {
     app_window::application::main(|| {
+        app_window::application::submit_to_main_thread("show window".to_string(), || {
+            debug_window_show();
+        });
+
         let task = some_executor::task::Task::without_notifications(
             "input_main".into(),
             some_executor::task::Configuration::new(
