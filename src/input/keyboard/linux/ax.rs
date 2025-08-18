@@ -232,8 +232,8 @@ fn ax_init() -> ChannelProducer<Event> {
             let mut ex = some_executor::current_executor::current_executor();
             let t = Task::without_notifications(
                 "linux ax".to_string(),
-                ax_loop(receiver),
                 Configuration::new(Hint::IO, Priority::UserInteractive, Instant::now()),
+                ax_loop(receiver),
             )
             .into_objsafe();
             let o = ex.spawn_objsafe(t);
@@ -248,6 +248,7 @@ pub fn ax_press(key: KeyboardKey, pressed: bool) {
     let mut ex = some_executor::current_executor::current_executor();
     let t = Task::without_notifications(
         "linux ax".to_string(),
+        Configuration::new(Hint::IO, Priority::UserInteractive, Instant::now()),
         async move {
             let mut sender = sender;
             sender
@@ -256,7 +257,6 @@ pub fn ax_press(key: KeyboardKey, pressed: bool) {
                 .expect("Failed to send event");
             sender.async_drop().await;
         },
-        Configuration::new(Hint::IO, Priority::UserInteractive, Instant::now()),
     )
     .into_objsafe();
     let o = ex.spawn_objsafe(t);
@@ -268,6 +268,7 @@ pub fn ax_mouse() {
     let mut ex = some_executor::current_executor::current_executor();
     let t = Task::without_notifications(
         "linux ax".to_string(),
+        Configuration::new(Hint::IO, Priority::UserInteractive, Instant::now()),
         async move {
             let mut sender = sender;
             sender
@@ -276,7 +277,6 @@ pub fn ax_mouse() {
                 .expect("Failed to send event");
             sender.async_drop().await;
         },
-        Configuration::new(Hint::IO, Priority::UserInteractive, Instant::now()),
     )
     .into_objsafe();
     let o = ex.spawn_objsafe(t);

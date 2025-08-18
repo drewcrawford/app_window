@@ -10,7 +10,7 @@ license = "MPL-2.0"
 keywords = ["window", "windowing", "input", "keyboard", "mouse"]
 categories = ["gui", "os", "wasm", "hardware-support"]
 exclude = [".*"]
-rust-version = "1.85.1"
+rust-version = "1.88.0"
 
 [features]
 logwise_internal = []

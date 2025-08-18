@@ -448,7 +448,6 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
                 .dispatch_pending(&mut app)
                 .expect("can't dispatch events");
             event_queue.flush().expect("Failed to flush event queue");
-            println!("flushed");
             //submit new peek
             let mut sqs = io_uring.submission();
             unsafe { sqs.push(&eventfd_opcode) }.expect("Can't submit peek");
@@ -1110,8 +1109,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<XdgToplevel, A> for App {
                 height,
                 states: _,
             } => {
-                #[cfg(feature = "app_input")]
-                app_input::linux::xdg_toplevel_configure_event(width, height);
+                crate::input::linux::xdg_toplevel_configure_event(width, height);
 
                 data.as_ref().lock().unwrap().proposed_configure =
                     Some(Configure { width, height });
@@ -1335,8 +1333,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                     parent_surface_x = surface_x;
                     parent_surface_y = surface_y;
                 }
-                #[cfg(feature = "app_input")]
-                app_input::linux::motion_event(_time, parent_surface_x, parent_surface_y);
+                crate::input::linux::motion_event(_time, parent_surface_x, parent_surface_y);
 
                 //get current size
                 let size = data.applied_size();
@@ -1373,8 +1370,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                 button,
                 state,
             } => {
-                #[cfg(feature = "app_input")]
-                app_input::linux::button_event(
+                crate::input::linux::button_event(
                     _time,
                     button,
                     state.into(),
@@ -1479,8 +1475,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
                 key: _key,
                 state: _state,
             } => {
-                #[cfg(feature = "app_input")]
-                app_input::linux::wl_keyboard_event(
+                crate::input::linux::wl_keyboard_event(
                     _serial,
                     _time,
                     _key,
@@ -1501,7 +1496,7 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
 
 impl Window {
     pub async fn new(_position: Position, size: Size, title: String) -> Self {
-        let window_internal = crate::application::on_main_thread(move || {
+        let window_internal = crate::application::on_main_thread("Window::new".to_string(),move || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let xdg_wm_base: XdgWmBase = info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
             let window_internal =
@@ -1621,7 +1616,7 @@ impl Window {
     }
 
     pub async fn surface(&self) -> crate::surface::Surface {
-        let display = on_main_thread_async(async {
+        let display = crate::application::on_main_thread("surface".to_string(), || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             info.connection.display()
         })
@@ -1661,7 +1656,7 @@ unsafe impl Send for Surface {}
 unsafe impl Sync for Surface {}
 
 impl Surface {
-    pub async fn size_scale(&self) -> (Size, f64) {
+    fn size_scale_impl(&self) -> (Size, f64) {
         let size = self.window_internal.lock().unwrap().applied_size();
 
         // Get the scale factor from the app state directly (accessible from any thread)
@@ -1677,7 +1672,7 @@ impl Surface {
         let outputs = app_state.outputs.lock().unwrap();
         let scale = if current_outputs.is_empty() {
             // If no outputs are tracked yet, default to 1.0
-            1.07
+            1.0
         } else {
             // Use the scale factor of the first output the window is on
             // In a proper implementation, you might want to use the "primary" output
@@ -1691,6 +1686,13 @@ impl Surface {
         };
 
         (size, scale)
+    }
+    pub async fn size_scale(&self) -> (Size, f64) {
+        self.size_scale_impl()
+    }
+    pub fn size_main(&self) -> (Size, f64) {
+        //on this platform we can call size_scale_impl on main thread
+        self.size_scale_impl()
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {
