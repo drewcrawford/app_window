@@ -12,7 +12,7 @@ use wayland_client::protocol::wl_shm_pool::WlShmPool;
 use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::wl_subsurface::WlSubsurface;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::protocol::{wl_registry, wl_compositor};
+use wayland_client::protocol::wl_registry;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
@@ -20,10 +20,10 @@ use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use wayland_protocols::xdg::shell::client::{xdg_surface, xdg_toplevel};
 
 use crate::coordinates::Position;
-use super::{App, BufferReleaseInfo, Configure, OutputInfo, ReleaseOpt, SurfaceEvents, WindowInternal};
+use super::{App, BufferReleaseInfo, Configure, OutputInfo, SurfaceEvents, WindowInternal};
 use super::ax;
 use super::buffer::AllocatedBuffer;
-use super::cursor::{ActiveCursor, CursorRequest, MouseRegion};
+use super::cursor::{CursorRequest, MouseRegion};
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for App {
     fn event(

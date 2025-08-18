@@ -2,9 +2,9 @@
 
 // Re-export main types and functions
 pub use window::{Window, WindowInternal};
-pub use main_thread::{run_main_thread, on_main_thread, is_main_thread, MAIN_THREAD_INFO};
+pub use main_thread::{run_main_thread, on_main_thread, is_main_thread};
 pub use buffer::AllocatedBuffer;
-pub use cursor::{ActiveCursor, CursorRequest, MouseRegion};
+pub use cursor::ActiveCursor;
 
 // Module declarations
 pub mod ax;
@@ -14,9 +14,9 @@ pub mod dispatchers;
 pub mod main_thread;
 pub mod window;
 
-use crate::coordinates::{Position, Size};
+use crate::coordinates::Size;
 use accesskit::NodeId;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fs::File;
 use std::ptr::NonNull;
@@ -25,14 +25,12 @@ use memmap2::MmapMut;
 use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
 };
-use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_display::WlDisplay;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, QueueHandle, Proxy};
-use wayland_cursor::CursorTheme;
 use zune_png::zune_core::result::DecodingResult;
 
 // Constants

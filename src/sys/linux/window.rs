@@ -14,7 +14,7 @@ use crate::coordinates::{Position, Size};
 use super::{App, AppState, Configure, FullscreenError, SurfaceEvents, Surface};
 use super::ax::AX;
 use super::buffer::{AllocatedBuffer, create_shm_buffer_decor};
-use super::main_thread::{MAIN_THREAD_INFO, on_main_thread};
+use super::main_thread::MAIN_THREAD_INFO;
 
 pub struct DebugWrapper(pub Box<dyn Fn(Size) + Send>);
 impl Debug for DebugWrapper {
