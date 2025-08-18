@@ -123,12 +123,10 @@ unsafe impl Send for Window {}
 unsafe impl Sync for Window {}
 
 extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
-    logwise::debuginternal_sync!("got msg hwnd {hwnd} msg {msg} w_param {w_param} l_param {l_param}", hwnd=hwnd, msg = msg, w_param = w_param, l_param = l_param);
-    #[cfg(feature = "app_input")]
-    {
-        if app_input::window_proc(hwnd, msg, w_param, l_param) == LRESULT(0) {
-            return LRESULT(0);
-        }
+    logwise::debuginternal_sync!("got msg hwnd {hwnd} msg {msg} w_param {w_param} l_param {l_param}", hwnd=logwise::privacy::LogIt(&hwnd), msg = msg,
+        w_param = logwise::privacy::LogIt(&w_param), l_param = logwise::privacy::LogIt(&l_param));
+    if crate::input::window_proc(hwnd, msg, w_param, l_param) == LRESULT(0) {
+        return LRESULT(0);
     }
 
     match msg {
@@ -195,7 +193,7 @@ fn create_window_impl(position: Position, size: Size, title: String, style: WIND
 
 impl Window {
     pub async fn new(position: Position, size: Size, title: String) -> Self {
-        let window = crate::application::on_main_thread(move || {
+        let window = crate::application::on_main_thread("Window::new".into(), move || {
             let window = create_window_impl(position, size, title, WS_OVERLAPPEDWINDOW);
             SendCell::new(window)
         })
@@ -217,7 +215,7 @@ impl Window {
         let size = Size::new(unsafe { GetSystemMetrics(SM_CXSCREEN) as f64 }, unsafe {
             GetSystemMetrics(SM_CYSCREEN) as f64
         });
-        let window = crate::application::on_main_thread(move || {
+        let window = crate::application::on_main_thread("Window::fullscreen".into(), move || {
             let window = create_window_impl(Position::new(0.0, 0.0), size, title, WS_POPUP);
             SendCell::new(window)
         })
@@ -254,18 +252,24 @@ unsafe impl Send for Surface {}
 unsafe impl Sync for Surface {}
 
 impl Surface {
+    fn size_imp(hwnd: HWND) -> (Size, f64) {
+        let mut rect = RECT::default();
+        unsafe { GetClientRect(hwnd, &mut rect).expect("Can't get size") }
+        let s = Size::new(rect.right as f64, rect.bottom as f64);
+        let dpi = unsafe { GetDpiForWindow(hwnd) };
+        let scale = dpi as f64 / 96.0;
+        (s, scale)
+    }
     pub async fn size_scale(&self) -> (Size, f64) {
         let send_hwnd = self.imp.copying();
-        crate::application::on_main_thread(move || {
-            let hwnd = send_hwnd.get();
-            let mut rect = RECT::default();
-            unsafe { GetClientRect(*hwnd, &mut rect).expect("Can't get size") }
-            let s = Size::new(rect.right as f64, rect.bottom as f64);
-            let dpi = unsafe { GetDpiForWindow(*hwnd) };
-            let scale = dpi as f64 / 96.0;
-            (s, scale)
+        crate::application::on_main_thread("Surface::size_scale".into(), move || {
+            Self::size_imp(*send_hwnd.get())
         })
         .await
+    }
+    pub fn size_main(&self) -> (Size, f64) {
+        assert!(crate::application::is_main_thread(), "Call from main thread only");
+        Self::size_imp(*self.imp.get())
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {
