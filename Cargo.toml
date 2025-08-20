@@ -21,7 +21,7 @@ atomic_float = "1.1.0"
 raw-window-handle = "0.6.2"
 logwise = "0.3"
 thiserror = "2.0.15"
-some_executor = "0.6.0"
+some_executor = "0.6.1"
 continue = "0.1.1"
 send_cells = "0.2.0"
 
@@ -75,21 +75,21 @@ windows = { version = "0.61.1", features=[
 
 # linux
 [target.'cfg(target_os="linux")'.dependencies]
-libc = "0.2.169"
-wayland-client = "0.31.7"
+libc = "0.2.175"
+wayland-client = "0.31.11"
 wayland-backend = {version = "0.3.7", features=["client_system"]}
-wayland-protocols = {version = "0.32.5", features = ["client"]}
-wayland-cursor = "0.31.7"
-memmap2 = "0.9.5"
-io-uring = "0.7.3"
+wayland-protocols = {version = "0.32.9", features = ["client"]}
+wayland-cursor = "0.31.11"
+memmap2 = "0.9.7"
+io-uring = "0.7.9"
 zune-png = "0.4.10"
 # probably at some point this will be a global requirement,
 # for now we only NEED it to advertise decorations on linux
-accesskit = "0.19.0"
-accesskit_unix = "0.15.0"
+accesskit = "0.21.0"
+accesskit_unix = "0.17.0"
 # input dependencies
-tempfile = "3.14.0"
-atspi = {version = "0.27", features=[]}
+tempfile = "3.21.0"
+atspi = {version = "0.28.0", features=[]}
 ampsc = "0.2.0"
 
 
