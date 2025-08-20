@@ -24,7 +24,7 @@ use web_time::{Duration, Instant};
 #[cfg(target_arch = "wasm32")]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-const NUM_ITERATIONS: usize = 50;
+const NUM_ITERATIONS: usize = 25;
 
 struct TimingStats {
     samples: Vec<Duration>,
@@ -137,7 +137,7 @@ fn main() {}
 async fn wasm_main() {
     assert!(app_window::application::is_main_thread());
     let (c, r) = r#continue::continuation();
-
+    logwise::info_sync!("WILL call main thread");
     app_window::application::main(move || {
         logwise::warn_sync!("=== submit_to_main_thread_benchmark ===");
 
@@ -152,8 +152,9 @@ async fn wasm_main() {
         );
         t.spawn_static_current();
     });
-
+    logwise::info_sync!("Awaiting benchmark completion...");
     r.await;
+    logwise::info_sync!("Benchmark completed, exiting...");
 }
 
 async fn run_benchmark() {
@@ -220,5 +221,7 @@ async fn run_benchmark() {
     stats.report();
 
     // Exit cleanly after benchmark completes
+    //note: not on wasm32 I guess
+    #[cfg(not(target_arch = "wasm32"))]
     std::process::exit(0);
 }
