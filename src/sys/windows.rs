@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MPL-2.0
 
 use crate::coordinates::{Position, Size};
 use raw_window_handle::{

@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MPL-2.0
 
 //! A cell type for main-thread-only values that can be shared across threads.
 //!

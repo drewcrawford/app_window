@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MPL-2.0
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex, Weak};

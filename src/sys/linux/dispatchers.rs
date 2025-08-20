@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MPL-2.0
 use std::sync::{Arc, Mutex};
 use wayland_client::globals::GlobalListContents;
 use wayland_client::protocol::wl_buffer::{Event, WlBuffer};

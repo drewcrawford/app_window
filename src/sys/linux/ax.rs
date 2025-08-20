@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MPL-2.0
 use super::{BUTTON_WIDTH, CLOSE_ID, MAXIMIZE_ID, MINIMIZE_ID, TITLEBAR_HEIGHT};
 use crate::coordinates::Size;
 

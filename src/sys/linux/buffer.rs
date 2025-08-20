@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MPL-2.0
 use super::{App, BufferReleaseInfo, ReleaseOpt};
 use crate::sys::window::WindowInternal;
 use libc::{MFD_ALLOW_SEALING, MFD_CLOEXEC, c_char, memfd_create};

@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MPL-2.0
 
 // Re-export main types and functions
 pub use buffer::AllocatedBuffer;
