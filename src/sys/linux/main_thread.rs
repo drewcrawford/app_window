@@ -2,8 +2,8 @@
 use libc::{EFD_SEMAPHORE, SYS_gettid, c_int, c_void, eventfd, getpid, pid_t, syscall};
 use std::cell::RefCell;
 use std::os::fd::AsRawFd;
-use std::sync::mpsc::{Sender, channel};
 use std::sync::OnceLock;
+use std::sync::mpsc::{Sender, channel};
 use std::time::Duration;
 use wayland_client::backend::WaylandError;
 use wayland_client::globals::{GlobalList, registry_queue_init};

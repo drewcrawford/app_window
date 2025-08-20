@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
+use app_window::input::debug_window_show;
 use app_window::input::keyboard::Keyboard;
 use app_window::input::mouse::Mouse;
-use app_window::input::debug_window_show;
 use some_executor::SomeExecutor;
 use some_executor::observer::Observer;
 

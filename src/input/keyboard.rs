@@ -36,14 +36,14 @@
 //! // In a real application, you would create the keyboard after initializing the main thread:
 //! // let keyboard = Keyboard::coalesced().await;
 //! // For this example, we'll show the key enum usage:
-//! 
+//!
 //! // The KeyboardKey enum represents all supported keys
 //! let space_key = KeyboardKey::Space;
 //! let escape_key = KeyboardKey::Escape;
-//! 
+//!
 //! // Keys can be compared
 //! assert_ne!(space_key, escape_key);
-//! 
+//!
 //! // Keys implement Copy and Debug
 //! let key_copy = space_key;
 //! println!("Key: {:?}", key_copy);
@@ -59,7 +59,7 @@
 //!
 //! // In a game loop, you would check key states like this:
 //! // let keyboard = Keyboard::coalesced().await;
-//! 
+//!
 //! // Define your control keys
 //! let move_keys = [
 //!     (KeyboardKey::W, (0.0, -1.0)), // Up
@@ -67,7 +67,7 @@
 //!     (KeyboardKey::A, (-1.0, 0.0)), // Left
 //!     (KeyboardKey::D, (1.0, 0.0)),  // Right
 //! ];
-//! 
+//!
 //! // You can iterate over keys
 //! for (key, _direction) in &move_keys {
 //!     // In real code: if keyboard.is_pressed(*key) { ... }

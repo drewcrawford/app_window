@@ -470,13 +470,13 @@ pub enum WGPUStrategy {
     /// This is required on WebAssembly and some macOS configurations where
     /// the graphics context must be created and used from the main thread.
     MainThread,
-    
+
     /// The main thread should NOT be used to access wgpu.
     ///
     /// This is required on Linux with Wayland, where blocking the main thread
     /// with graphics operations can cause compositor issues.
     NotMainThread,
-    
+
     /// On this platform, wgpu types are sendable and can be used from any thread.
     ///
     /// This is the case on Windows and most macOS configurations, providing
@@ -516,8 +516,6 @@ pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
 #[cfg(target_arch = "wasm32")]
 pub const WGPU_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 
-
-
 /// The preferred strategy for interacting with wgpu surfaces on the current platform.
 ///
 /// This constant provides the platform-specific threading requirements for wgpu
@@ -548,7 +546,7 @@ pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
 /// The preferred strategy for interacting with wgpu surfaces on the current platform.
 ///
 /// See [`WGPU_SURFACE_STRATEGY`] documentation for details.
-#[cfg(target_os="macos")]
+#[cfg(target_os = "macos")]
 pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 
 /// The preferred strategy for interacting with wgpu surfaces on the current platform.
@@ -556,6 +554,5 @@ pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 /// See [`WGPU_SURFACE_STRATEGY`] documentation for details.
 #[cfg(target_arch = "wasm32")]
 pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
-
 
 logwise::declare_logging_domain!();

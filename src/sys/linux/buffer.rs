@@ -1,15 +1,15 @@
 //SPDX-License-Identifier: MPL-2.0
+use super::{App, BufferReleaseInfo, ReleaseOpt};
+use crate::sys::window::WindowInternal;
 use libc::{MFD_ALLOW_SEALING, MFD_CLOEXEC, c_char, memfd_create};
 use memmap2::MmapMut;
 use std::fs::File;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd};
 use std::sync::{Arc, Mutex};
+use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_buffer::WlBuffer;
 use wayland_client::protocol::wl_shm::{Format, WlShm};
-use wayland_client::QueueHandle;
 use zune_png::zune_core::result::DecodingResult;
-use crate::sys::window::WindowInternal;
-use super::{App, BufferReleaseInfo, ReleaseOpt};
 
 #[derive(Debug, Clone)]
 pub struct AllocatedBuffer {
@@ -26,7 +26,11 @@ impl AllocatedBuffer {
         queue_handle: &QueueHandle<App>,
         window_internal: Arc<Mutex<WindowInternal>>,
     ) -> AllocatedBuffer {
-        logwise::debuginternal_sync!("Creating shm buffer width {width}, height {height}",width=width,height=height);
+        logwise::debuginternal_sync!(
+            "Creating shm buffer width {width}, height {height}",
+            width = width,
+            height = height
+        );
         let file = unsafe {
             memfd_create(
                 b"mem_fd\0" as *const _ as *const c_char,
@@ -57,14 +61,12 @@ impl AllocatedBuffer {
 
         let pool = shm.create_pool(file.as_fd(), width * height * 4, queue_handle, ());
         let mmap = Arc::new(mmap);
-        let release_opt = Arc::new(Mutex::new(Some(
-            ReleaseOpt {
-                _file: file,
-                _mmap: mmap.clone(),
-                allocated_buffer: None,
-                window_internal: window_internal.clone(),
-            }
-        )));
+        let release_opt = Arc::new(Mutex::new(Some(ReleaseOpt {
+            _file: file,
+            _mmap: mmap.clone(),
+            allocated_buffer: None,
+            window_internal: window_internal.clone(),
+        })));
         let release_info = BufferReleaseInfo {
             opt: release_opt.clone(),
             decor: false,
@@ -84,7 +86,12 @@ impl AllocatedBuffer {
             width,
             height,
         };
-        release_opt.lock().unwrap().as_mut().unwrap().allocated_buffer = Some(allocated_buffer.clone());
+        release_opt
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .allocated_buffer = Some(allocated_buffer.clone());
         allocated_buffer
     }
 }
@@ -134,14 +141,12 @@ pub(super) fn create_shm_buffer_decor(
         queue_handle,
         (),
     );
-    let release_opt = Arc::new(Mutex::new(Some(
-        ReleaseOpt {
-            _file: file,
-            _mmap: Arc::new(mmap),
-            allocated_buffer: None,
-            window_internal: window_internal.clone(),
-        }
-    )));
+    let release_opt = Arc::new(Mutex::new(Some(ReleaseOpt {
+        _file: file,
+        _mmap: Arc::new(mmap),
+        allocated_buffer: None,
+        window_internal: window_internal.clone(),
+    })));
     let release_info = BufferReleaseInfo {
         opt: release_opt.clone(),
         decor: true,
@@ -161,6 +166,11 @@ pub(super) fn create_shm_buffer_decor(
         width: dimensions.0 as i32,
         height: dimensions.1 as i32,
     };
-    release_opt.lock().unwrap().as_mut().unwrap().allocated_buffer = Some(allocated_buffer.clone());
+    release_opt
+        .lock()
+        .unwrap()
+        .as_mut()
+        .unwrap()
+        .allocated_buffer = Some(allocated_buffer.clone());
     allocated_buffer
 }

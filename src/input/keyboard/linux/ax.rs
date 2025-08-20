@@ -292,7 +292,3 @@ pub fn ax_mouse() {
     let o = ex.spawn_objsafe(t);
     std::mem::forget(o);
 }
-
-
-
-

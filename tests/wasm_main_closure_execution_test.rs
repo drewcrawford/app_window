@@ -18,7 +18,7 @@
 //! Run with: `cargo test --test wasm_main_closure_execution_test`
 
 #[cfg(not(target_arch = "wasm32"))]
-use std::time::{Duration};
+use std::time::Duration;
 #[cfg(target_arch = "wasm32")]
 use web_time::{Duration, Instant};
 

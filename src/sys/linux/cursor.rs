@@ -8,9 +8,9 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, QueueHandle};
 use wayland_cursor::CursorTheme;
 
-use crate::coordinates::{Position, Size};
-use super::{App, AppState, SurfaceEvents, BUTTON_WIDTH, TITLEBAR_HEIGHT};
 use super::main_thread::on_main_thread;
+use super::{App, AppState, BUTTON_WIDTH, SurfaceEvents, TITLEBAR_HEIGHT};
+use crate::coordinates::{Position, Size};
 
 const CURSOR_SIZE: i32 = 16;
 

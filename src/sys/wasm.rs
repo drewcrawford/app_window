@@ -126,32 +126,33 @@ impl Window {
         let (sender, fut) = r#continue::continuation();
         let sender_mutex = Arc::new(Mutex::new(Some(sender)));
         let sender_mutex_error = sender_mutex.clone();
-        let main_thread_job = crate::application::on_main_thread("Window::fullscreen".to_string(),  move || {
-            let strong_closure = Closure::once(move |_| {
-                let lock = sender_mutex.lock().unwrap().take().expect("already sent?");
-                lock.send(Ok(()));
-            });
-            let error_closure = Closure::once(move |a: JsValue| {
-                let lock = sender_mutex_error
-                    .lock()
-                    .unwrap()
-                    .take()
-                    .expect("already sent?");
-                let a_typeerror: TypeError = a.unchecked_into();
-                let a_string = a_typeerror.to_string();
+        let main_thread_job =
+            crate::application::on_main_thread("Window::fullscreen".to_string(), move || {
+                let strong_closure = Closure::once(move |_| {
+                    let lock = sender_mutex.lock().unwrap().take().expect("already sent?");
+                    lock.send(Ok(()));
+                });
+                let error_closure = Closure::once(move |a: JsValue| {
+                    let lock = sender_mutex_error
+                        .lock()
+                        .unwrap()
+                        .take()
+                        .expect("already sent?");
+                    let a_typeerror: TypeError = a.unchecked_into();
+                    let a_string = a_typeerror.to_string();
 
-                lock.send(Err(ToString::to_string(&a_string)));
+                    lock.send(Err(ToString::to_string(&a_string)));
+                });
+                let window = window().expect("Can't get window");
+                let doc = window.document().expect("Can't get document");
+                let canvas = CanvasHolder::new_main();
+                let as_element_2: &Element2 = canvas.canvas.as_ref().unchecked_ref();
+                doc.set_title(&title);
+                let promise = as_element_2.request_fullscreen_2();
+                drop(promise.then2(&strong_closure, &error_closure));
+                CANVAS_HOLDER.replace(Some(canvas));
+                SendCell::new((strong_closure, error_closure))
             });
-            let window = window().expect("Can't get window");
-            let doc = window.document().expect("Can't get document");
-            let canvas = CanvasHolder::new_main();
-            let as_element_2: &Element2 = canvas.canvas.as_ref().unchecked_ref();
-            doc.set_title(&title);
-            let promise = as_element_2.request_fullscreen_2();
-            drop(promise.then2(&strong_closure, &error_closure));
-            CANVAS_HOLDER.replace(Some(canvas));
-            SendCell::new((strong_closure, error_closure))
-        });
         let closures = main_thread_job.await;
         logwise::warn_sync!("Waiting for fut...");
         let fullscreen_result = fut.await;
@@ -220,14 +221,20 @@ pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
 
     wasm_thread::spawn(|| {
         // logwise::info_sync!("wasm_thread spawn");
-        let new_context = Context::new_task(Some(push_context_2), "app_window after MT context".to_string());
+        let new_context = Context::new_task(
+            Some(push_context_2),
+            "app_window after MT context".to_string(),
+        );
         let new_id = new_context.context_id();
         new_context.set_current();
         closure();
         Context::pop(new_id);
     });
 
-    let event_loop_context = Context::new_task(Some(Context::current()), "main thread eventloop".to_string());
+    let event_loop_context = Context::new_task(
+        Some(Context::current()),
+        "main thread eventloop".to_string(),
+    );
     let apply_context = logwise::context::ApplyContext::new(event_loop_context, async move {
         loop {
             // logwise::debuginternal_sync!("Waiting for main thread event");

@@ -113,7 +113,6 @@ impl TimingStats {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-
     logwise::warn_sync!("=== submit_to_main_thread Latency Benchmark ===");
 
     app_window::application::main(|| {
@@ -174,10 +173,13 @@ async fn run_benchmark() {
     }
 
     thread::spawn(move || {
-        logwise::info_sync!("Background thread started, will submit {count} tasks", count = senders.len());
+        logwise::info_sync!(
+            "Background thread started, will submit {count} tasks",
+            count = senders.len()
+        );
         for (s, sender) in senders.drain(..).enumerate() {
             eprintln!("Submitting task {}/{}", s + 1, NUM_ITERATIONS);
-            
+
             // Record time just before submission
             let start_time = Instant::now();
 
@@ -193,11 +195,17 @@ async fn run_benchmark() {
             // Wait a bit between submissions to get clean measurements
             thread::sleep(Duration::from_millis(20));
         }
-        logwise::info_sync!("Background thread finished submitting all {count} tasks", count = NUM_ITERATIONS);
+        logwise::info_sync!(
+            "Background thread finished submitting all {count} tasks",
+            count = NUM_ITERATIONS
+        );
     });
 
     // Collect results
-    logwise::warn_sync!("Starting to collect {count} results...", count = futures.len());
+    logwise::warn_sync!(
+        "Starting to collect {count} results...",
+        count = futures.len()
+    );
     for (_i, recv) in futures.into_iter().enumerate() {
         // logwise::info_sync!("Waiting for result {partial}/{total}", partial = i + 1, total = NUM_ITERATIONS);
         let r = recv.await;
@@ -210,7 +218,7 @@ async fn run_benchmark() {
 
     // Report results
     stats.report();
-    
+
     // Exit cleanly after benchmark completes
     std::process::exit(0);
 }

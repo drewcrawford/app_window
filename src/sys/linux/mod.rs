@@ -1,10 +1,10 @@
 //SPDX-License-Identifier: MPL-2.0
 
 // Re-export main types and functions
-pub use main_thread::{run_main_thread, on_main_thread, is_main_thread};
 pub use buffer::AllocatedBuffer;
 pub use cursor::ActiveCursor;
-pub(crate)  use window::Window;
+pub use main_thread::{is_main_thread, on_main_thread, run_main_thread};
+pub(crate) use window::Window;
 // Module declarations
 pub mod ax;
 pub mod buffer;
@@ -14,24 +14,24 @@ pub mod main_thread;
 pub mod window;
 
 use crate::coordinates::Size;
+use crate::sys::window::WindowInternal;
 use accesskit::NodeId;
+use memmap2::MmapMut;
+use raw_window_handle::{
+    RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
+};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fs::File;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
-use memmap2::MmapMut;
-use raw_window_handle::{
-    RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle, WaylandWindowHandle,
-};
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_display::WlDisplay;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_surface::WlSurface;
-use wayland_client::{Connection, QueueHandle, Proxy};
+use wayland_client::{Connection, Proxy, QueueHandle};
 use zune_png::zune_core::result::DecodingResult;
-use crate::sys::window::WindowInternal;
 
 // Constants
 const CLOSE_ID: NodeId = NodeId(3);
@@ -172,11 +172,11 @@ impl Surface {
 
         (size, scale)
     }
-    
+
     pub async fn size_scale(&self) -> (Size, f64) {
         self.size_scale_impl()
     }
-    
+
     pub fn size_main(&self) -> (Size, f64) {
         //on this platform we can call size_scale_impl on main thread
         self.size_scale_impl()

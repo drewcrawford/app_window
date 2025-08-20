@@ -18,8 +18,7 @@ fn js_button_to_rust(button: i16) -> u8 {
 }
 
 #[derive(Debug)]
-pub(super) struct PlatformCoalescedMouse {
-}
+pub(super) struct PlatformCoalescedMouse {}
 
 impl PlatformCoalescedMouse {
     pub async fn new(shared: &Arc<crate::input::mouse::Shared>) -> Self {
@@ -122,8 +121,7 @@ impl PlatformCoalescedMouse {
                 .expect("Can't add event listener");
             wheel_callback.forget();
 
-            PlatformCoalescedMouse {
-            }
+            PlatformCoalescedMouse {}
         })
         .await
     }

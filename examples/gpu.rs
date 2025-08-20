@@ -9,28 +9,30 @@ mod gpu {
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
 
-    use app_window::{WGPUStrategy, WGPU_SURFACE_STRATEGY};
+    use app_window::{WGPU_SURFACE_STRATEGY, WGPUStrategy};
     use wgpu::{Device, Queue, SurfaceTargetUnsafe};
 
     #[cfg(not(target_arch = "wasm32"))]
-    async fn use_strategy<C,R>(strategy: WGPUStrategy, for_closure: C) -> R
-    where C: FnOnce() -> R + Send + 'static,
-    R: Send + 'static {
+    async fn use_strategy<C, R>(strategy: WGPUStrategy, for_closure: C) -> R
+    where
+        C: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
         match strategy {
-            WGPUStrategy::Relaxed => {
-                for_closure()
-            }
+            WGPUStrategy::Relaxed => for_closure(),
             WGPUStrategy::MainThread => {
-                let f = app_window::application::on_main_thread("use_strategy".to_string(), move || {
-                    for_closure()
-                }).await;
+                let f = app_window::application::on_main_thread(
+                    "use_strategy".to_string(),
+                    move || for_closure(),
+                )
+                .await;
                 f
             }
             WGPUStrategy::NotMainThread => {
                 if app_window::application::is_main_thread() {
                     todo!()
-                }
-                else { //effectively relaxed
+                } else {
+                    //effectively relaxed
                     for_closure()
                 }
             }
@@ -39,13 +41,12 @@ mod gpu {
     }
 
     #[cfg(target_arch = "wasm32")]
-    async fn use_strategy<C,R>(strategy: WGPUStrategy, for_closure: C) -> R
-    where C: FnOnce() -> R,
+    async fn use_strategy<C, R>(strategy: WGPUStrategy, for_closure: C) -> R
+    where
+        C: FnOnce() -> R,
     {
         match strategy {
-            WGPUStrategy::Relaxed => {
-                for_closure()
-            }
+            WGPUStrategy::Relaxed => for_closure(),
             WGPUStrategy::MainThread => {
                 assert!(app_window::application::is_main_thread());
                 for_closure()
@@ -53,8 +54,8 @@ mod gpu {
             WGPUStrategy::NotMainThread => {
                 if app_window::application::is_main_thread() {
                     todo!()
-                }
-                else { //effectively relaxed
+                } else {
+                    //effectively relaxed
                     for_closure()
                 }
             }
@@ -144,16 +145,15 @@ mod gpu {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
 
         let move_instance = instance.clone();
-        let surface = use_strategy(WGPU_SURFACE_STRATEGY, move || {
-            unsafe {
-                move_instance
-                    .create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
-                        raw_display_handle: move_surface.raw_display_handle(),
-                        raw_window_handle: move_surface.raw_window_handle(),
-                    })
-                    .expect("Can't create surface")
-            }
-        }).await;
+        let surface = use_strategy(WGPU_SURFACE_STRATEGY, move || unsafe {
+            move_instance
+                .create_surface_unsafe(SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: move_surface.raw_display_handle(),
+                    raw_window_handle: move_surface.raw_window_handle(),
+                })
+                .expect("Can't create surface")
+        })
+        .await;
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -246,7 +246,7 @@ mod gpu {
         //set up main thread
         app_window::application::main(|| match app_window::WGPU_STRATEGY {
             WGPUStrategy::MainThread => {
-                app_window::application::submit_to_main_thread("gpu".to_owned(),|| {
+                app_window::application::submit_to_main_thread("gpu".to_owned(), || {
                     some_executor::task::Task::without_notifications(
                         "gpu_main".to_string(),
                         Configuration::default(),

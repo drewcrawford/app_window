@@ -87,9 +87,7 @@ async fn test_platform_coalesced_mouse_creation() {
                     // Try to create the mouse - this will now happen on the main thread via MainThreadCell
                     app_window::input::mouse::Mouse::coalesced().await;
                     logwise::info_sync!("Successfully created PlatformCoalescedMouse");
-                    logwise::warn_sync!(
-                                "✅ SUCCESS: PlatformCoalescedMouse created successfully"
-                            );
+                    logwise::warn_sync!("✅ SUCCESS: PlatformCoalescedMouse created successfully");
                     tx.send(true);
                 },
             );

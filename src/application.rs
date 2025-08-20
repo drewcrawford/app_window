@@ -10,7 +10,7 @@
 //! # Overview
 //!
 //! The module provides three key capabilities:
-//! 
+//!
 //! 1. **Application initialization** via [`application::main`] - Sets up the platform event loop
 //! 2. **Main thread execution** via [`application::on_main_thread`] - Runs async operations on the UI thread
 //! 3. **Direct submission** via [`application::submit_to_main_thread`] - Fire-and-forget main thread tasks
@@ -354,7 +354,10 @@ pub(crate) fn is_main_thread_running() -> bool {
 /// }).await;
 /// # }
 /// ```
-pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(debug_label: String, closure: F) -> R {
+pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(
+    debug_label: String,
+    closure: F,
+) -> R {
     let (sender, receiver) = r#continue::continuation();
     let block = move || {
         let r = closure();
@@ -474,7 +477,7 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 /// 4. Restores the previous context
 /// 5. Logs if execution was slow (>10ms)
 pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, closure: F) {
-    assert!(is_main_thread_running(), "{}",CALL_MAIN);
+    assert!(is_main_thread_running(), "{}", CALL_MAIN);
     let perf = move || {
         let start = time::Instant::now();
         let prior = logwise::context::Context::current();

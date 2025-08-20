@@ -194,7 +194,10 @@ pub async fn on_main_thread_async<R: Send + 'static, F: Future<Output = R> + Sen
 /// (when the `some_executor` feature is enabled) when spawning tasks, but can be used
 /// directly when you're already on the main thread and want to submit work to be
 /// executed asynchronously.
-pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(debug_label: String, future: F) {
+pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(
+    debug_label: String,
+    future: F,
+) {
     assert!(sys::is_main_thread());
 
     // Generate unique task ID
@@ -205,9 +208,14 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(debug_lab
     let parent_context = logwise::context::Context::current();
     //creating a task is a bit heavyweight, particularly on the main thread.
     // let new_context = logwise::context::Context::from_parent(parent_context);
-    let new_context = logwise::context::Context::new_task(Some(parent_context), debug_label.clone());
-    
-    logwise::info_sync!("Creating task {id} {label}", id = logwise::privacy::IPromiseItsNotPrivate(new_context.task_id()), label = logwise::privacy::LogIt(debug_label));
+    let new_context =
+        logwise::context::Context::new_task(Some(parent_context), debug_label.clone());
+
+    logwise::info_sync!(
+        "Creating task {id} {label}",
+        id = logwise::privacy::IPromiseItsNotPrivate(new_context.task_id()),
+        label = logwise::privacy::LogIt(debug_label)
+    );
     // debuginternal_sync!("Creating task {id}", id = logwise::privacy::IPromiseItsNotPrivate(new_context.task_id()));
     let task = Task {
         our_task_id: task_id,
@@ -278,7 +286,11 @@ fn main_executor_iter() {
             //there MAY be more pollable tasks.  However, we want to yield here
             submit_to_main_thread("main_executor_iter".to_string(), main_executor_iter);
             if begin_iter.elapsed() > crate::application::time::Duration::from_millis(10) {
-                logwise::warn_sync!("main_executor_iter {task} took too long: {duration}", task = logwise::privacy::IPromiseItsNotPrivate(task_id), duration = logwise::privacy::IPromiseItsNotPrivate(begin_iter.elapsed()));
+                logwise::warn_sync!(
+                    "main_executor_iter {task} took too long: {duration}",
+                    task = logwise::privacy::IPromiseItsNotPrivate(task_id),
+                    duration = logwise::privacy::IPromiseItsNotPrivate(begin_iter.elapsed())
+                );
             }
         }
     }

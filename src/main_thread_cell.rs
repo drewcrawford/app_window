@@ -49,10 +49,7 @@ impl<T> Drop for Shared<T> {
     fn drop(&mut self) {
         // When we're dropping the last value, we need to do so on the right thread
         if let Some(take) = self.inner.take() {
-            let drop_shared = format!(
-                "MainThreadCell::drop({})",
-                std::any::type_name::<T>()
-            );
+            let drop_shared = format!("MainThreadCell::drop({})", std::any::type_name::<T>());
             application::submit_to_main_thread(drop_shared, || {
                 drop(take);
             });
@@ -281,8 +278,11 @@ impl<T> MainThreadCell<T> {
         F: Future<Output = T> + Send + 'static,
     {
         logwise::info_sync!("MainThreadCell::new_on_main_thread() started");
-        let new_on_main_thread = format!("MainThreadCell::new_on_main_thread({})", std::any::type_name::<T>());
-        let value = application::on_main_thread(new_on_main_thread,  || async move {
+        let new_on_main_thread = format!(
+            "MainThreadCell::new_on_main_thread({})",
+            std::any::type_name::<T>()
+        );
+        let value = application::on_main_thread(new_on_main_thread, || async move {
             logwise::info_sync!("Inside main thread closure");
             let f = c();
             logwise::info_sync!("Calling provided closure f()...");

@@ -295,11 +295,11 @@ impl KeyboardKey {
     /// use app_window::input::keyboard::key::KeyboardKey;
     ///
     /// let all_keys = KeyboardKey::all_keys();
-    /// 
+    ///
     /// // Check that we have a reasonable number of keys
     /// assert!(all_keys.len() > 50);
     /// assert!(all_keys.len() < 200);
-    /// 
+    ///
     /// // Verify specific keys are included
     /// assert!(all_keys.contains(&KeyboardKey::A));
     /// assert!(all_keys.contains(&KeyboardKey::Space));
@@ -310,21 +310,21 @@ impl KeyboardKey {
     ///
     /// ```
     /// use app_window::input::keyboard::key::KeyboardKey;
-    /// 
+    ///
     /// // Count specific types of keys
     /// let all_keys = KeyboardKey::all_keys();
-    /// 
+    ///
     /// let function_keys = all_keys.iter()
-    ///     .filter(|k| matches!(k, 
-    ///         KeyboardKey::F1 | KeyboardKey::F2 | KeyboardKey::F3 | 
+    ///     .filter(|k| matches!(k,
+    ///         KeyboardKey::F1 | KeyboardKey::F2 | KeyboardKey::F3 |
     ///         KeyboardKey::F4 | KeyboardKey::F5 | KeyboardKey::F6 |
     ///         KeyboardKey::F7 | KeyboardKey::F8 | KeyboardKey::F9 |
     ///         KeyboardKey::F10 | KeyboardKey::F11 | KeyboardKey::F12
     ///     ))
     ///     .count();
-    /// 
+    ///
     /// assert!(function_keys >= 12);
-    /// 
+    ///
     /// let letter_keys = all_keys.iter()
     ///     .filter(|k| matches!(k,
     ///         KeyboardKey::A | KeyboardKey::B | KeyboardKey::C |
@@ -333,7 +333,7 @@ impl KeyboardKey {
     ///         // ... and so on
     ///     ))
     ///     .count();
-    /// 
+    ///
     /// assert!(letter_keys > 0);
     /// ```
     pub fn all_keys() -> Vec<KeyboardKey> {
