@@ -14,7 +14,6 @@ use std::thread;
 #[cfg(target_arch = "wasm32")]
 use wasm_thread as thread;
 
-
 use some_executor::task::{Configuration, Task};
 
 #[cfg(target_arch = "wasm32")]
