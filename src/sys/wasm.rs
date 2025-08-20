@@ -4,10 +4,6 @@ use crate::coordinates::{Position, Size};
 use logwise::context::Context;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WebDisplayHandle, WebWindowHandle};
 use send_cells::send_cell::SendCell;
-use some_executor::SomeExecutor;
-use some_executor::hint::Hint;
-use some_executor::observer::Observer;
-use some_executor::task::Configuration;
 use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::{Debug, Display};
@@ -19,7 +15,6 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::js_sys::Promise;
 use web_sys::js_sys::TypeError;
 use web_sys::{HtmlCanvasElement, window};
-use web_time;
 
 #[derive(Debug)]
 pub struct Window {}
@@ -205,7 +200,7 @@ pub fn is_main_thread() -> bool {
     web_sys::window().is_some()
 }
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
-    let (sender, mut receiver) = continue_stream::continuation();
+    let (sender, receiver) = continue_stream::continuation();
 
     let mut sent = false;
     MAIN_THREAD_SENDER.get_or_init(|| {
@@ -252,10 +247,9 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     if is_main_thread() {
         closure()
     } else {
-        let mut mt_sender = MAIN_THREAD_SENDER
+        let mt_sender = MAIN_THREAD_SENDER
             .get()
-            .expect(crate::application::CALL_MAIN)
-            .clone();
+            .expect(crate::application::CALL_MAIN);
         let boxed_closure = Box::new(closure) as Box<dyn FnOnce() -> () + Send + 'static>;
         // let perf = logwise::perfwarn_begin!("starting SEND task");
 

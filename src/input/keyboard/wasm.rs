@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 use crate::input::keyboard::Shared;
 use crate::input::keyboard::key::KeyboardKey;
-use crate::main_thread_cell::MainThreadCell;
 use std::ffi::c_void;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;

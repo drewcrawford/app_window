@@ -14,8 +14,6 @@ use std::thread;
 #[cfg(target_arch = "wasm32")]
 use wasm_thread as thread;
 
-#[cfg(target_arch = "wasm32")]
-use web_time::Duration;
 
 use some_executor::task::{Configuration, Task};
 

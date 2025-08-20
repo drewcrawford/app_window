@@ -2,7 +2,6 @@
 use crate::input::Window;
 use crate::input::keyboard::wasm::ARBITRARY_WINDOW_PTR;
 use crate::input::mouse::MouseWindowLocation;
-use crate::main_thread_cell::MainThreadCell;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
