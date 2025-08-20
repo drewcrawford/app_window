@@ -1,47 +1,101 @@
-# xplat v2
-on: ["push", "pull_request"]
+# matrix v2
+on: [push,pull_request]
 env:
-  RUSTFLAGS: "-D warnings"
+  FATAL_WARNINGS_1: "build.rustflags=['-Dwarnings']"
+  FATAL_WARNINGS_2: "build.rustdocflags=['-Dwarnings']"
+  FATAL_WARNINGS_3: "build.clippyflags=['-Dwarnings']"
+
 jobs:
-  build:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+  ci:
+    name: Build (${{ matrix.os }} ${{ matrix.cwd }} ${{ matrix.channel }} ${{ matrix.target }} ${{ matrix.features }})
+
+    runs-on: ${{matrix.os}}
+
+
     strategy:
-      fail-fast: false  # Don't cancel other jobs if one fails
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-15]
+        channel: [""]
+        features: [""]
+        target: [""]
+        cwd: ["."]
+        os: [ubuntu-latest]
+
+        include:
+          - os: ubuntu-latest
+            channel: "+nightly"
+            target: "wasm32-unknown-unknown"
+            cwd: "."
 
     steps:
-      # we need wayland etc. to build
-      - name: Install ubuntu deps
-        if: runner.os == 'Linux' && !(env.GITEA_ACTIONS == 'true')
-        run: sudo apt install libwayland-dev pkg-config
-
-
-      - name: Install rust nightly
-        if: runner.os == 'Linux' && !(env.GITEA_ACTIONS == 'true')
-        run: rustup install nightly
-
-
-
       - uses: actions/checkout@v4
 
       - name: Cache target
         uses: actions/cache@v4
         with:
-          key: app_window_${{ runner.os }}-target
-          path: "target"
-      - run: cargo fmt --check
-      - run: cargo check
-      - run: cargo clippy --no-deps
-      - run: cargo doc
-      - run: cargo test
+          key: target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}-${{ matrix.features || 'default' }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          path: |
+            target
+          restore-keys: |
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}-${{ matrix.features || 'default' }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}-${{ matrix.features || 'default' }}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}
+            target-${{ github.event.repository.name }}
 
-      - name: Build example
-        run: cargo build --example main
-
-      - name: Build wasm
-        if: matrix.os == 'ubuntu-latest'
+      # Compute reusable args once
+      - name: Compute cargo args
+        id: args
+        shell: bash
+        env:
+          FEATURE_FLAGS: ${{ matrix.features }}
+          TARGET: ${{ matrix.target }}
         run: |
-          rustup +nightly target add wasm32-unknown-unknown  
-          cargo +nightly build --example main --target wasm32-unknown-unknown
+          set -euo pipefail
+          FEATURES_ARG=""
+          TARGET_ARG=""
+          if [ -n "${FEATURE_FLAGS}" ]; then
+            FEATURES_ARG="--features=${FEATURE_FLAGS}"
+          fi
+          if [ -n "${TARGET}" ]; then
+            TARGET_ARG="--target=${TARGET}"
+          fi
+          echo "features=${FEATURES_ARG}" >> "$GITHUB_OUTPUT"
+          echo "target=${TARGET_ARG}"   >> "$GITHUB_OUTPUT"
+          echo "features are ${FEATURES_ARG}"
+          echo "target is ${TARGET_ARG}"
+
+      #      - name: Github update Rust
+      #        if: runner.os == 'Linux' && !(env.GITEA_ACTIONS == 'true')
+      #        run: |
+      #          # at the moment, GitHub is too far behind mainline rust (v1.89.0-v1.91.0-nightly)
+      #          rustup update
+      - name: Install wasm target
+        if: matrix.target == 'wasm32-unknown-unknown' && !(env.GITEA_ACTIONS == 'true')
+        run: rustup ${{ matrix.channel}} target add wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli
+        if: matrix.target == 'wasm32-unknown-unknown' && !(env.GITEA_ACTIONS == 'true')
+        run: cargo ${{ matrix.channel }} install wasm-bindgen-cli
+
+      - name: Install nightly components
+        if: matrix.channel == '+nightly' && !(env.GITEA_ACTIONS == 'true')
+        run: |
+          rustup ${{ matrix.channel }} component add rustfmt clippy
+          rustup ${{ matrix.channel }} component add rust-src
+
+      - name: rustfmt
+        run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }} --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" fmt --check
+
+      - name: cargo check
+        run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3"  check ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+
+      - name: clippy
+        run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }} --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" clippy --no-deps ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+
+      - name: docs
+        run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" doc ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+
+      - name: tests
+        run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
