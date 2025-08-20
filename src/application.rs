@@ -11,9 +11,9 @@
 //!
 //! The module provides three key capabilities:
 //! 
-//! 1. **Application initialization** via [`main()`] - Sets up the platform event loop
-//! 2. **Main thread execution** via [`on_main_thread()`] - Runs async operations on the UI thread
-//! 3. **Direct submission** via [`submit_to_main_thread()`] - Fire-and-forget main thread tasks
+//! 1. **Application initialization** via [`application::main`] - Sets up the platform event loop
+//! 2. **Main thread execution** via [`application::on_main_thread`] - Runs async operations on the UI thread
+//! 3. **Direct submission** via [`application::submit_to_main_thread`] - Fire-and-forget main thread tasks
 //!
 //! # Platform Threading Models
 //!
@@ -93,9 +93,9 @@
 //!
 //! # Error Handling
 //!
-//! Most functions in this module will panic if [`main()`] hasn't been called yet.
+//! Most functions in this module will panic if [`application::main`] hasn't been called yet.
 //! This is intentional as it represents a programming error. Always ensure
-//! [`main()`] is called at the start of your program.
+//! `main` is called at the start of your program.
 
 use std::sync::atomic::AtomicBool;
 #[cfg(not(target_arch = "wasm32"))]
@@ -188,19 +188,19 @@ pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
 
 /// Checks if the main thread event loop has been started.
 ///
-/// This internal function verifies that [`main()`] has been called and the
+/// This internal function verifies that [`main`] has been called and the
 /// event loop is running. Used by other modules to ensure proper initialization
 /// before attempting window creation or other operations.
 ///
 /// # Returns
 ///
-/// - `true` if [`main()`] has been called and the event loop is running
+/// - `true` if [`main`] has been called and the event loop is running
 /// - `false` if the application hasn't been initialized yet
 ///
 /// # Thread Safety
 ///
 /// Uses `Acquire` ordering to ensure all threads see the initialization
-/// state correctly after it's set by [`main()`].
+/// state correctly after it's set by [`main`].
 ///
 /// # Internal Use
 ///
@@ -251,7 +251,7 @@ pub(crate) fn is_main_thread_running() -> bool {
 ///
 /// # Thread Safety
 ///
-/// This function is safe to call from any thread after [`main()`] has been called.
+/// This function is safe to call from any thread after [`main`] has been called.
 /// Multiple threads can call this concurrently; operations are queued and executed
 /// in order on the main thread.
 ///
@@ -499,7 +499,7 @@ pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, 
 /// Checks if the current thread is the main thread.
 ///
 /// Returns `true` if called from the main thread (the thread that called
-/// [`main()`]), `false` otherwise.
+/// [`main`]), `false` otherwise.
 ///
 /// # Platform Implementation
 ///

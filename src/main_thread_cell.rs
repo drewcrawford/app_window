@@ -2,7 +2,7 @@
 
 //! A cell type for main-thread-only values that can be shared across threads.
 //!
-//! [`MainThreadCell<T>`] is a thread-safe container that allows `T` to be shared across threads
+//! `MainThreadCell<T>` is a thread-safe container that allows `T` to be shared across threads
 //! while ensuring all access to the inner value happens on the main thread. This is useful for
 //! wrapping platform-specific resources that must only be accessed from the main thread.
 //!

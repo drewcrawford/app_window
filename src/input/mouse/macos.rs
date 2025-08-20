@@ -29,8 +29,8 @@ extern "C" fn raw_input_mouse_move(
     window_height: f64,
 ) {
     let weak = unsafe { Weak::from_raw(ctx as *const Shared) };
-    if let Some(shared) = weak.upgrade() {
-        if !window.is_null() {
+    if let Some(shared) = weak.upgrade()
+        && !window.is_null() {
             let window = Some(Window(NonNull::new(window).unwrap()));
             let loc = MouseWindowLocation::new(
                 window_pos_x,
@@ -41,7 +41,6 @@ extern "C" fn raw_input_mouse_move(
             );
             shared.set_window_location(loc);
         }
-    }
     std::mem::forget(weak);
 }
 

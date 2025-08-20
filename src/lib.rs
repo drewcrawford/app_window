@@ -26,7 +26,6 @@ First, initialize the application from your main function:
 ```no_run
 // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
 use app_window::application;
-
 fn main() {
     application::main(|| {
         // Your application code here
@@ -36,6 +35,7 @@ fn main() {
         futures::executor::block_on(run());
     });
 }
+#[allow(clippy::needless_doctest_main)]
 ```
 
 Then create windows from any async context:
@@ -299,9 +299,17 @@ pub mod window;
 /// for executing code on the main thread. The [`application::main`] function must
 /// be called once from the first thread to initialize the platform event loop.
 ///
+/// Key functions:
+/// - [`application::main`] - Initialize the application and event loop
+/// - [`application::on_main_thread`] - Execute async code on the main thread
+/// - [`application::submit_to_main_thread`] - Fire-and-forget main thread tasks
+///
+/// Most functions in this module will panic if [`application::main`] hasn't been called yet.
+/// [`application::main`] is called at the start of your program.
+///
 /// # Example
 /// ```no_run
-/// # // can't use main thread in doctests
+/// // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
 /// use app_window::application;
 ///
 /// fn main() {
@@ -399,8 +407,8 @@ pub mod some_executor;
 
 /// Thread-safe cell for main-thread-only values.
 ///
-/// This module provides [`main_thread_cell::MainThreadCell`], which allows sharing
-/// values across threads while ensuring all access happens on the main thread.
+/// `MainThreadCell<T>` is a thread-safe container that allows `T` to be shared across threads
+/// while ensuring all access to the inner value happens on the main thread.
 /// This is useful for platform-specific resources that have main-thread requirements.
 ///
 /// # Example
@@ -540,13 +548,13 @@ pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::Relaxed;
 /// The preferred strategy for interacting with wgpu surfaces on the current platform.
 ///
 /// See [`WGPU_SURFACE_STRATEGY`] documentation for details.
-#[cfg(any(target_os="macos"))]
+#[cfg(target_os="macos")]
 pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 
 /// The preferred strategy for interacting with wgpu surfaces on the current platform.
 ///
 /// See [`WGPU_SURFACE_STRATEGY`] documentation for details.
-#[cfg(any(target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
 pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 
 
