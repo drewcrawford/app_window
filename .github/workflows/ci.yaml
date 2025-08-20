@@ -97,13 +97,38 @@ jobs:
       - name: docs
         run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" doc ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
 
-      - name: tests
-        env: # wayland hacks
+      - name: Run tests under headless Weston
+        env:
           WAYLAND_DISPLAY: wayland-ci-0
-
+          XDG_RUNTIME_DIR: /tmp/xdg-runtime-$(id -u)  # <- key: create your own runtime dir
         run: |
-          weston --backend=headless --socket=$WAYLAND_DISPLAY --idle-time=0 >/tmp/weston.log 2>&1 &
-          # wait a moment for the socket to appear
-          for i in {1..20}; do test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" -o -S "/run/user/$(id -u)/$WAYLAND_DISPLAY" && break || sleep 0.2; done
-          
-          cd ${{ matrix.cwd }} && CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+          set -euxo pipefail
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+
+          # Start weston headless
+          weston \
+            --backend=headless \
+            --socket="$WAYLAND_DISPLAY" \
+            --idle-time=0 \
+            --log=/tmp/weston.log \
+            --no-config >/tmp/weston.stdout 2>&1 &
+
+          # Wait for the Wayland socket to appear
+          for i in {1..50}; do
+            test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" && break
+            sleep 0.1
+          done
+
+          # Quick diagnostics so you can see what's up if it fails
+          ls -l "$XDG_RUNTIME_DIR" || true
+          grep -E "ERROR|warn|headless" -i /tmp/weston.log || true
+
+          # Your build/test
+          cd ${{ matrix.cwd }}
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
+          cargo ${{ matrix.channel }} \
+            --config "$FATAL_WARNINGS_1" \
+            --config "$FATAL_WARNINGS_2" \
+            --config "$FATAL_WARNINGS_3" \
+            test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
