@@ -85,6 +85,12 @@ jobs:
           rustup ${{ matrix.channel }} component add rustfmt clippy
           rustup ${{ matrix.channel }} component add rust-src
 
+      - name: Demand a valid wayland server
+        run: |
+          weston --backend=headless --socket=$WAYLAND_DISPLAY --idle-time=0 >/tmp/weston.log 2>&1 &
+          # wait a moment for the socket to appear
+          for i in {1..20}; do test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" -o -S "/run/user/$(id -u)/$WAYLAND_DISPLAY" && break || sleep 0.2; done
+
       - name: rustfmt
         run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }} --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" fmt --check
 
@@ -98,4 +104,6 @@ jobs:
         run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" doc ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
 
       - name: tests
+        env: # wayland hacks
+          WAYLAND_DISPLAY: wayland-ci-0
         run: cd ${{ matrix.cwd }} && CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
