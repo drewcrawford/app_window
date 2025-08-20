@@ -12,6 +12,7 @@ mod gpu {
     use app_window::{WGPUStrategy, WGPU_SURFACE_STRATEGY};
     use wgpu::{Device, Queue, SurfaceTargetUnsafe};
 
+    #[cfg(not(target_arch = "wasm32"))]
     async fn use_strategy<C,R>(strategy: WGPUStrategy, for_closure: C) -> R
     where C: FnOnce() -> R + Send + 'static,
     R: Send + 'static {
@@ -24,6 +25,30 @@ mod gpu {
                     for_closure()
                 }).await;
                 f
+            }
+            WGPUStrategy::NotMainThread => {
+                if app_window::application::is_main_thread() {
+                    todo!()
+                }
+                else { //effectively relaxed
+                    for_closure()
+                }
+            }
+            _ => todo!("Unsupported WGPU strategy: {:?}", strategy),
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    async fn use_strategy<C,R>(strategy: WGPUStrategy, for_closure: C) -> R
+    where C: FnOnce() -> R,
+    {
+        match strategy {
+            WGPUStrategy::Relaxed => {
+                for_closure()
+            }
+            WGPUStrategy::MainThread => {
+                assert!(app_window::application::is_main_thread());
+                for_closure()
             }
             WGPUStrategy::NotMainThread => {
                 if app_window::application::is_main_thread() {

@@ -1,0 +1,7 @@
+[unstable]
+# Tell *Cargo* to rebuild these crates for non-host targets (needs nightly)
+build-std = ["std", "panic_abort"]
+
+[target.'cfg(target_arch="wasm32")']
+runner = "wasm-server-runner"
+rustflags = ["-C", "target-feature=+atomics"]
