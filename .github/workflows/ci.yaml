@@ -102,71 +102,71 @@ jobs:
         env:
           WAYLAND_DISPLAY: wayland-ci-0
         run: |
-      set -euxo pipefail
-      
-      # Create runtime directory with proper user ID resolution
-      export XDG_RUNTIME_DIR="/tmp/xdg-runtime-$(id -u)"
-      mkdir -p "$XDG_RUNTIME_DIR"
-      chmod 700 "$XDG_RUNTIME_DIR"
+          set -euxo pipefail
+          
+          # Create runtime directory with proper user ID resolution
+          export XDG_RUNTIME_DIR="/tmp/xdg-runtime-$(id -u)"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
 
-      # Start weston headless
-      weston \
-      --backend=headless \
-      --socket="$WAYLAND_DISPLAY" \
-      --idle-time=0 \
-      --log=/tmp/weston.log \
-      --no-config >/tmp/weston.stdout 2>&1 &
-      
-      WESTON_PID=$!
+          # Start weston headless
+          weston \
+            --backend=headless \
+            --socket="$WAYLAND_DISPLAY" \
+            --idle-time=0 \
+            --log=/tmp/weston.log \
+            --no-config >/tmp/weston.stdout 2>&1 &
+          
+          WESTON_PID=$!
 
-      # Wait for the Wayland socket to appear
-      echo "Waiting for Wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
-      for i in {1..100}; do
-      if test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"; then
-        echo "Wayland socket found after $i attempts"
-        break
-      fi
-      sleep 0.1
-      done
+          # Wait for the Wayland socket to appear
+          echo "Waiting for Wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+          for i in {1..100}; do
+            if test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"; then
+              echo "Wayland socket found after $i attempts"
+              break
+            fi
+            sleep 0.1
+          done
 
-      # Verify Weston is still running
-      if ! kill -0 $WESTON_PID 2>/dev/null; then
-      echo "Weston process died unexpectedly"
-      cat /tmp/weston.log || true
-      cat /tmp/weston.stdout || true
-      exit 1
-      fi
+          # Verify Weston is still running
+          if ! kill -0 $WESTON_PID 2>/dev/null; then
+            echo "Weston process died unexpectedly"
+            cat /tmp/weston.log || true
+            cat /tmp/weston.stdout || true
+            exit 1
+          fi
 
-      # Additional wait to ensure compositor is fully ready
-      sleep 1
+          # Additional wait to ensure compositor is fully ready
+          sleep 1
 
-      # Quick diagnostics so you can see what's up if it fails
-      echo "XDG_RUNTIME_DIR contents:"
-      ls -la "$XDG_RUNTIME_DIR" || true
-      echo "Weston log:"
-      grep -E "ERROR|warn|headless|listening" -i /tmp/weston.log || true
+          # Quick diagnostics so you can see what's up if it fails
+          echo "XDG_RUNTIME_DIR contents:"
+          ls -la "$XDG_RUNTIME_DIR" || true
+          echo "Weston log:"
+          grep -E "ERROR|warn|headless|listening" -i /tmp/weston.log || true
 
-      # Your build/test
-      cd ${{ matrix.cwd }}
-      export XDG_RUNTIME_DIR
-      export WAYLAND_DISPLAY
-      CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
-      cargo ${{ matrix.channel }} \
-        --config "$FATAL_WARNINGS_1" \
-        --config "$FATAL_WARNINGS_2" \
-        --config "$FATAL_WARNINGS_3" \
-        test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
-      
-      # Cleanup
-      kill $WESTON_PID || true
+          # Your build/test
+          cd ${{ matrix.cwd }}
+          export XDG_RUNTIME_DIR
+          export WAYLAND_DISPLAY
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
+          cargo ${{ matrix.channel }} \
+            --config "$FATAL_WARNINGS_1" \
+            --config "$FATAL_WARNINGS_2" \
+            --config "$FATAL_WARNINGS_3" \
+            test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+          
+          # Cleanup
+          kill $WESTON_PID || true
 
       - name: Run WASM tests
         if: matrix.target == 'wasm32-unknown-unknown'
         run: |
-      cd ${{ matrix.cwd }}
-      CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
-      cargo ${{ matrix.channel }} \
-        --config "$FATAL_WARNINGS_1" \
-        --config "$FATAL_WARNINGS_2" \
-        --config "$FATAL_WARNINGS_3" \
-        test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+          cd ${{ matrix.cwd }}
+          CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
+          cargo ${{ matrix.channel }} \
+            --config "$FATAL_WARNINGS_1" \
+            --config "$FATAL_WARNINGS_2" \
+            --config "$FATAL_WARNINGS_3" \
+            test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
