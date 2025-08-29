@@ -85,6 +85,10 @@ jobs:
           rustup ${{ matrix.channel }} component add rustfmt clippy
           rustup ${{ matrix.channel }} component add rust-src
 
+      - name: Install Wayland components
+        if: matrix.target == 'ubuntu-latewst' && !(env.GITEA_ACTIONS == 'true')
+        run: sudo apt-get install -y libwayland-dev
+
       - name: rustfmt
         run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }} --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" fmt --check
 
