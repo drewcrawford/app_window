@@ -86,7 +86,7 @@ jobs:
           rustup ${{ matrix.channel }} component add rust-src
 
       - name: Install Wayland components
-        if: matrix.target == 'ubuntu-latewst' && !(env.GITEA_ACTIONS == 'true')
+        if: matrix.target == 'ubuntu-latest' && !(env.GITEA_ACTIONS == 'true')
         run: sudo apt-get install -y libwayland-dev
 
       - name: rustfmt
