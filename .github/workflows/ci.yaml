@@ -87,7 +87,7 @@ jobs:
 
       - name: Install Wayland components
         if: matrix.os == 'ubuntu-latest' && matrix.target == '' && !(env.GITEA_ACTIONS == 'true')
-        run: sudo apt-get install -y libwayland-dev
+        run: sudo apt-get install -y libwayland-dev weston
 
       - name: rustfmt
         run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }} --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" fmt --check
