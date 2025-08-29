@@ -1,4 +1,4 @@
-# matrix v3
+# matrix v3-weston
 on: [push,pull_request]
 env:
   FATAL_WARNINGS_1: "build.rustflags=['-Dwarnings']"
@@ -98,7 +98,7 @@ jobs:
         run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" doc ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
 
       - name: Run tests under headless Weston
-        if: matrix.target != 'wasm32-unknown-unknown'
+        if: matrix.target == 'ubuntu-latest'
         env:
           WAYLAND_DISPLAY: wayland-ci-0
         run: |
@@ -137,9 +137,6 @@ jobs:
             exit 1
           fi
 
-          # Additional wait to ensure compositor is fully ready
-          sleep 1
-
           # Quick diagnostics so you can see what's up if it fails
           echo "XDG_RUNTIME_DIR contents:"
           ls -la "$XDG_RUNTIME_DIR" || true
@@ -160,7 +157,7 @@ jobs:
           # Cleanup
           kill $WESTON_PID || true
 
-      - name: Run WASM tests
+      - name: Run WASM tests (non-Weston)
         if: matrix.target == 'wasm32-unknown-unknown'
         run: |
           cd ${{ matrix.cwd }}
