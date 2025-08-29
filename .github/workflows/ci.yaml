@@ -121,12 +121,12 @@ jobs:
 
           # Wait for the Wayland socket to appear
           echo "Waiting for Wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
-          for i in {1..100}; do
+          for i in {1..10}; do
             if test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"; then
               echo "Wayland socket found after $i attempts"
               break
             fi
-            sleep 0.1
+            sleep 1
           done
 
           # Verify Weston is still running

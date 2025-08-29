@@ -78,7 +78,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let (globals, mut event_queue) =
         registry_queue_init::<App>(&connection).expect("Can't initialize registry");
     let qh = event_queue.handle();
-    let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 6..=6, ()).unwrap();
+    let compositor: wl_compositor::WlCompositor = globals.bind(&qh, 5..=6, ()).unwrap();
     let subcompositor: WlSubcompositor = globals.bind(&qh, 1..=1, ()).unwrap();
     //fedora 41 KDE uses version 1?
     let shm: WlShm = globals.bind(&qh, 1..=2, ()).unwrap();
