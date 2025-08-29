@@ -12,6 +12,8 @@ categories = ["gui", "os", "wasm", "hardware-support"]
 exclude = [".*"]
 rust-version = "1.88.0"
 
+#[lib]
+
 [features]
 logwise_internal = []
 
