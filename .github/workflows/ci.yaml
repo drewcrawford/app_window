@@ -7,166 +7,166 @@ env:
 
 jobs:
   ci:
-	name: Build (${{ matrix.os }} ${{ matrix.cwd }} ${{ matrix.channel }} ${{ matrix.target }} ${{ matrix.features }})
+    name: Build (${{ matrix.os }} ${{ matrix.cwd }} ${{ matrix.channel }} ${{ matrix.target }} ${{ matrix.features }})
 
-	runs-on: ${{matrix.os}}
+    runs-on: ${{matrix.os}}
 
 
-	strategy:
-	  matrix:
-		channel: [""]
-		features: [""]
-		target: [""]
-		cwd: ["."]
-		os: [ubuntu-latest]
+    strategy:
+      matrix:
+        channel: [""]
+        features: [""]
+        target: [""]
+        cwd: ["."]
+        os: [ubuntu-latest]
 
-		include:
-		  - os: ubuntu-latest
-			channel: "+nightly"
-			target: "wasm32-unknown-unknown"
-			cwd: "."
+        include:
+          - os: ubuntu-latest
+            channel: "+nightly"
+            target: "wasm32-unknown-unknown"
+            cwd: "."
 
-	steps:
-	  - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-	  - name: Cache target
-		uses: actions/cache@v4
-		with:
-		  key: target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}-${{ matrix.features || 'default' }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-		  path: |
-			target
-		  restore-keys: |
-			target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}-${{ matrix.features || 'default' }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-			target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}-${{ matrix.features || 'default' }}
-			target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}
-			target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}
-			target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}
-			target-${{ github.event.repository.name }}-${{ matrix.cwd }}
-			target-${{ github.event.repository.name }}
+      - name: Cache target
+        uses: actions/cache@v4
+        with:
+          key: target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}-${{ matrix.features || 'default' }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          path: |
+            target
+          restore-keys: |
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}-${{ matrix.features || 'default' }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}-${{ matrix.features || 'default' }}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}-${{ matrix.target || 'host' }}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}-${{ matrix.channel || 'stable'}}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}-${{ matrix.os }}
+            target-${{ github.event.repository.name }}-${{ matrix.cwd }}
+            target-${{ github.event.repository.name }}
 
-	  # Compute reusable args once
-	  - name: Compute cargo args
-		id: args
-		shell: bash
-		env:
-		  FEATURE_FLAGS: ${{ matrix.features }}
-		  TARGET: ${{ matrix.target }}
-		run: |
-		  set -euo pipefail
-		  FEATURES_ARG=""
-		  TARGET_ARG=""
-		  if [ -n "${FEATURE_FLAGS}" ]; then
-			FEATURES_ARG="--features=${FEATURE_FLAGS}"
-		  fi
-		  if [ -n "${TARGET}" ]; then
-			TARGET_ARG="--target=${TARGET}"
-		  fi
-		  echo "features=${FEATURES_ARG}" >> "$GITHUB_OUTPUT"
-		  echo "target=${TARGET_ARG}"   >> "$GITHUB_OUTPUT"
-		  echo "features are ${FEATURES_ARG}"
-		  echo "target is ${TARGET_ARG}"
+      # Compute reusable args once
+      - name: Compute cargo args
+        id: args
+        shell: bash
+        env:
+          FEATURE_FLAGS: ${{ matrix.features }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          FEATURES_ARG=""
+          TARGET_ARG=""
+          if [ -n "${FEATURE_FLAGS}" ]; then
+            FEATURES_ARG="--features=${FEATURE_FLAGS}"
+          fi
+          if [ -n "${TARGET}" ]; then
+            TARGET_ARG="--target=${TARGET}"
+          fi
+          echo "features=${FEATURES_ARG}" >> "$GITHUB_OUTPUT"
+          echo "target=${TARGET_ARG}"   >> "$GITHUB_OUTPUT"
+          echo "features are ${FEATURES_ARG}"
+          echo "target is ${TARGET_ARG}"
 
-	  #      - name: Github update Rust
-	  #        if: runner.os == 'Linux' && !(env.GITEA_ACTIONS == 'true')
-	  #        run: |
-	  #          # at the moment, GitHub is too far behind mainline rust (v1.89.0-v1.91.0-nightly)
-	  #          rustup update
-	  - name: Install wasm target
-		if: matrix.target == 'wasm32-unknown-unknown' && !(env.GITEA_ACTIONS == 'true')
-		run: rustup ${{ matrix.channel}} target add wasm32-unknown-unknown
+    #      - name: Github update Rust
+    #        if: runner.os == 'Linux' && !(env.GITEA_ACTIONS == 'true')
+    #        run: |
+    #          # at the moment, GitHub is too far behind mainline rust (v1.89.0-v1.91.0-nightly)
+    #          rustup update
+      - name: Install wasm target
+        if: matrix.target == 'wasm32-unknown-unknown' && !(env.GITEA_ACTIONS == 'true')
+        run: rustup ${{ matrix.channel}} target add wasm32-unknown-unknown
 
-	  - name: Install wasm-bindgen-cli
-		if: matrix.target == 'wasm32-unknown-unknown' && !(env.GITEA_ACTIONS == 'true')
-		run: cargo ${{ matrix.channel }} install wasm-bindgen-cli
+      - name: Install wasm-bindgen-cli
+        if: matrix.target == 'wasm32-unknown-unknown' && !(env.GITEA_ACTIONS == 'true')
+        run: cargo ${{ matrix.channel }} install wasm-bindgen-cli
 
-	  - name: Install nightly components
-		if: matrix.channel == '+nightly' && !(env.GITEA_ACTIONS == 'true')
-		run: |
-		  rustup ${{ matrix.channel }} component add rustfmt clippy
-		  rustup ${{ matrix.channel }} component add rust-src
+      - name: Install nightly components
+        if: matrix.channel == '+nightly' && !(env.GITEA_ACTIONS == 'true')
+        run: |
+          rustup ${{ matrix.channel }} component add rustfmt clippy
+          rustup ${{ matrix.channel }} component add rust-src
 
-	  - name: rustfmt
-		run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }} --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" fmt --check
+      - name: rustfmt
+        run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }} --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" fmt --check
 
-	  - name: cargo check
-		run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3"  check ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+      - name: cargo check
+        run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3"  check ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
 
-	  - name: clippy
-		run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }} --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" clippy --no-deps ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+      - name: clippy
+        run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }} --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" clippy --no-deps ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
 
-	  - name: docs
-		run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" doc ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+      - name: docs
+        run: cd ${{ matrix.cwd }} && cargo ${{ matrix.channel }}  --config "$FATAL_WARNINGS_1"  --config "$FATAL_WARNINGS_2"  --config "$FATAL_WARNINGS_3" doc ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
 
-	  - name: Run tests under headless Weston
-		if: matrix.target != 'wasm32-unknown-unknown'
-		env:
-		  WAYLAND_DISPLAY: wayland-ci-0
-		run: |
-		  set -euxo pipefail
-		  
-		  # Create runtime directory with proper user ID resolution
-		  export XDG_RUNTIME_DIR="/tmp/xdg-runtime-$(id -u)"
-		  mkdir -p "$XDG_RUNTIME_DIR"
-		  chmod 700 "$XDG_RUNTIME_DIR"
+      - name: Run tests under headless Weston
+        if: matrix.target != 'wasm32-unknown-unknown'
+        env:
+          WAYLAND_DISPLAY: wayland-ci-0
+        run: |
+      set -euxo pipefail
+      
+      # Create runtime directory with proper user ID resolution
+      export XDG_RUNTIME_DIR="/tmp/xdg-runtime-$(id -u)"
+      mkdir -p "$XDG_RUNTIME_DIR"
+      chmod 700 "$XDG_RUNTIME_DIR"
 
-		  # Start weston headless
-		  weston \
-			--backend=headless \
-			--socket="$WAYLAND_DISPLAY" \
-			--idle-time=0 \
-			--log=/tmp/weston.log \
-			--no-config >/tmp/weston.stdout 2>&1 &
-		  
-		  WESTON_PID=$!
+      # Start weston headless
+      weston \
+      --backend=headless \
+      --socket="$WAYLAND_DISPLAY" \
+      --idle-time=0 \
+      --log=/tmp/weston.log \
+      --no-config >/tmp/weston.stdout 2>&1 &
+      
+      WESTON_PID=$!
 
-		  # Wait for the Wayland socket to appear
-		  echo "Waiting for Wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
-		  for i in {1..100}; do
-			if test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"; then
-			  echo "Wayland socket found after $i attempts"
-			  break
-			fi
-			sleep 0.1
-		  done
+      # Wait for the Wayland socket to appear
+      echo "Waiting for Wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+      for i in {1..100}; do
+      if test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"; then
+        echo "Wayland socket found after $i attempts"
+        break
+      fi
+      sleep 0.1
+      done
 
-		  # Verify Weston is still running
-		  if ! kill -0 $WESTON_PID 2>/dev/null; then
-			echo "Weston process died unexpectedly"
-			cat /tmp/weston.log || true
-			cat /tmp/weston.stdout || true
-			exit 1
-		  fi
+      # Verify Weston is still running
+      if ! kill -0 $WESTON_PID 2>/dev/null; then
+      echo "Weston process died unexpectedly"
+      cat /tmp/weston.log || true
+      cat /tmp/weston.stdout || true
+      exit 1
+      fi
 
-		  # Additional wait to ensure compositor is fully ready
-		  sleep 1
+      # Additional wait to ensure compositor is fully ready
+      sleep 1
 
-		  # Quick diagnostics so you can see what's up if it fails
-		  echo "XDG_RUNTIME_DIR contents:"
-		  ls -la "$XDG_RUNTIME_DIR" || true
-		  echo "Weston log:"
-		  grep -E "ERROR|warn|headless|listening" -i /tmp/weston.log || true
+      # Quick diagnostics so you can see what's up if it fails
+      echo "XDG_RUNTIME_DIR contents:"
+      ls -la "$XDG_RUNTIME_DIR" || true
+      echo "Weston log:"
+      grep -E "ERROR|warn|headless|listening" -i /tmp/weston.log || true
 
-		  # Your build/test
-		  cd ${{ matrix.cwd }}
-		  export XDG_RUNTIME_DIR
-		  export WAYLAND_DISPLAY
-		  CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
-		  cargo ${{ matrix.channel }} \
-			--config "$FATAL_WARNINGS_1" \
-			--config "$FATAL_WARNINGS_2" \
-			--config "$FATAL_WARNINGS_3" \
-			test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
-		  
-		  # Cleanup
-		  kill $WESTON_PID || true
+      # Your build/test
+      cd ${{ matrix.cwd }}
+      export XDG_RUNTIME_DIR
+      export WAYLAND_DISPLAY
+      CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
+      cargo ${{ matrix.channel }} \
+        --config "$FATAL_WARNINGS_1" \
+        --config "$FATAL_WARNINGS_2" \
+        --config "$FATAL_WARNINGS_3" \
+        test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+      
+      # Cleanup
+      kill $WESTON_PID || true
 
-	  - name: Run WASM tests
-		if: matrix.target == 'wasm32-unknown-unknown'
-		run: |
-		  cd ${{ matrix.cwd }}
-		  CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
-		  cargo ${{ matrix.channel }} \
-			--config "$FATAL_WARNINGS_1" \
-			--config "$FATAL_WARNINGS_2" \
-			--config "$FATAL_WARNINGS_3" \
-			test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
+      - name: Run WASM tests
+        if: matrix.target == 'wasm32-unknown-unknown'
+        run: |
+      cd ${{ matrix.cwd }}
+      CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
+      cargo ${{ matrix.channel }} \
+        --config "$FATAL_WARNINGS_1" \
+        --config "$FATAL_WARNINGS_2" \
+        --config "$FATAL_WARNINGS_3" \
+        test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
