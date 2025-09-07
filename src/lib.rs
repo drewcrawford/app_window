@@ -434,6 +434,7 @@ pub mod some_executor;
 /// # }
 /// ```
 pub mod main_thread_cell;
+pub mod test_support;
 
 /// Describes the preferred strategy for interacting with wgpu on different platforms.
 ///

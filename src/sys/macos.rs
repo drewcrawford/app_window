@@ -27,18 +27,13 @@ impl Display for FullscreenError {
 }
 
 swift!(fn SwiftAppWindowIsMainThread() -> bool);
-
 swift!(fn SwiftAppWindowRunMainThread());
-
 swift!(fn SwiftAppWindow_WindowNew( x: f64, y: f64, width: f64, height: f64, title: SRString)  -> *mut c_void);
-
 swift!(fn SwiftAppWindow_WindowFree(window: *mut c_void)  -> ());
-
 swift!(fn SwiftAppWindow_WindowNewFullscreen(title: SRString)  -> *mut c_void);
-
 swift!(fn SwiftAppWindow_WindowSurface(ctx: *mut c_void, window: *mut c_void, ret: *mut c_void)  -> ());
-
 swift!(fn SwiftAppWindow_OnMainThread(ctx: *mut c_void, c_fn: *mut c_void)  -> ());
+swift!(fn SwiftAppWindow_StopMainThread()  -> ());
 
 #[repr(C)]
 struct SwiftSizeScale {
@@ -56,6 +51,10 @@ pub fn is_main_thread() -> bool {
 pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     std::thread::spawn(closure);
     unsafe { SwiftAppWindowRunMainThread() }
+}
+
+pub fn stop_main_thread() {
+    unsafe{SwiftAppWindow_StopMainThread()}
 }
 
 extern "C" fn on_main_thread_callback<F: FnOnce()>(ctx: *mut MainThreadClosure<F>) {
