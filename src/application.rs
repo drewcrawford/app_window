@@ -178,7 +178,9 @@ pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
 }
 
 pub(crate) fn main_postlude<F>(closure: F)
-where F: FnOnce() + Send + 'static {
+where
+    F: FnOnce() + Send + 'static,
+{
     use crate::some_executor::MainThreadExecutor;
     some_executor::thread_executor::set_thread_local_executor_adapting_notifier(
         MainThreadExecutor {},

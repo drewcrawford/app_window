@@ -48,7 +48,9 @@ fn main() {
 * On wasm32, this should be marked #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 */
 pub fn integration_test_harness<C>(c: C)
- where C: FnOnce() + 'static + Send {
+where
+    C: FnOnce() + 'static + Send,
+{
     crate::application::main(|| {
         c();
         crate::sys::stop_main_thread();
@@ -75,14 +77,18 @@ doctest_main(|| {
 ```
 */
 pub fn doctest_main<C>(c: C)
-where C: FnOnce() + 'static + Send {
+where
+    C: FnOnce() + 'static + Send,
+{
     if crate::application::IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Relaxed) {
-       //main already running
+        //main already running
         c()
-    }
-    else {
+    } else {
         //main not already running
-        assert!(crate::sys::is_main_thread(), "doctest_main must be called from the main thread");
+        assert!(
+            crate::sys::is_main_thread(),
+            "doctest_main must be called from the main thread"
+        );
         crate::application::main_postlude(|| {
             c();
             crate::sys::stop_main_thread();
