@@ -54,7 +54,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 }
 
 pub fn stop_main_thread() {
-    unsafe{SwiftAppWindow_StopMainThread()}
+    unsafe { SwiftAppWindow_StopMainThread() }
 }
 
 extern "C" fn on_main_thread_callback<F: FnOnce()>(ctx: *mut MainThreadClosure<F>) {
