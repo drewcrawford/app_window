@@ -1,0 +1,15 @@
+[package]
+name = "test_example"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[dev-dependencies]
+app_window = {path = "../../."}
+wasm-bindgen-test = "0.3.51"
+
+[[test]]
+name = "custom_harness_test"
+harness = false
+path = "tests/custom_harness_test.rs"
