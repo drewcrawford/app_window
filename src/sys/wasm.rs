@@ -197,7 +197,55 @@ impl Window {
 }
 
 pub fn is_main_thread() -> bool {
-    web_sys::window().is_some()
+    let g = web_sys::js_sys::global();
+
+    // Browser: main thread vs Web Worker
+    if g.dyn_ref::<web_sys::Window>().is_some() {
+        return true;
+    }
+    if g.dyn_ref::<web_sys::WorkerGlobalScope>().is_some() {
+        return false;
+    }
+
+    // Node: detect environment, then query worker_threads.isMainThread
+    if is_node_env(&g) {
+        return node_is_main_thread_cjs(); // sync, works when `require` is available
+    }
+
+    // Unknown host
+    panic!("Unknown global object type: {:?}", g);
+}
+
+fn is_node_env(g: &wasm_bindgen::JsValue) -> bool {
+    // typeof process === 'object' && !!process?.versions?.node
+    if let Ok(process) = web_sys::js_sys::Reflect::get(g, &"process".into()) {
+        if !process.is_undefined() && !process.is_null() {
+            if let Ok(versions) = web_sys::js_sys::Reflect::get(&process, &"versions".into()) {
+                if let Ok(node) = web_sys::js_sys::Reflect::get(&versions, &"node".into()) {
+                    return !node.is_undefined() && !node.is_null();
+                }
+            }
+        }
+    }
+    false
+}
+
+// --- Node (CommonJS): synchronous path ---
+// Uses `require('node:worker_threads').isMainThread` if `require` exists.
+#[wasm_bindgen(inline_js = r#"
+export function nodeIsMainThreadCJS() {
+  try {
+    if (typeof require !== 'undefined') {
+      return require('node:worker_threads').isMainThread;
+    }
+  } catch (_) {}
+  // If require isn't available, caller can try the async ESM variant.
+  return true; // sensible default on main thread
+}
+"#)]
+extern "C" {
+    #[wasm_bindgen(js_name = nodeIsMainThreadCJS)]
+    fn node_is_main_thread_cjs() -> bool;
 }
 pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
     let (sender, receiver) = continue_stream::continuation();
@@ -255,6 +303,10 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 
         mt_sender.send(MainThreadEvent::Execute(boxed_closure));
     }
+}
+
+pub fn stop_main_thread() {
+    //nothing to do - handled by browsers
 }
 
 #[derive(Clone)]
