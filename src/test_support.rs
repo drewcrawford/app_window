@@ -58,7 +58,7 @@ where
 }
 
 /**
-A version of [`application::main`] for doctests.
+A version of [`crate::application::main`] for doctests.
 
 doctests generally pick one of two execution models:
 
