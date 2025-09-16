@@ -364,7 +364,7 @@ mod tests {
             // We can hold the cell in another thread, just not access it
             let held_cell = cell;
             c.send(());
-            drop(held_cell);
+            std::mem::forget(held_cell);
         });
 
         f.await;
