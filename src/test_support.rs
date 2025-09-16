@@ -30,8 +30,8 @@ harness = false
 
 Then in `tests/your_custom_test_name.rs`:
 ```rust,no_run
+# #[allow(clippy::needless_doctest_main)]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
-#[!allow(clippy::needless_doctest_main)]
 fn main() {
     app_window::test_support::integration_test_harness(|| {
         test_fn_1();
