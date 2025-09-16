@@ -68,7 +68,12 @@ doctests generally pick one of two execution models:
 This function implements a version of `main` that works in both cases.
 It brings up a temporary main thread environment for the duration of the test.
 
+Note: wasm_thread does not generally work in node.js, so you may need to run your tests in a browser.
+
 ```
+#[cfg(target_arch = "wasm32")] {
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+}
 use app_window::test_support::doctest_main;
 eprintln!("Will call doctest_main");
 doctest_main(|| {
