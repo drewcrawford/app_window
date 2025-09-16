@@ -9,7 +9,7 @@ use web_sys::KeyboardEvent;
 #[derive(Debug)]
 pub(super) struct PlatformCoalescedKeyboard {}
 
-pub(crate) const ARBITRARY_WINDOW_PTR: *mut c_void = 0x01 as *mut c_void;
+pub(crate) const ARBITRARY_WINDOW_PTR: *mut c_void = std::ptr::dangling_mut::<c_void>();
 
 impl PlatformCoalescedKeyboard {
     pub async fn new(shared: &Arc<Shared>) -> Self {
@@ -28,7 +28,7 @@ impl PlatformCoalescedKeyboard {
 
                     if let Some(shared) = weak.upgrade() {
                         let key = KeyboardKey::from_js_code(&code)
-                            .expect(format!("Unknown key: {}", key).as_str());
+                            .unwrap_or_else(|| panic!("Unknown key: {}", key));
 
                         shared.set_key_state(key, true, ARBITRARY_WINDOW_PTR);
                     }
@@ -47,7 +47,7 @@ impl PlatformCoalescedKeyboard {
                     let code = event.code();
                     if let Some(shared) = weak_up.upgrade() {
                         let key = KeyboardKey::from_js_code(&code)
-                            .expect(format!("Unknown key: {}", key).as_str());
+                            .unwrap_or_else(|| panic!("Unknown key: {}", key));
                         shared.set_key_state(key, false, ARBITRARY_WINDOW_PTR);
                     }
                 })

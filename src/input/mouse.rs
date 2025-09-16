@@ -223,7 +223,7 @@ impl Shared {
             location
                 .window
                 .map(|e| e.0.as_ptr())
-                .unwrap_or(std::ptr::null_mut()),
+                .unwrap_or_default(),
             Ordering::Relaxed,
         )
     }

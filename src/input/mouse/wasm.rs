@@ -112,7 +112,7 @@ impl PlatformCoalescedMouse {
                 };
 
                 if let Some(shared) = weak_wheel.upgrade() {
-                    shared.add_scroll_delta(x as f64, y as f64, ARBITRARY_WINDOW_PTR);
+                    shared.add_scroll_delta(x, y, ARBITRARY_WINDOW_PTR);
                 }
             }) as Box<dyn FnMut(WheelEvent)>);
             document
