@@ -362,8 +362,9 @@ mod tests {
         // Verify we can send the cell to another thread
         thread::spawn(move || {
             // We can hold the cell in another thread, just not access it
-            let _held_cell = cell;
+            let held_cell = cell;
             c.send(());
+            drop(held_cell);
         });
 
         f.await;
