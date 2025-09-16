@@ -113,6 +113,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.target == ''
         env:
           WAYLAND_DISPLAY: wayland-ci-0
+          ADDITIONAL_RUSTFLAGS: ${{ matrix.additional_rustflags }}
         run: |
           set -euxo pipefail
           
