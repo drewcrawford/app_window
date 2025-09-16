@@ -173,6 +173,6 @@ jobs:
         run: |
           cd ${{ matrix.cwd }}
           CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" \
-            RUSTFLAGS="$ADDITIONAL_RUSTFLAGS -Dwarnings" RUSTDOCFLAGS="$ADDITIONAL_RUSTFLAGS -Dwarnings" \
+            RUSTFLAGS="{{ matrix.additional_rustflags }} -Dwarnings" RUSTDOCFLAGS="{{ matrix.additional_rustflags }} -Dwarnings" \
           cargo ${{ matrix.channel }} \
             test ${{ steps.args.outputs.features }} ${{ steps.args.outputs.target }}
