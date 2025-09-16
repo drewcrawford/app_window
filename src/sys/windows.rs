@@ -14,12 +14,7 @@ use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT,
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
-use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
-    GetSystemMetrics, IDC_ARROW, LoadCursorW, MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW,
-    RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, ShowWindow, TranslateMessage,
-    WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP,
-};
+use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW, GetSystemMetrics, IDC_ARROW, LoadCursorW, MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW, RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, ShowWindow, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW, WS_POPUP, PostQuitMessage};
 use windows::core::{HSTRING, PCWSTR, w};
 
 const WM_RUN_FUNCTION: u32 = WM_USER;
@@ -112,6 +107,10 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
         )
     }
     .expect("PostThreadMessageW failed");
+}
+
+pub fn stop_main_thread() {
+    unsafe{PostQuitMessage(0)};
 }
 
 #[derive(Debug)]
