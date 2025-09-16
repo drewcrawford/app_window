@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
+use super::{App, AppState};
+use crate::application::IS_MAIN_THREAD_RUNNING;
 use libc::{EFD_SEMAPHORE, SYS_gettid, c_int, c_void, eventfd, getpid, pid_t, syscall};
 use std::cell::RefCell;
 use std::os::fd::AsRawFd;
-use std::sync::atomic::Ordering;
 use std::sync::OnceLock;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::{Sender, channel};
 use std::time::Duration;
 use wayland_client::backend::WaylandError;
@@ -11,8 +13,6 @@ use wayland_client::globals::{GlobalList, registry_queue_init};
 use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::{wl_compositor, wl_output::WlOutput, wl_shm::WlShm};
 use wayland_client::{Connection, QueueHandle};
-use crate::application::IS_MAIN_THREAD_RUNNING;
-use super::{App, AppState};
 
 pub fn is_main_thread() -> bool {
     let current_pid = unsafe { getpid() };
@@ -71,7 +71,9 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 }
 
 pub fn stop_main_thread() {
-    MAIN_THREAD_SENDER.get().expect("Main thread sender not set")
+    MAIN_THREAD_SENDER
+        .get()
+        .expect("Main thread sender not set")
         .send(Message::Stop);
 }
 
@@ -259,7 +261,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
                 .recv_timeout(Duration::from_secs(0))
                 .expect("Failed to receive closure");
             match message {
-                Message::Closure(closure) => { closure() }
+                Message::Closure(closure) => closure(),
                 Message::Stop => {
                     IS_MAIN_THREAD_RUNNING.store(false, Ordering::Relaxed);
                     break;

@@ -3,7 +3,7 @@
 // Re-export main types and functions
 pub use buffer::AllocatedBuffer;
 pub use cursor::ActiveCursor;
-pub use main_thread::{is_main_thread, on_main_thread, run_main_thread,stop_main_thread};
+pub use main_thread::{is_main_thread, on_main_thread, run_main_thread, stop_main_thread};
 pub(crate) use window::Window;
 // Module declarations
 pub mod ax;
