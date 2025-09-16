@@ -220,10 +220,7 @@ impl Shared {
         );
         *self.window.lock().unwrap() = Some(location);
         self.last_window.store(
-            location
-                .window
-                .map(|e| e.0.as_ptr())
-                .unwrap_or(std::ptr::null_mut()),
+            location.window.map(|e| e.0.as_ptr()).unwrap_or_default(),
             Ordering::Relaxed,
         )
     }

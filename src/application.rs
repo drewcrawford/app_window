@@ -105,7 +105,7 @@ pub(crate) use web_time as time;
 
 use crate::sys;
 
-static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
+pub(crate) static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// Error message constant used when operations require initialization.
 ///
@@ -174,7 +174,13 @@ pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
     let old = IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Release);
 
     assert!(!old, "Do not call main more than once.");
+    main_postlude(closure)
+}
 
+pub(crate) fn main_postlude<F>(closure: F)
+where
+    F: FnOnce() + Send + 'static,
+{
     use crate::some_executor::MainThreadExecutor;
     some_executor::thread_executor::set_thread_local_executor_adapting_notifier(
         MainThreadExecutor {},

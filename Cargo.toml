@@ -48,7 +48,7 @@ swift-rs = { version = "1.0.7", features = ["build"] }
 # wasm32
 [target.'cfg(target_arch="wasm32")'.dependencies]
 web-sys = { version = "0.3.76", features=["CssStyleDeclaration","HtmlCanvasElement","KeyboardEvent","Window","Document","MouseEvent","WheelEvent"] }
-wasm-bindgen = "0.2.99"
+wasm-bindgen = "0.2.101"
 wasm_thread = "0.3.3"
 wasm-bindgen-futures = "0.4.49"
 continue_stream = "0.1.0"
@@ -58,14 +58,14 @@ web-time = "1"
 [target.'cfg(target_arch="wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.7"
 wasm_thread = "0.3.3"
-wasm-bindgen-test = "0.3"
+wasm-bindgen-test = "0.3.51"
 web-time = "1.1"
 
 
 # windows
 
 [target.'cfg(target_os="windows")'.dependencies]
-windows = { version = "0.61.3", features=[
+windows = { version = "0.62.0", features=[
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",

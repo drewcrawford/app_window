@@ -20,8 +20,11 @@ use web_sys::{HtmlCanvasElement, window};
 pub struct Window {}
 
 thread_local! {
-    static CANVAS_HOLDER: RefCell<Option<CanvasHolder>> = RefCell::new(None);
+    static CANVAS_HOLDER: RefCell<Option<CanvasHolder>> = const { RefCell::new(None) };
 }
+
+type SizeCallback = dyn Fn(Size) + Send + 'static;
+type SharedSizeCallback = Arc<Mutex<Option<Box<SizeCallback>>>>;
 
 enum MainThreadEvent {
     Execute(Box<dyn FnOnce() + Send + 'static>),
@@ -32,12 +35,12 @@ static MAIN_THREAD_SENDER: OnceLock<continue_stream::Sender<MainThreadEvent>> = 
 struct CanvasHolder {
     handle: WebWindowHandle,
     canvas: Rc<HtmlCanvasElement>,
-    closure_box: Arc<Mutex<Option<Box<dyn Fn(Size) + Send>>>>,
+    closure_box: SharedSizeCallback,
 }
 impl CanvasHolder {
     fn new_main() -> CanvasHolder {
         use web_sys::wasm_bindgen::__rt::IntoJsResult;
-        let closure_box = Arc::new(Mutex::new(None));
+        let closure_box: SharedSizeCallback = Arc::new(Mutex::new(None));
         let move_closure_box = closure_box.clone();
 
         let window = window().expect("Can't get window");
@@ -73,11 +76,9 @@ impl CanvasHolder {
                 Some(canvas) => {
                     let width = canvas.width();
                     let height = canvas.height();
-                    move_closure_box.lock().unwrap().as_ref().map(
-                        |closure: &Box<dyn Fn(Size) -> () + Send + 'static>| {
-                            closure(Size::new(width as f64, height as f64))
-                        },
-                    );
+                    if let Some(closure) = move_closure_box.lock().unwrap().as_ref() {
+                        closure(Size::new(width as f64, height as f64));
+                    }
                 }
             }
         });
@@ -174,14 +175,13 @@ impl Window {
 
     pub async fn surface(&self) -> crate::surface::Surface {
         let sys_surface = crate::application::on_main_thread("surface".to_string(), || {
-            let surface = CANVAS_HOLDER.with_borrow_mut(|canvas| {
+            CANVAS_HOLDER.with_borrow_mut(|canvas| {
                 let canvas = canvas.as_ref().expect("no canvas");
                 Surface {
                     display_handle: canvas.handle,
                     closure_box: DebugWrapper(canvas.closure_box.clone()),
                 }
-            });
-            surface
+            })
         })
         .await;
         crate::surface::Surface { sys: sys_surface }
@@ -197,9 +197,56 @@ impl Window {
 }
 
 pub fn is_main_thread() -> bool {
-    web_sys::window().is_some()
+    let g = web_sys::js_sys::global();
+
+    // Browser: main thread vs Web Worker
+    if g.dyn_ref::<web_sys::Window>().is_some() {
+        return true;
+    }
+    if g.dyn_ref::<web_sys::WorkerGlobalScope>().is_some() {
+        return false;
+    }
+
+    // Node: detect environment, then query worker_threads.isMainThread
+    if is_node_env(&g) {
+        return node_is_main_thread_cjs(); // sync, works when `require` is available
+    }
+
+    // Unknown host
+    panic!("Unknown global object type: {:?}", g);
 }
-pub fn run_main_thread<F: FnOnce() -> () + Send + 'static>(closure: F) {
+
+fn is_node_env(g: &wasm_bindgen::JsValue) -> bool {
+    // typeof process === 'object' && !!process?.versions?.node
+    if let Ok(process) = web_sys::js_sys::Reflect::get(g, &"process".into())
+        && !process.is_undefined()
+        && !process.is_null()
+        && let Ok(versions) = web_sys::js_sys::Reflect::get(&process, &"versions".into())
+        && let Ok(node) = web_sys::js_sys::Reflect::get(&versions, &"node".into())
+    {
+        return !node.is_undefined() && !node.is_null();
+    }
+    false
+}
+
+// --- Node (CommonJS): synchronous path ---
+// Uses `require('node:worker_threads').isMainThread` if `require` exists.
+#[wasm_bindgen(inline_js = r#"
+export function nodeIsMainThreadCJS() {
+  try {
+    if (typeof require !== 'undefined') {
+      return require('node:worker_threads').isMainThread;
+    }
+  } catch (_) {}
+  // If require isn't available, caller can try the async ESM variant.
+  return true; // sensible default on main thread
+}
+"#)]
+extern "C" {
+    #[wasm_bindgen(js_name = nodeIsMainThreadCJS)]
+    fn node_is_main_thread_cjs() -> bool;
+}
+pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let (sender, receiver) = continue_stream::continuation();
 
     let mut sent = false;
@@ -250,11 +297,15 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
         let mt_sender = MAIN_THREAD_SENDER
             .get()
             .expect(crate::application::CALL_MAIN);
-        let boxed_closure = Box::new(closure) as Box<dyn FnOnce() -> () + Send + 'static>;
+        let boxed_closure = Box::new(closure) as Box<dyn FnOnce() + Send + 'static>;
         // let perf = logwise::perfwarn_begin!("starting SEND task");
 
         mt_sender.send(MainThreadEvent::Execute(boxed_closure));
     }
+}
+
+pub fn stop_main_thread() {
+    //nothing to do - handled by browsers
 }
 
 #[derive(Clone)]
@@ -268,7 +319,7 @@ impl<T> Debug for DebugWrapper<T> {
 #[derive(Debug)]
 pub struct Surface {
     display_handle: WebWindowHandle,
-    closure_box: DebugWrapper<Arc<Mutex<Option<Box<dyn Fn(Size) -> () + Send + 'static>>>>>,
+    closure_box: DebugWrapper<SharedSizeCallback>,
 }
 impl Surface {
     pub async fn size_scale(&self) -> (Size, f64) {
@@ -309,7 +360,7 @@ impl Surface {
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {
-        RawWindowHandle::Web(self.display_handle.clone())
+        RawWindowHandle::Web(self.display_handle)
     }
     pub fn raw_display_handle(&self) -> RawDisplayHandle {
         RawDisplayHandle::Web(WebDisplayHandle::new())
@@ -317,7 +368,7 @@ impl Surface {
     /**
     Run the attached callback when size changes.
     */
-    pub fn size_update<F: Fn(Size) -> () + Send + 'static>(&mut self, update: F) {
+    pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, update: F) {
         self.closure_box.0.lock().unwrap().replace(Box::new(update));
     }
 }

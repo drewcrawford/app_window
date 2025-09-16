@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
+use super::{App, AppState};
+use crate::application::IS_MAIN_THREAD_RUNNING;
 use libc::{EFD_SEMAPHORE, SYS_gettid, c_int, c_void, eventfd, getpid, pid_t, syscall};
 use std::cell::RefCell;
 use std::os::fd::AsRawFd;
 use std::sync::OnceLock;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::{Sender, channel};
 use std::time::Duration;
 use wayland_client::backend::WaylandError;
@@ -11,22 +14,24 @@ use wayland_client::protocol::wl_subcompositor::WlSubcompositor;
 use wayland_client::protocol::{wl_compositor, wl_output::WlOutput, wl_shm::WlShm};
 use wayland_client::{Connection, QueueHandle};
 
-use super::{App, AppState};
-
 pub fn is_main_thread() -> bool {
     let current_pid = unsafe { getpid() };
     let main_thread_pid = unsafe { syscall(SYS_gettid) } as pid_t;
     current_pid == main_thread_pid
 }
 
+enum Message {
+    Closure(Box<dyn FnOnce() + Send>),
+    Stop,
+}
 struct MainThreadSender {
-    sender: Sender<Box<dyn FnOnce() + Send>>,
+    sender: Sender<Message>,
     eventfd: c_int,
 }
 
 impl MainThreadSender {
-    fn send(&self, closure: Box<dyn FnOnce() + Send>) {
-        self.sender.send(closure).expect("Can't send closure");
+    fn send(&self, message: Message) {
+        self.sender.send(message).expect("Can't send closure");
         let val = 1_u64;
         let w = unsafe {
             libc::write(
@@ -62,7 +67,14 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     MAIN_THREAD_SENDER
         .get()
         .expect("Main thread sender not set")
-        .send(Box::new(closure));
+        .send(Message::Closure(Box::new(closure)));
+}
+
+pub fn stop_main_thread() {
+    MAIN_THREAD_SENDER
+        .get()
+        .expect("Main thread sender not set")
+        .send(Message::Stop);
 }
 
 pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
@@ -245,10 +257,16 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
             let mut buf = [0u8; 8];
             let r = unsafe { libc::read(channel_read_event, buf.as_mut_ptr() as *mut c_void, 8) };
             assert_eq!(r, 8, "Failed to read from eventfd");
-            let closure = receiver
+            let message = receiver
                 .recv_timeout(Duration::from_secs(0))
                 .expect("Failed to receive closure");
-            closure();
+            match message {
+                Message::Closure(closure) => closure(),
+                Message::Stop => {
+                    IS_MAIN_THREAD_RUNNING.store(false, Ordering::Relaxed);
+                    break;
+                }
+            }
             //let's ensure any writes went out to wayland
             event_queue
                 .dispatch_pending(&mut app)
