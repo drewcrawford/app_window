@@ -57,6 +57,10 @@ pub fn stop_main_thread() {
     unsafe { SwiftAppWindow_StopMainThread() }
 }
 
+pub async fn alert(message: String) {
+    todo!("alert not yet implemented for macOS: {}", message)
+}
+
 extern "C" fn on_main_thread_callback<F: FnOnce()>(ctx: *mut MainThreadClosure<F>) {
     let b: MainThreadClosure<F> = *unsafe { Box::from_raw(ctx) };
     (b.closure)();

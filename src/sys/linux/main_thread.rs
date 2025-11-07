@@ -77,6 +77,10 @@ pub fn stop_main_thread() {
         .send(Message::Stop);
 }
 
+pub async fn alert(message: String) {
+    todo!("alert not yet implemented for Linux: {}", message)
+}
+
 pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let (sender, receiver) = channel();
     let channel_read_event = unsafe { eventfd(0, EFD_SEMAPHORE) };

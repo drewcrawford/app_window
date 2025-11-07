@@ -484,6 +484,37 @@ pub enum WGPUStrategy {
     /// maximum flexibility for application architecture.
     Relaxed,
 }
+
+/// Displays an alert dialog with the given message.
+///
+/// This function displays a modal alert dialog to the user. The behavior is platform-specific:
+///
+/// - **WebAssembly**: Uses the browser's native `window.alert()` function
+/// - **macOS, Windows, Linux**: Not yet implemented (will panic with `todo!`)
+///
+/// # Platform-specific behavior
+///
+/// On WebAssembly, this function will block execution until the user dismisses the alert dialog.
+/// The function automatically dispatches to the main thread as required by the platform.
+///
+/// # Example
+///
+/// ```no_run
+/// // ALLOW_NORUN_DOCTEST: alert() requires application::main() to be called first, which is not available in doctests
+/// # async fn example() {
+/// use app_window::alert;
+///
+/// alert("Hello, world!".to_string()).await;
+/// # }
+/// ```
+///
+/// # Panics
+///
+/// Currently panics with `todo!` on macOS, Windows, and Linux platforms.
+pub async fn alert(message: String) {
+    sys::alert(message).await
+}
+
 /// The preferred strategy for interacting with wgpu on the current platform.
 ///
 /// This constant provides the platform-specific threading requirements for wgpu

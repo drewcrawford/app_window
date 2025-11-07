@@ -308,6 +308,14 @@ pub fn stop_main_thread() {
     //nothing to do - handled by browsers
 }
 
+pub async fn alert(message: String) {
+    crate::application::on_main_thread("alert".to_string(), move || {
+        let window = window().expect("Can't get window");
+        window.alert_with_message(&message).expect("Alert failed");
+    })
+    .await
+}
+
 #[derive(Clone)]
 struct DebugWrapper<T>(T);
 

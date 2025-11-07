@@ -119,6 +119,10 @@ pub fn stop_main_thread() {
     unsafe { PostQuitMessage(0) };
 }
 
+pub async fn alert(message: String) {
+    todo!("alert not yet implemented for Windows: {}", message)
+}
+
 #[derive(Debug)]
 pub struct Window {
     hwnd: SendCell<HWND>,

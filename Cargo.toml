@@ -48,7 +48,7 @@ swift-rs = { version = "1.0.7", features = ["build"] }
 # wasm32
 [target.'cfg(target_arch="wasm32")'.dependencies]
 web-sys = { version = "0.3.76", features=["CssStyleDeclaration","HtmlCanvasElement","KeyboardEvent","Window","Document","MouseEvent","WheelEvent"] }
-wasm-bindgen = "0.2.101"
+wasm-bindgen = "0.2.105"
 wasm_thread = "0.3.3"
 wasm-bindgen-futures = "0.4.49"
 continue_stream = "0.1.0"
