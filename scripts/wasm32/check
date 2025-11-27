@@ -1,0 +1,4 @@
+#!/bin/bash
+set -e
+source "$(dirname "$0")/_env"
+RUSTFLAGS="$WASM32_RUSTFLAGS" cargo +nightly check --target=wasm32-unknown-unknown

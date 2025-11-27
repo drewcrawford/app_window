@@ -1,0 +1,8 @@
+# Sourced by wasm32 scripts to set up RUSTFLAGS
+CARGO_CONFIG_RUSTFLAGS=$(cargo +nightly -Z unstable-options config get 'target.cfg(target_arch="wasm32").rustflags' --format json 2>/dev/null | python3 -c "import json,sys; d=sys.stdin.read(); print(' '.join(json.loads(d)['target']['cfg(target_arch=\"wasm32\")']['rustflags']) if d.strip() else '')" 2>/dev/null)
+
+if [ -z "$CARGO_CONFIG_RUSTFLAGS" ]; then
+    echo "Warning: Could not read rustflags from cargo config" >&2
+fi
+
+export WASM32_RUSTFLAGS="$CARGO_CONFIG_RUSTFLAGS -D warnings"

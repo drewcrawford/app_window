@@ -1,0 +1,13 @@
+#!/bin/bash
+set -e
+
+echo "fmt check"
+scripts/fmt
+echo "check"
+scripts/check
+echo "clippy"
+scripts/clippy
+echo "tests"
+scripts/tests
+echo "docs"
+scripts/docs

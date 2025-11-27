@@ -1,0 +1,3 @@
+#!/bin/bash
+set -e
+RUSTDOCFLAGS="-D warnings" cargo +nightly doc --target=wasm32-unknown-unknown

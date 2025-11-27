@@ -1,0 +1,4 @@
+#!/bin/bash
+set -e
+scripts/native/check
+scripts/wasm32/check
