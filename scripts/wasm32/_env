@@ -5,4 +5,5 @@ if [ -z "$CARGO_CONFIG_RUSTFLAGS" ]; then
     echo "Warning: Could not read rustflags from cargo config" >&2
 fi
 
-export WASM32_RUSTFLAGS="$CARGO_CONFIG_RUSTFLAGS -D warnings"
+export WASM32_RUSTFLAGS="$CARGO_CONFIG_RUSTFLAGS"
+export WASM32_RUSTDOCFLAGS="$CARGO_CONFIG_RUSTFLAGS"

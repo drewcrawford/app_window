@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
 source "$(dirname "$0")/_env"
-CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS="$WASM32_RUSTFLAGS" cargo +nightly test --target=wasm32-unknown-unknown
+CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS="$WASM32_RUSTFLAGS" RUSTDOCFLAGS="$WASM32_RUSTDOCFLAGS" cargo +nightly test --target=wasm32-unknown-unknown
