@@ -141,6 +141,19 @@ impl Window {
         let window_internal =
             crate::application::on_main_thread("Window::new".to_string(), move || {
                 let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
+
+                // Log available xdg_wm_base versions for debugging
+                let available_versions: Vec<u32> = info.globals.contents().with_list(|list| {
+                    list.iter()
+                        .filter(|g| g.interface == "xdg_wm_base")
+                        .map(|g| g.version)
+                        .collect()
+                });
+                eprintln!(
+                    "Available xdg_wm_base versions in Wayland compositor: {:?}",
+                    available_versions
+                );
+
                 let xdg_wm_base: XdgWmBase =
                     info.globals.bind(&info.queue_handle, 6..=6, ()).unwrap();
                 let window_internal =
