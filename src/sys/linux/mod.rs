@@ -211,6 +211,8 @@ impl Surface {
 
 impl Drop for Surface {
     fn drop(&mut self) {
-        todo!()
+        // wl_surface is destroyed by Window::Drop via close_window()
+        // wl_display is owned by Connection
+        // window_internal is an Arc (just decrements refcount)
     }
 }
