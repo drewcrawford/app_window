@@ -217,22 +217,23 @@ impl Window {
                 drop(lock);
                 surface.commit();
 
-                let seat: WlSeat = info
-                    .globals
-                    .bind(&info.queue_handle, 8..=9, ())
-                    .expect("Can't bind seat");
-                window_internal
-                    .lock()
-                    .unwrap()
-                    .app_state
-                    .upgrade()
-                    .unwrap()
-                    .seat
-                    .lock()
-                    .unwrap()
-                    .replace(seat.clone());
-                let _pointer = seat.get_pointer(&info.queue_handle, window_internal.clone());
-                let _keyboard = seat.get_keyboard(&info.queue_handle, window_internal.clone());
+                // Seat (input devices) may not be available in headless environments
+                let seat_result: Result<WlSeat, _> =
+                    info.globals.bind(&info.queue_handle, 8..=9, ());
+                if let Ok(seat) = seat_result {
+                    window_internal
+                        .lock()
+                        .unwrap()
+                        .app_state
+                        .upgrade()
+                        .unwrap()
+                        .seat
+                        .lock()
+                        .unwrap()
+                        .replace(seat.clone());
+                    let _pointer = seat.get_pointer(&info.queue_handle, window_internal.clone());
+                    let _keyboard = seat.get_keyboard(&info.queue_handle, window_internal.clone());
+                }
 
                 MAIN_THREAD_INFO.replace(Some(info));
                 window_internal
