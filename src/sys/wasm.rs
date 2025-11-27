@@ -9,6 +9,7 @@ use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
+use logwise::Level;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};
@@ -266,6 +267,8 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
         let new_context = Context::new_task(
             Some(push_context_2),
             "app_window after MT context".to_string(),
+            Level::DebugInternal,
+            logwise::log_enabled!(Level::DebugInternal),
         );
         let new_id = new_context.context_id();
         new_context.set_current();
@@ -276,6 +279,8 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let event_loop_context = Context::new_task(
         Some(Context::current()),
         "main thread eventloop".to_string(),
+        Level::DebugInternal,
+        logwise::log_enabled!(Level::DebugInternal),
     );
     let apply_context = logwise::context::ApplyContext::new(event_loop_context, async move {
         loop {

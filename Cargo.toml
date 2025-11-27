@@ -21,7 +21,7 @@ logwise_internal = []
 [dependencies]
 atomic_float = "1.1.0"
 raw-window-handle = "0.6.2"
-logwise = "0.3"
+logwise = "0.4.0"
 thiserror = "2.0.15"
 some_executor = "0.6.1"
 continue = "0.1.1"
@@ -125,5 +125,5 @@ harness = false
 [patch.crates-io]
 #send_cells = { path = "../send_cells" }
 #some_executor = { path = "../some_executor" }
-#logwise = { path = "../logwise" }
+logwise = { path = "../logwise" }
 #test_executors = { path = "../test_executors" }

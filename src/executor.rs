@@ -209,14 +209,13 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(
     //creating a task is a bit heavyweight, particularly on the main thread.
     // let new_context = logwise::context::Context::from_parent(parent_context);
     let new_context =
-        logwise::context::Context::new_task(Some(parent_context), debug_label.clone());
+        logwise::context::Context::new_task(Some(parent_context), debug_label.clone(), logwise::Level::DebugInternal, logwise::log_enabled!(logwise::Level::DebugInternal));
 
-    logwise::info_sync!(
+    logwise::debuginternal_sync!(
         "Creating task {id} {label}",
         id = logwise::privacy::IPromiseItsNotPrivate(new_context.task_id()),
         label = logwise::privacy::LogIt(debug_label)
     );
-    // debuginternal_sync!("Creating task {id}", id = logwise::privacy::IPromiseItsNotPrivate(new_context.task_id()));
     let task = Task {
         our_task_id: task_id,
         context: new_context,
