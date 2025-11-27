@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **[Linux] Surface cleanup** - Improved Surface::drop handling to prevent resource leaks and compositor complaints.
 
+- **[Linux] xdg-shell protocol compliance** - Fixed a protocol violation that was causing "xdg_surface has never been configured" errors. Turns out Wayland is *very* particular about the order of operations: you must `ack_configure` before committing a buffer, not after. We also stopped attaching buffers before the initial configure event (another no-no). Thanks to `WAYLAND_DEBUG=1` for helping us catch this one!
+
 ### Changed
 
 - **Dependency updates** - Bumped wgpu to 27.0, updated Windows crates to 0.62, and refreshed logwise to 0.4. Everything's a bit shinier now.
