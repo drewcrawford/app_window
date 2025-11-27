@@ -173,13 +173,13 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                         configure.width = 800;
                         configure.height = 600;
                     }
-                    //check size
-                    if locked_data
+                    //check size (always attach on first configure)
+                    let size_changed = locked_data
                         .applied_configure
                         .as_ref()
                         .map(|c| c.width != configure.width || c.height != configure.height)
-                        .unwrap_or(true)
-                    {
+                        .unwrap_or(true);
+                    if !locked_data.has_been_configured || size_changed {
                         //apply decor position
                         locked_data
                             .decor_subsurface

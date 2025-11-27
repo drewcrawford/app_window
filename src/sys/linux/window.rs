@@ -213,14 +213,9 @@ impl Window {
                     .xdg_toplevel
                     .replace(xdg_toplevel);
 
-                //convert to compositor-owned buffer
-                let mut lock = window_internal.lock().unwrap();
-                let drawable_buffer = lock
-                    .drawable_buffer
-                    .take()
-                    .expect("No drawable buffer available");
-                surface.attach(Some(&drawable_buffer.buffer), 0, 0);
-                drop(lock);
+                // Initial commit without buffer to trigger configure event.
+                // Per xdg-shell protocol, we must wait for configure before attaching a buffer.
+                // The configure handler in dispatchers.rs will attach the buffer.
                 surface.commit();
 
                 // Seat (input devices) may not be available in headless environments
