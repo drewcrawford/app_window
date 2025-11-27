@@ -210,15 +210,24 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                             0,
                             0,
                         );
+                        // ack_configure MUST come before commit per xdg-shell protocol
+                        proxy.ack_configure(serial);
+                        locked_data.has_been_configured = true;
                         locked_data
                             .wl_surface
                             .as_ref()
                             .expect("No surface")
                             .commit();
+                    } else {
+                        // No buffer changes needed, but still must ack
+                        proxy.ack_configure(serial);
+                        locked_data.has_been_configured = true;
                     }
+                } else {
+                    // No proposed configure, still ack
+                    proxy.ack_configure(serial);
+                    locked_data.has_been_configured = true;
                 }
-                proxy.ack_configure(serial);
-                locked_data.has_been_configured = true;
             }
             _ => {
                 logwise::debuginternal_sync!(
