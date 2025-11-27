@@ -24,7 +24,7 @@ requirements.
 First, initialize the application from your main function:
 
 ```no_run
-// ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
+# // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
 use app_window::application;
 fn main() {
     application::main(|| {
@@ -215,7 +215,7 @@ if scroll_y != 0.0 {
 For wgpu integration, use the platform-specific strategy:
 
 ```no_run
-// ALLOW_NORUN_DOCTEST: Full wgpu example requires graphics setup beyond scope of doctest
+# // ALLOW_NORUN_DOCTEST: Full wgpu example requires graphics setup beyond scope of doctest
 # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 use app_window::{window::Window, application, WGPU_STRATEGY, WGPUStrategy};
 
@@ -309,7 +309,7 @@ pub mod window;
 ///
 /// # Example
 /// ```no_run
-/// // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
+/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
 /// use app_window::application;
 ///
 /// fn main() {
@@ -387,7 +387,7 @@ pub mod input;
 ///
 /// # Example
 /// ```no_run
-/// # // can't run on main thread in doctests
+/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
 /// # use app_window::{application, executor};
 /// # application::main(|| {
 /// # async fn my_async_function() -> i32 { 42 }
@@ -500,7 +500,7 @@ pub enum WGPUStrategy {
 /// # Example
 ///
 /// ```no_run
-/// // ALLOW_NORUN_DOCTEST: alert() requires application::main() to be called first, which is not available in doctests
+/// # // ALLOW_NORUN_DOCTEST: alert() requires application::main() to be called first, which is not available in doctests
 /// # async fn example() {
 /// use app_window::alert;
 ///

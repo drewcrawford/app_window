@@ -34,7 +34,7 @@
 //! Every `app_window` application follows this pattern:
 //!
 //! ```no_run
-//! // ALLOW_NORUN_DOCTEST: Requires full application initialization which blocks the thread
+//! # // ALLOW_NORUN_DOCTEST: Requires full application initialization which blocks the thread
 //! use app_window::application;
 //!
 //! fn main() {
@@ -163,7 +163,7 @@ pub(crate) const CALL_MAIN: &str = "Call app_window::application::main";
 /// ## Basic Setup
 ///
 /// ```no_run
-/// // ALLOW_NORUN_DOCTEST: Function blocks indefinitely running the event loop
+/// # // ALLOW_NORUN_DOCTEST: Function blocks indefinitely running the event loop
 /// app_window::application::main(|| {
 ///     println!("Application ready!");
 ///     // Your app initialization here
@@ -414,7 +414,7 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 /// ## Basic Fire-and-Forget
 ///
 /// ```no_run
-//  # //main thread is not running in doctests.
+/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
 /// use app_window::application;
 ///
 /// // Update UI without waiting
@@ -452,13 +452,13 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 /// ## Event Handling
 ///
 /// ```no_run
-/// # // main thread is not running in doctests.
+/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
 /// use app_window::application;
 ///
 /// fn handle_user_input(input: String) {
 ///     // Process input on current thread
 ///     let processed = input.to_uppercase();
-///     
+///
 ///     // Update UI on main thread
 ///     application::submit_to_main_thread(
 ///         format!("handle_input_{}", processed.clone()),

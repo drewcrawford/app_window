@@ -3,3 +3,4 @@ Cargo.lock
 .idea
 SwiftAppWindow/Package.resolved
 examples/test_example/target
+.claude

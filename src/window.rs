@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```no_run
-//! # // can't use main in doctests
+//! # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
 //! use app_window::coordinates::{Position, Size};
 //!
 //! app_window::application::main(|| {
@@ -26,7 +26,7 @@
 //!             Size::new(800.0, 600.0),
 //!             "My App".to_string()
 //!         ).await;
-//!         
+//!
 //!         // Keep the window alive
 //!         std::mem::forget(window);
 //!     };
@@ -52,7 +52,7 @@ use std::fmt::Display;
 /// close it immediately. To keep a window open indefinitely, use [`std::mem::forget`]:
 ///
 /// ```no_run
-/// # // can't use main in doctests
+/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
 /// # app_window::application::main(|| {
 /// # let task = async {
 /// let window = app_window::window::Window::default().await;
@@ -121,7 +121,7 @@ impl Window {
     /// # Example
     ///
     /// ```no_run
-    /// # // can't use main in doctests
+    /// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
     /// # app_window::application::main(|| {
     /// # let task = async {
     /// match app_window::window::Window::fullscreen("My Game".to_string()).await {
@@ -165,7 +165,7 @@ impl Window {
     /// # Example
     ///
     /// ```no_run
-    /// # // can't use main in doctests
+    /// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
     /// use app_window::coordinates::{Position, Size};
     ///
     /// # app_window::application::main(|| {
@@ -210,7 +210,7 @@ impl Window {
     /// # Example
     ///
     /// ```no_run
-    /// # // can't use main in doctests
+    /// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
     /// # app_window::application::main(|| {
     /// # let task = async {
     /// let mut window = app_window::window::Window::default().await;
@@ -250,7 +250,7 @@ impl Window {
     /// # Example
     ///
     /// ```no_run
-    /// # // can't use main in doctests
+    /// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
     /// # app_window::application::main(|| {
     /// # let task = async {
     /// let window = app_window::window::Window::default().await;
