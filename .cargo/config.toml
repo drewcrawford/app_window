@@ -5,3 +5,6 @@ build-std = ["std", "panic_abort"]
 [target.'cfg(target_arch="wasm32")']
 runner = "wasm-server-runner"
 rustflags = ["-C", "target-feature=+atomics"]
+
+[target.'cfg(test)']
+runner = "test_runner"
