@@ -413,21 +413,27 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 ///
 /// ## Basic Fire-and-Forget
 ///
-/// ```no_run
-/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
-/// use app_window::application;
+/// ```
+/// #[cfg(target_arch = "wasm32")] {
+///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+/// }
+/// use app_window::test_support::doctest_main;
+/// doctest_main(|| {
+///     use app_window::application;
 ///
-/// // Update UI without waiting
-/// application::submit_to_main_thread(
-///     "update_status".to_owned(),
-///     || {
-///         update_status_bar("Operation complete");
-///     }
-/// );
+///     // Update UI without waiting
+///     application::submit_to_main_thread(
+///         "update_status".to_owned(),
+///         || {
+///             update_status_bar("Operation complete");
+///         }
+///     );
 ///
-/// // Continue immediately without waiting
-/// println!("Submitted UI update");
-/// # fn update_status_bar(_: &str) {}
+///     // Continue immediately without waiting
+///     println!("Submitted UI update");
+///
+///     fn update_status_bar(_: &str) {}
+/// });
 /// ```
 ///
 /// ## Periodic UI Updates
@@ -451,26 +457,31 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 ///
 /// ## Event Handling
 ///
-/// ```no_run
-/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
-/// use app_window::application;
-///
-/// fn handle_user_input(input: String) {
-///     // Process input on current thread
-///     let processed = input.to_uppercase();
-///
-///     // Update UI on main thread
-///     application::submit_to_main_thread(
-///         format!("handle_input_{}", processed.clone()),
-///         move || {
-///             // In a real app, this would update UI elements
-///             println!("Displaying result: {}", processed);
-///         }
-///     );
+/// ```
+/// #[cfg(target_arch = "wasm32")] {
+///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 /// }
+/// use app_window::test_support::doctest_main;
+/// doctest_main(|| {
+///     use app_window::application;
 ///
-/// // Example usage
-/// handle_user_input("hello".to_string());
+///     fn handle_user_input(input: String) {
+///         // Process input on current thread
+///         let processed = input.to_uppercase();
+///
+///         // Update UI on main thread
+///         application::submit_to_main_thread(
+///             format!("handle_input_{}", processed.clone()),
+///             move || {
+///                 // In a real app, this would update UI elements
+///                 println!("Displaying result: {}", processed);
+///             }
+///         );
+///     }
+///
+///     // Example usage
+///     handle_user_input("hello".to_string());
+/// });
 /// ```
 ///
 /// # Implementation Details

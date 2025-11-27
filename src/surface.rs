@@ -98,22 +98,31 @@ impl Surface {
     ///
     /// # Example
     ///
-    /// ```no_run
-    /// # // ALLOW_NORUN_DOCTEST: Requires main thread context
-    /// # use app_window::window::Window;
-    /// # use app_window::application;
-    /// # application::main(|| {
-    /// # let task = async {
-    /// # let mut window: Window = todo!();
-    /// let surface = window.surface().await;
-    ///
-    /// // Only call from main thread
-    /// if application::is_main_thread() {
-    ///     let (size, scale) = surface.size_main();
-    ///     println!("Size: {}x{} at {}x scale", size.width(), size.height(), scale);
+    /// ```
+    /// #[cfg(target_arch = "wasm32")] {
+    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
     /// }
-    /// # };
-    /// # });
+    /// use app_window::test_support::doctest_main;
+    /// use some_executor::task::{Configuration, Task};
+    ///
+    /// doctest_main(|| {
+    ///     Task::without_notifications(
+    ///         "doctest".to_string(),
+    ///         Configuration::default(),
+    ///         async {
+    ///             use app_window::application;
+    ///
+    ///             let mut window = app_window::window::Window::default().await;
+    ///             let surface = window.surface().await;
+    ///
+    ///             // Only call from main thread
+    ///             if application::is_main_thread() {
+    ///                 let (size, scale) = surface.size_main();
+    ///                 println!("Size: {}x{} at {}x scale", size.width(), size.height(), scale);
+    ///             }
+    ///         },
+    ///     ).spawn_static_current();
+    /// });
     /// ```
     pub fn size_main(&self) -> (Size, f64) {
         assert!(

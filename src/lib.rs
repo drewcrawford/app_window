@@ -390,14 +390,31 @@ pub mod input;
 /// native event loop to process both async tasks and platform events.
 ///
 /// # Example
-/// ```no_run
-/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
-/// # use app_window::{application, executor};
-/// # application::main(|| {
-/// # async fn my_async_function() -> i32 { 42 }
-/// // Run an async function on the main thread
-/// let result = executor::on_main_thread_async("ex".to_owned(),my_async_function());
-/// # });
+/// ```
+/// #[cfg(target_arch = "wasm32")] {
+///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+/// }
+/// use app_window::test_support::doctest_main;
+/// use some_executor::task::{Configuration, Task};
+///
+/// doctest_main(|| {
+///     Task::without_notifications(
+///         "doctest".to_string(),
+///         Configuration::default(),
+///         async {
+///             use app_window::executor;
+///
+///             async fn my_async_function() -> i32 { 42 }
+///
+///             // Run an async function on the main thread
+///             let result = executor::on_main_thread_async(
+///                 "ex".to_owned(),
+///                 my_async_function()
+///             ).await;
+///             assert_eq!(result, 42);
+///         },
+///     ).spawn_static_current();
+/// });
 /// ```
 pub mod executor;
 

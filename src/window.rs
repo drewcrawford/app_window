@@ -14,23 +14,28 @@
 //!
 //! # Example
 //!
-//! ```no_run
-//! # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
-//! use app_window::coordinates::{Position, Size};
+//! ```
+//! #[cfg(target_arch = "wasm32")] {
+//!     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+//! }
+//! use app_window::test_support::doctest_main;
+//! use some_executor::task::{Configuration, Task};
 //!
-//! app_window::application::main(|| {
-//!     // Spawn a task to create windows - can be on any thread
-//!     let task = async {
-//!         let window = app_window::window::Window::new(
-//!             Position::new(100.0, 100.0),
-//!             Size::new(800.0, 600.0),
-//!             "My App".to_string()
-//!         ).await;
+//! doctest_main(|| {
+//!     use app_window::coordinates::{Position, Size};
 //!
-//!         // Keep the window alive
-//!         std::mem::forget(window);
-//!     };
-//!     # // In a real app, you'd spawn this task with your executor
+//!     Task::without_notifications(
+//!         "doctest".to_string(),
+//!         Configuration::default(),
+//!         async {
+//!             let _window = app_window::window::Window::new(
+//!                 Position::new(100.0, 100.0),
+//!                 Size::new(800.0, 600.0),
+//!                 "My App".to_string()
+//!             ).await;
+//!             // Window closes when dropped
+//!         },
+//!     ).spawn_static_current();
 //! });
 //! ```
 
@@ -51,14 +56,23 @@ use std::fmt::Display;
 /// Windows remain open as long as the `Window` instance exists. Dropping a `Window` will
 /// close it immediately. To keep a window open indefinitely, use [`std::mem::forget`]:
 ///
-/// ```no_run
-/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
-/// # app_window::application::main(|| {
-/// # let task = async {
-/// let window = app_window::window::Window::default().await;
-/// std::mem::forget(window); // Window stays open
-/// # };
-/// # });
+/// ```
+/// #[cfg(target_arch = "wasm32")] {
+///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+/// }
+/// use app_window::test_support::doctest_main;
+/// use some_executor::task::{Configuration, Task};
+///
+/// doctest_main(|| {
+///     Task::without_notifications(
+///         "doctest".to_string(),
+///         Configuration::default(),
+///         async {
+///             let window = app_window::window::Window::default().await;
+///             std::mem::forget(window); // Window stays open
+///         },
+///     ).spawn_static_current();
+/// });
 /// ```
 ///
 /// # Threading
@@ -120,19 +134,28 @@ impl Window {
     ///
     /// # Example
     ///
-    /// ```no_run
-    /// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
-    /// # app_window::application::main(|| {
-    /// # let task = async {
-    /// match app_window::window::Window::fullscreen("My Game".to_string()).await {
-    ///     Ok(window) => {
-    ///         println!("Fullscreen window created");
-    ///         std::mem::forget(window);
-    ///     },
-    ///     Err(e) => eprintln!("Failed to create fullscreen: {}", e),
+    /// ```
+    /// #[cfg(target_arch = "wasm32")] {
+    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
     /// }
-    /// # };
-    /// # });
+    /// use app_window::test_support::doctest_main;
+    /// use some_executor::task::{Configuration, Task};
+    ///
+    /// doctest_main(|| {
+    ///     Task::without_notifications(
+    ///         "doctest".to_string(),
+    ///         Configuration::default(),
+    ///         async {
+    ///             match app_window::window::Window::fullscreen("My Game".to_string()).await {
+    ///                 Ok(window) => {
+    ///                     println!("Fullscreen window created");
+    ///                     std::mem::forget(window);
+    ///                 },
+    ///                 Err(e) => eprintln!("Failed to create fullscreen: {}", e),
+    ///             }
+    ///         },
+    ///     ).spawn_static_current();
+    /// });
     /// ```
     ///
     /// # Panics
@@ -164,22 +187,29 @@ impl Window {
     ///
     /// # Example
     ///
-    /// ```no_run
-    /// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
-    /// use app_window::coordinates::{Position, Size};
+    /// ```
+    /// #[cfg(target_arch = "wasm32")] {
+    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+    /// }
+    /// use app_window::test_support::doctest_main;
+    /// use some_executor::task::{Configuration, Task};
     ///
-    /// # app_window::application::main(|| {
-    /// # let task = async {
-    /// let window = app_window::window::Window::new(
-    ///     Position::new(100.0, 100.0),
-    ///     Size::new(800.0, 600.0),
-    ///     "My Application".to_string()
-    /// ).await;
+    /// doctest_main(|| {
+    ///     Task::without_notifications(
+    ///         "doctest".to_string(),
+    ///         Configuration::default(),
+    ///         async {
+    ///             use app_window::coordinates::{Position, Size};
     ///
-    /// // Window is now visible at (100, 100) with size 800x600
-    /// std::mem::forget(window);
-    /// # };
-    /// # });
+    ///             let _window = app_window::window::Window::new(
+    ///                 Position::new(100.0, 100.0),
+    ///                 Size::new(800.0, 600.0),
+    ///                 "My Application".to_string()
+    ///             ).await;
+    ///             // Window closes when dropped
+    ///         },
+    ///     ).spawn_static_current();
+    /// });
     /// ```
     ///
     /// # Platform Notes
@@ -209,19 +239,28 @@ impl Window {
     ///
     /// # Example
     ///
-    /// ```no_run
-    /// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
-    /// # app_window::application::main(|| {
-    /// # let task = async {
-    /// let mut window = app_window::window::Window::default().await;
-    /// let surface = window.surface().await;
+    /// ```
+    /// #[cfg(target_arch = "wasm32")] {
+    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+    /// }
+    /// use app_window::test_support::doctest_main;
+    /// use some_executor::task::{Configuration, Task};
     ///
-    /// // Now you can use the surface with a graphics API
-    /// let (size, scale) = surface.size_scale().await;
-    /// println!("Surface size: {}x{} at {} scale",
-    ///          size.width(), size.height(), scale);
-    /// # };
-    /// # });
+    /// doctest_main(|| {
+    ///     Task::without_notifications(
+    ///         "doctest".to_string(),
+    ///         Configuration::default(),
+    ///         async {
+    ///             let mut window = app_window::window::Window::default().await;
+    ///             let surface = window.surface().await;
+    ///
+    ///             // Now you can use the surface with a graphics API
+    ///             let (size, scale) = surface.size_scale().await;
+    ///             println!("Surface size: {}x{} at {} scale",
+    ///                      size.width(), size.height(), scale);
+    ///         },
+    ///     ).spawn_static_current();
+    /// });
     /// ```
     ///
     /// # Platform Performance
@@ -249,15 +288,24 @@ impl Window {
     ///
     /// # Example
     ///
-    /// ```no_run
-    /// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
-    /// # app_window::application::main(|| {
-    /// # let task = async {
-    /// let window = app_window::window::Window::default().await;
-    /// println!("Window created with default settings");
-    /// std::mem::forget(window);
-    /// # };
-    /// # });
+    /// ```
+    /// #[cfg(target_arch = "wasm32")] {
+    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+    /// }
+    /// use app_window::test_support::doctest_main;
+    /// use some_executor::task::{Configuration, Task};
+    ///
+    /// doctest_main(|| {
+    ///     Task::without_notifications(
+    ///         "doctest".to_string(),
+    ///         Configuration::default(),
+    ///         async {
+    ///             let _window = app_window::window::Window::default().await;
+    ///             println!("Window created with default settings");
+    ///             // Window closes when dropped
+    ///         },
+    ///     ).spawn_static_current();
+    /// });
     /// ```
     ///
     /// # Panics
