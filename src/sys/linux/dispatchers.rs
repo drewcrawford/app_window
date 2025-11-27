@@ -218,6 +218,7 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                     }
                 }
                 proxy.ack_configure(serial);
+                locked_data.has_been_configured = true;
             }
             _ => {
                 logwise::debuginternal_sync!(

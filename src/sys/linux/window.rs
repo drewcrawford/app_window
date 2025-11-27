@@ -46,6 +46,7 @@ pub(super) struct WindowInternal {
     pub decor_subsurface: Option<WlSubsurface>,
     pub title: String,
     pub current_outputs: HashSet<u32>,
+    pub has_been_configured: bool,
 }
 
 impl WindowInternal {
@@ -77,6 +78,7 @@ impl WindowInternal {
             decor_subsurface: None,
             xdg_surface: None,
             current_outputs: HashSet::new(),
+            has_been_configured: false,
         }));
         if ax {
             let _aximpl = AX::new(size, title.clone(), window_internal.clone());
@@ -104,11 +106,15 @@ impl WindowInternal {
     }
 
     pub fn close_window(&self) {
-        if let Some(e) = self.xdg_toplevel.as_ref() {
-            e.destroy()
-        }
-        if let Some(s) = self.xdg_surface.as_ref() {
-            s.destroy()
+        // Only destroy xdg objects if we received a configure event.
+        // Destroying an unconfigured xdg_surface is a protocol error in Weston.
+        if self.has_been_configured {
+            if let Some(e) = self.xdg_toplevel.as_ref() {
+                e.destroy()
+            }
+            if let Some(s) = self.xdg_surface.as_ref() {
+                s.destroy()
+            }
         }
         if let Some(s) = self.wl_surface.as_ref() {
             s.destroy()
