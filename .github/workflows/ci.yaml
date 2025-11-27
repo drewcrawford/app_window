@@ -35,18 +35,18 @@ jobs:
       #      - name: Github update Rust
       #        if: runner.os == 'Linux' && !(env.GITEA_ACTIONS == 'true')      #        run: |      #          # at the moment, GitHub is too far behind mainline rust (v1.89.0-v1.91.0-nightly)      #          rustup update
       - name: Install wasm target
-        if: matrix.target == 'wasm32-unknown-unknown' && !(env.GITEA_ACTIONS == 'true')
-        run: rustup ${{ matrix.channel}} target add wasm32-unknown-unknown
+        if: matrix.target == 'wasm32' && !(env.GITEA_ACTIONS == 'true')
+        run: rustup +nightly target add wasm32-unknown-unknown
 
       - name: Install wasm-bindgen-cli
-        if: matrix.target == 'wasm32-unknown-unknown' && !(env.GITEA_ACTIONS == 'true')
-        run: cargo ${{ matrix.channel }} install wasm-bindgen-cli
+        if: matrix.target == 'wasm32' && !(env.GITEA_ACTIONS == 'true')
+        run: cargo +nightly install wasm-bindgen-cli
 
       - name: Install nightly components
-        if: matrix.channel == '+nightly' && !(env.GITEA_ACTIONS == 'true')
+        if: matrix.target == 'wasm32' && !(env.GITEA_ACTIONS == 'true')
         run: |
-          rustup ${{ matrix.channel }} component add rustfmt clippy
-          rustup ${{ matrix.channel }} component add rust-src
+          rustup +nightly component add rustfmt clippy
+          rustup +nightly component add rust-src
 
       - name: Install Wayland components
         if: matrix.target == 'native' && !(env.GITEA_ACTIONS == 'true')
