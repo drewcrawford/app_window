@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 /*! An example for wgpu.
 */
 mod gpu {

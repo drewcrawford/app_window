@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 use wasm_bindgen_test::wasm_bindgen_test_configure;
 
 //at the moment, wasm_thread does not work in node

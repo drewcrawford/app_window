@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MPL-2.0
 
 //! Benchmark test for measuring the time between calling submit_to_main_thread
 //! and when the closure starts executing.

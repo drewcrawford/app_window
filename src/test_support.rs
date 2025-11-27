@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 /*!
 This module provides test support utilities working with the main thread.
 

@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: MPL-2.0
 
 //! Test to verify that PlatformCoalescedKeyboard can be created from a non-main thread.
 //!
