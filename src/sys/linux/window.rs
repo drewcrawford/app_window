@@ -270,7 +270,9 @@ impl Window {
     pub async fn surface(&self) -> crate::surface::Surface {
         let display = crate::application::on_main_thread("surface".to_string(), || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
-            info.connection.display()
+            let display = info.connection.display();
+            MAIN_THREAD_INFO.replace(Some(info));
+            display
         })
         .await;
         let surface = self
