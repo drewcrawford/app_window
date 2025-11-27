@@ -15,7 +15,11 @@ rustflags = [
     "-Clink-arg=--export=__wasm_init_tls",
     "-Clink-arg=--export=__tls_size",
     "-Clink-arg=--export=__tls_align",
-    "-Clink-arg=--export=__tls_base"
+    "-Clink-arg=--export=__tls_base",
+    # Workaround for wasm-bindgen duplicate function declarations with v0 mangling
+    # see https://github.com/rustwasm/wasm-bindgen/issues/4820
+    "-Csymbol-mangling-version=legacy",
+    "-Zunstable-options"
 ]
 
 [target.'cfg(test)']
