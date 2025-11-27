@@ -357,6 +357,10 @@ pub mod coordinates;
 ///
 /// // Get size and scale factor
 /// let (size, scale) = surface.size_scale().await;
+///
+/// // Get handles for graphics API integration
+/// let window_handle = surface.window_handle();
+/// let display_handle = surface.display_handle();
 /// # }
 /// ```
 pub mod surface;
@@ -403,6 +407,10 @@ pub mod executor;
 /// the `SomeExecutor` and `SomeLocalExecutor` traits from the `some_executor` crate.
 /// This allows the main thread executor to be used with any library that supports
 /// the `some_executor` abstraction.
+///
+/// When [`application::main`] is called, a `MainThreadExecutor` is automatically
+/// installed as the thread-local and thread-static executor, making it available
+/// to any code using `some_executor`'s convenience functions.
 pub mod some_executor;
 
 /// Thread-safe cell for main-thread-only values.
@@ -434,6 +442,34 @@ pub mod some_executor;
 /// # }
 /// ```
 pub mod main_thread_cell;
+
+/// Test support utilities for working with the main thread.
+///
+/// This module provides utilities for writing tests (both doctests and integration tests)
+/// that need to interact with the main thread. Since many platforms require UI operations
+/// to run on the main thread, these utilities help set up and tear down the appropriate
+/// environment for testing.
+///
+/// # Available utilities
+///
+/// - `doctest_main` - For writing doctests that need main thread access
+/// - `integration_test_harness` - For integration tests with custom harness
+///
+/// # Example
+///
+/// For doctests that use async window operations:
+/// ```
+/// #[cfg(target_arch = "wasm32")] {
+///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+/// }
+/// use app_window::test_support::doctest_main;
+///
+/// doctest_main(|| {
+///     // Your test code here - has access to main thread
+/// });
+/// ```
+///
+/// See the module documentation for more details and integration test examples.
 pub mod test_support;
 
 /// Describes the preferred strategy for interacting with wgpu on different platforms.

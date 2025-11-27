@@ -3,8 +3,8 @@ This module provides test support utilities working with the main thread.
 
 Your main options are:
 
-* doctests using [`doctest_main`]
-* integration tests
+* doctests using `doctest_main`
+* integration tests using `integration_test_harness`
 
 Examples using this module are kept in the `examples/test_example` crate.
 */

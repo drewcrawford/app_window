@@ -9,7 +9,7 @@ Windows, macOS, Linux, and WebAssembly. The crate's primary goal is to provide a
 async-first API that works seamlessly across platforms with wildly different threading
 requirements.
 
-## Key Features
+# Key Features
 
 - **Async-first design**: All APIs are async functions that can be called from any thread
 - **Modern platform backends**: Win32 on Windows, AppKit on macOS, Wayland on Linux, Canvas on Web
@@ -18,7 +18,7 @@ requirements.
 - **Built-in input handling**: Cross-platform keyboard and mouse support
 - **Executor-agnostic**: Works with any async runtime via [`some_executor`](https://sealedabstract.com/code/some_executor)
 
-## Quick Start
+# Quick Start
 
 First, initialize the application from your main function:
 
@@ -41,27 +41,27 @@ Then create windows from any async context:
 ```rust
 use app_window::{window::Window, coordinates::{Position, Size}};
 
-async fn example() {
-    // Create a window at a specific position
-    let window = Window::new(
-        Position::new(100.0, 100.0),
-        Size::new(800.0, 600.0),
-        "My Application".to_string()
-    ).await;
+// Create a window at a specific position
+let window = Window::new(
+    Position::new(100.0, 100.0),
+    Size::new(800.0, 600.0),
+    "My Application".to_string()
+).await;
 
-    // The window stays open as long as the Window instance exists
-    // When dropped, the window automatically closes
-}
+// The window stays open as long as the Window instance exists
+// When dropped, the window automatically closes
 ```
 
-## Design Principles
+# Design Principles
 
-### 1. Async-First API
+## 1. Async-First API
 
 Unlike traditional windowing libraries, `app_window` uses async functions throughout.
 This design elegantly handles platform differences:
 
 ```rust
+use app_window::window::Window;
+
 // This works on any thread, on any platform
 let window = Window::default().await;
 
@@ -71,18 +71,20 @@ let window = Window::default().await;
 // - On Web: runs on the single thread
 ```
 
-### 2. Window Lifetime Management
+## 2. Window Lifetime Management
 
 Windows are tied to their Rust object lifetime. No manual cleanup needed:
 
 ```rust
+use app_window::window::Window;
+
 {
     let window = Window::default().await;
     // Window is open and visible
 } // Window automatically closes when dropped
 ```
 
-### 3. Platform-Specific Strategies
+## 3. Platform-Specific Strategies
 
 The crate provides platform-specific strategies for graphics APIs:
 
@@ -106,7 +108,7 @@ match WGPU_STRATEGY {
 }
 ```
 
-## Threading Model
+# Threading Model
 
 This crate abstracts over platform threading differences:
 
@@ -127,9 +129,9 @@ let result = application::on_main_thread("my_task".to_string(), || {
 }).await;
 ```
 
-## Examples
+# Examples
 
-### Creating a fullscreen window
+## Creating a fullscreen window
 
 ```rust
 use app_window::window::Window;
@@ -144,7 +146,7 @@ match Window::fullscreen("My Game".to_string()).await {
 }
 ```
 
-### Handling window resize
+## Handling window resize
 
 ```rust
 use app_window::{window::Window, coordinates::Size};
@@ -159,7 +161,7 @@ surface.size_update(|new_size: Size| {
 });
 ```
 
-### Input handling
+## Input handling
 
 ```rust
 use app_window::input::{
@@ -192,7 +194,7 @@ if scroll_y != 0.0 {
 }
 ```
 
-### Integrating with wgpu
+## Integrating with wgpu
 
 For wgpu integration, use the platform-specific strategy:
 
@@ -223,29 +225,7 @@ match WGPU_STRATEGY {
 
 See `examples/gpu.rs` for a complete wgpu integration example.
 
-
-## Performance Considerations
-
-- **Lazy surface creation**: Surfaces are only allocated when requested via `window.surface()`
-- **Input coalescing**: Input events can be coalesced for better performance in high-frequency scenarios
-- **Efficient executor**: The main thread executor processes both async tasks and native events
-- **Platform optimizations**: Each backend uses platform-specific optimizations
-
-## Integration with Graphics APIs
-
-The crate implements `raw-window-handle` traits, enabling integration with:
-- **wgpu** (recommended, see `examples/gpu.rs`)
-- **OpenGL/WebGL** via glutin or similar
-- **Vulkan** via ash or vulkano
-- **Metal** (macOS) via metal-rs
-- **DirectX** (Windows) via windows-rs
-
-## Cargo features
-* `some_executor` - Provides interop with the `some-executor` crate.
-* `wgpu` - Helper functions for creating a wgpu surface.
-* `app_input` - Created windows are configured to receive input via [`app_input`](https://sealedabstract.com/code/app_input) crate.
-
-## Platform Support
+# Platform Support
 
 | Platform | Backend | Status | Notes |
 |----------|---------|--------|-------|
@@ -253,6 +233,22 @@ The crate implements `raw-window-handle` traits, enabling integration with:
 | macOS    | AppKit via Swift | ✅ Stable | Main thread UI, Swift interop |
 | Linux    | Wayland | ✅ Stable | Client-side decorations, compositor-dependent |
 | Web      | Canvas API | ✅ Stable | Requires atomics & bulk memory features |
+
+# Performance Considerations
+
+- **Lazy surface creation**: Surfaces are only allocated when requested via `window.surface()`
+- **Input coalescing**: Input events can be coalesced for better performance in high-frequency scenarios
+- **Efficient executor**: The main thread executor processes both async tasks and native events
+- **Platform optimizations**: Each backend uses platform-specific optimizations
+
+# Integration with Graphics APIs
+
+The crate implements `raw-window-handle` traits, enabling integration with:
+- **wgpu** (recommended, see `examples/gpu.rs`)
+- **OpenGL/WebGL** via glutin or similar
+- **Vulkan** via ash or vulkano
+- **Metal** (macOS) via metal-rs
+- **DirectX** (Windows) via windows-rs
 
 ## License
 
