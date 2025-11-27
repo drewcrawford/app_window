@@ -34,7 +34,7 @@ use std::pin::Pin;
 /// ```
 /// # async fn example() {
 /// use app_window::some_executor::MainThreadExecutor;
-/// use some_executor::{SomeExecutor, Task};
+/// use some_executor::SomeExecutor;
 ///
 /// let mut executor = MainThreadExecutor {};
 ///

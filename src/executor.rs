@@ -208,8 +208,12 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(
     let parent_context = logwise::context::Context::current();
     //creating a task is a bit heavyweight, particularly on the main thread.
     // let new_context = logwise::context::Context::from_parent(parent_context);
-    let new_context =
-        logwise::context::Context::new_task(Some(parent_context), debug_label.clone(), logwise::Level::DebugInternal, logwise::log_enabled!(logwise::Level::DebugInternal));
+    let new_context = logwise::context::Context::new_task(
+        Some(parent_context),
+        debug_label.clone(),
+        logwise::Level::DebugInternal,
+        logwise::log_enabled!(logwise::Level::DebugInternal),
+    );
 
     logwise::debuginternal_sync!(
         "Creating task {id} {label}",

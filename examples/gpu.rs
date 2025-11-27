@@ -173,6 +173,7 @@ mod gpu {
                     .using_resolution(adapter.limits()),
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::default(),
+                experimental_features: wgpu::ExperimentalFeatures::default(),
             })
             .await
             .expect("Failed to create device");

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::coordinates::{Position, Size};
+use logwise::Level;
 use logwise::context::Context;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WebDisplayHandle, WebWindowHandle};
 use send_cells::send_cell::SendCell;
@@ -9,7 +10,6 @@ use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
-use logwise::Level;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::{JsCast, JsValue};

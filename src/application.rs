@@ -487,7 +487,12 @@ pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, 
     let perf = move || {
         let start = time::Instant::now();
         let prior = logwise::context::Context::current();
-        let c = logwise::context::Context::new_task(Some(prior.clone()), debug_label.clone(), logwise::Level::DebugInternal, logwise::log_enabled!(logwise::Level::DebugInternal));
+        let c = logwise::context::Context::new_task(
+            Some(prior.clone()),
+            debug_label.clone(),
+            logwise::Level::DebugInternal,
+            logwise::log_enabled!(logwise::Level::DebugInternal),
+        );
         c.set_current();
         closure();
         prior.set_current();

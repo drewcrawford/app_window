@@ -9,13 +9,10 @@ pub fn main() {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
     app_window::application::main(|| {
-        let task = Task::without_notifications(
-            "alert".to_string(),
-            Configuration::default(),
-            async {
+        let task =
+            Task::without_notifications("alert".to_string(), Configuration::default(), async {
                 app_window::alert("Hello World".to_string()).await;
-            },
-        );
+            });
         some_executor::current_executor::current_executor()
             .spawn_objsafe(task.into_objsafe())
             .detach();
