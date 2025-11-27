@@ -4,4 +4,57 @@ WARN_FLAGS="-D warnings"
 if [[ " $* " =~ " --relaxed " ]]; then
     WARN_FLAGS=""
 fi
-RUSTFLAGS="$WARN_FLAGS" RUSTDOCFLAGS="$WARN_FLAGS" cargo test
+
+# Check if we're on Linux and Weston is available
+if [[ "$OSTYPE" == "linux-gnu"* ]] && command -v weston &> /dev/null; then
+    # Run tests under headless Weston
+    export WAYLAND_DISPLAY=wayland-ci-0
+
+    # Create runtime directory with proper user ID resolution
+    export XDG_RUNTIME_DIR="/tmp/xdg-runtime-$(id -u)"
+    mkdir -p "$XDG_RUNTIME_DIR"
+    chmod 700 "$XDG_RUNTIME_DIR"
+
+    # Start weston headless
+    weston \
+        --backend=headless \
+        --socket="$WAYLAND_DISPLAY" \
+        --idle-time=0 \
+        --log=/tmp/weston.log \
+        --no-config >/tmp/weston.stdout 2>&1 &
+
+    WESTON_PID=$!
+
+    # Wait for the Wayland socket to appear
+    echo "Waiting for Wayland socket at $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+    for i in {1..10}; do
+        if test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"; then
+            echo "Wayland socket found after $i attempts"
+            break
+        fi
+        sleep 1
+    done
+
+    # Verify Weston is still running
+    if ! kill -0 $WESTON_PID 2>/dev/null; then
+        echo "Weston process died unexpectedly"
+        cat /tmp/weston.log || true
+        cat /tmp/weston.stdout || true
+        exit 1
+    fi
+
+    # Quick diagnostics so you can see what's up if it fails
+    echo "XDG_RUNTIME_DIR contents:"
+    ls -la "$XDG_RUNTIME_DIR" || true
+    echo "Weston log:"
+    grep -E "ERROR|warn|headless|listening" -i /tmp/weston.log || true
+
+    # Run tests
+    RUSTFLAGS="$WARN_FLAGS" RUSTDOCFLAGS="$WARN_FLAGS" cargo test
+
+    # Cleanup
+    kill $WESTON_PID || true
+else
+    # Non-Linux or Weston not available, run tests normally
+    RUSTFLAGS="$WARN_FLAGS" RUSTDOCFLAGS="$WARN_FLAGS" cargo test
+fi
