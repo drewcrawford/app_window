@@ -8,7 +8,7 @@ repository = "https://github.com/drewcrawford/app_window"
 homepage = "https://sealedabstract.com/code/app_window"
 license = "MPL-2.0"
 keywords = ["window", "windowing", "input", "keyboard", "mouse"]
-categories = ["gui", "os", "wasm", "hardware-support"]
+categories = ["gui", "os", "wasm", "asynchronous"]
 exclude = [".*"]
 rust-version = "1.88.0"
 

@@ -20,10 +20,19 @@ impl Position {
         Position { x, y }
     }
 
+    /// Returns the X coordinate of this position.
+    ///
+    /// The X coordinate represents horizontal distance from the upper-left corner,
+    /// measured in logical pixels (points).
     #[inline]
     pub const fn x(&self) -> f64 {
         self.x
     }
+
+    /// Returns the Y coordinate of this position.
+    ///
+    /// The Y coordinate represents vertical distance from the upper-left corner,
+    /// measured in logical pixels (points).
     #[inline]
     pub const fn y(&self) -> f64 {
         self.y
@@ -54,10 +63,17 @@ impl Size {
         Size { width, height }
     }
 
+    /// Returns the width of this size.
+    ///
+    /// The width is measured in logical pixels (points).
     #[inline]
     pub const fn width(&self) -> f64 {
         self.width
     }
+
+    /// Returns the height of this size.
+    ///
+    /// The height is measured in logical pixels (points).
     #[inline]
     pub const fn height(&self) -> f64 {
         self.height

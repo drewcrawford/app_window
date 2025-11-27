@@ -80,6 +80,41 @@ impl Surface {
         self.sys.size_scale().await
     }
 
+    /// Returns the size and scale factor of the surface from the main thread.
+    ///
+    /// This is the synchronous version of [`size_scale()`](Self::size_scale) that can
+    /// only be called from the main thread. Use this when you're already on the main
+    /// thread and need the size without awaiting.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - The [`Size`] of the surface in logical pixels
+    /// - The scale factor as a `f64` (e.g., 2.0 for a Retina display)
+    ///
+    /// # Panics
+    ///
+    /// Panics if called from a thread other than the main thread.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # // ALLOW_NORUN_DOCTEST: Requires main thread context
+    /// # use app_window::window::Window;
+    /// # use app_window::application;
+    /// # application::main(|| {
+    /// # let task = async {
+    /// # let mut window: Window = todo!();
+    /// let surface = window.surface().await;
+    ///
+    /// // Only call from main thread
+    /// if application::is_main_thread() {
+    ///     let (size, scale) = surface.size_main();
+    ///     println!("Size: {}x{} at {}x scale", size.width(), size.height(), scale);
+    /// }
+    /// # };
+    /// # });
+    /// ```
     pub fn size_main(&self) -> (Size, f64) {
         assert!(
             sys::is_main_thread(),
@@ -123,6 +158,26 @@ impl Surface {
         self.sys.raw_window_handle()
     }
 
+    /// Returns a borrowed window handle for this surface.
+    ///
+    /// This is a safe wrapper around [`raw_window_handle()`](Self::raw_window_handle) that
+    /// provides a lifetime-bound handle following the [`raw-window-handle`](https://docs.rs/raw-window-handle)
+    /// v0.6 API. This is the preferred method for passing window handles to graphics APIs
+    /// that accept the newer `WindowHandle` type.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # async fn example() {
+    /// # use app_window::window::Window;
+    /// # let mut window: Window = todo!();
+    /// let surface = window.surface().await;
+    /// let handle = surface.window_handle();
+    ///
+    /// // Use with graphics APIs that accept WindowHandle
+    /// // e.g., wgpu's create_surface_from_handle()
+    /// # }
+    /// ```
     pub fn window_handle(&self) -> WindowHandle<'_> {
         //should be safe because we own the raw handle
         unsafe { WindowHandle::borrow_raw(self.raw_window_handle()) }
@@ -149,6 +204,26 @@ impl Surface {
         self.sys.raw_display_handle()
     }
 
+    /// Returns a borrowed display handle for this surface.
+    ///
+    /// This is a safe wrapper around [`raw_display_handle()`](Self::raw_display_handle) that
+    /// provides a lifetime-bound handle following the [`raw-window-handle`](https://docs.rs/raw-window-handle)
+    /// v0.6 API. This is the preferred method for passing display handles to graphics APIs
+    /// that accept the newer `DisplayHandle` type.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # async fn example() {
+    /// # use app_window::window::Window;
+    /// # let mut window: Window = todo!();
+    /// let surface = window.surface().await;
+    /// let display = surface.display_handle();
+    /// let window = surface.window_handle();
+    ///
+    /// // Both handles are often used together when creating graphics surfaces
+    /// # }
+    /// ```
     pub fn display_handle(&self) -> DisplayHandle<'_> {
         //should be safe because we own the raw handle
         unsafe { DisplayHandle::borrow_raw(self.raw_display_handle()) }

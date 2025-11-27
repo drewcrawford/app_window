@@ -18,6 +18,40 @@ use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 
+/// An executor that runs futures on the application's main thread.
+///
+/// `MainThreadExecutor` implements the `some_executor` traits (`SomeExecutor`,
+/// `SomeLocalExecutor`, and `SomeStaticExecutor`), allowing it to be used with
+/// any code that accepts executor-agnostic task spawning.
+///
+/// This executor integrates with the platform's native event loop, ensuring
+/// futures can yield control back to the OS for smooth operation. All futures
+/// spawned on this executor will run on the main thread, which is required for
+/// UI operations on many platforms.
+///
+/// # Example
+///
+/// ```
+/// # async fn example() {
+/// use app_window::some_executor::MainThreadExecutor;
+/// use some_executor::{SomeExecutor, Task};
+///
+/// let mut executor = MainThreadExecutor {};
+///
+/// // Spawn a task on the main thread
+/// // let task = Task::new("my_task".to_string(), async {
+/// //     // This runs on the main thread
+/// //     println!("Hello from main thread!");
+/// // });
+/// // let observer = executor.spawn(task);
+/// # }
+/// ```
+///
+/// # Integration
+///
+/// When [`application::main()`](crate::application::main) is called, a `MainThreadExecutor`
+/// is automatically installed as both the thread-local and thread-static executor, making
+/// it available to any code using the `some_executor` crate's convenience functions.
 #[derive(Debug, Clone)]
 pub struct MainThreadExecutor {}
 

@@ -30,6 +30,7 @@ harness = false
 
 Then in `tests/your_custom_test_name.rs`:
 ```rust,no_run
+# // no_run because: this is a code example
 # #[allow(clippy::needless_doctest_main)]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn main() {
