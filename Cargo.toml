@@ -123,7 +123,3 @@ path = "tests/platform_coalesced_keyboard_test.rs"
 harness = false
 
 [patch.crates-io]
-#send_cells = { path = "../send_cells" }
-#some_executor = { path = "../some_executor" }
-logwise = { path = "../logwise" }
-#test_executors = { path = "../test_executors" }
