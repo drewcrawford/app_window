@@ -1,3 +1,7 @@
 #!/bin/bash
 set -e
-RUSTFLAGS="-D warnings" cargo check
+WARN_FLAGS="-D warnings"
+if [[ " $* " =~ " --relaxed " ]]; then
+    WARN_FLAGS=""
+fi
+RUSTFLAGS="$WARN_FLAGS" cargo check

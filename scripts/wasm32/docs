@@ -1,3 +1,7 @@
 #!/bin/bash
 set -e
-RUSTDOCFLAGS="-D warnings" cargo +nightly doc --target=wasm32-unknown-unknown
+if [[ " $* " =~ " --relaxed " ]]; then
+    export RELAXED_WARNINGS=1
+fi
+source "$(dirname "$0")/_env"
+RUSTDOCFLAGS="$WASM32_RUSTDOCFLAGS" cargo +nightly doc --target=wasm32-unknown-unknown

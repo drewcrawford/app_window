@@ -1,4 +1,7 @@
 #!/bin/bash
 set -e
+if [[ " $* " =~ " --relaxed " ]]; then
+    export RELAXED_WARNINGS=1
+fi
 source "$(dirname "$0")/_env"
 RUSTFLAGS="$WASM32_RUSTFLAGS" cargo +nightly clippy --target=wasm32-unknown-unknown
