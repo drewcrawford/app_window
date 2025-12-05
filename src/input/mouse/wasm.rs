@@ -50,8 +50,8 @@ impl PlatformCoalescedMouse {
                     let window = Some(Window(NonNull::new(ARBITRARY_WINDOW_PTR).unwrap()));
 
                     shared.set_window_location(MouseWindowLocation::new(
-                        event.page_x() as f64,
-                        event.page_y() as f64,
+                        event.offset_x() as f64,
+                        event.offset_y() as f64,
                         width,
                         height,
                         window,
