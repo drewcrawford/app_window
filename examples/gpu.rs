@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 /*! An example for wgpu.
 */
+logwise::declare_logging_domain!();
+
 mod gpu {
     use app_window::window::Window;
     use some_executor::hint::Hint;

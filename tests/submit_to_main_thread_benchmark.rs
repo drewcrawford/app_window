@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MPL-2.0
-
 //! Benchmark test for measuring the time between calling submit_to_main_thread
 //! and when the closure starts executing.
 //!
@@ -9,6 +8,7 @@
 //!
 //! Run with: `cargo test --test submit_to_main_thread_benchmark`
 //! Run on WASM with: CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' cargo +nightly test --target wasm32-unknown-unknown -Z build-std=std,panic_abort
+logwise::declare_logging_domain!();
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;

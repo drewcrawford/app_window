@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MPL-2.0
-
 //! Test to verify that PlatformCoalescedMouse can be created from a non-main thread.
 //!
 //! This test ensures that the mouse input system can be safely initialized
@@ -8,6 +7,7 @@
 //!
 //! Run with: `cargo test --test platform_coalesced_mouse_test`
 //! Run on WASM with: CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' cargo +nightly test --target wasm32-unknown-unknown -Z build-std=std,panic_abort
+logwise::declare_logging_domain!();
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;

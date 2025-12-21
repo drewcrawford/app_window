@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MPL-2.0
-
 //! Test to verify that PlatformCoalescedKeyboard can be created from a non-main thread.
 //!
 //! This test ensures that the keyboard input system can be safely initialized
@@ -15,6 +14,8 @@ use std::thread;
 use wasm_thread as thread;
 
 use some_executor::task::{Configuration, Task};
+logwise::declare_logging_domain!();
+
 
 #[cfg(target_arch = "wasm32")]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

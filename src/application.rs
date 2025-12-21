@@ -511,7 +511,7 @@ pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, 
         let duration = start.elapsed();
         if duration > time::Duration::from_millis(10) {
             logwise::warn_sync!(
-                "Main thread operation took too long: {duration}\n",
+                "submit_to_main_thread operation took too long: {duration}\n",
                 duration = logwise::privacy::LogIt(duration),
                 debug_label = logwise::privacy::IPromiseItsNotPrivate(debug_label)
             );
