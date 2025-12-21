@@ -13,6 +13,11 @@ import AppKit
 #endif
 import SwiftAppWindowC
 
+// Holds mutable modifier state for the event monitor closure
+private final class ModifierFlagsState: @unchecked Sendable {
+    var previousFlags: UInt = 0
+}
+
 final class PlatformCoalescedKeyboard:
     /*Rust type implements send/sync
      **/
@@ -20,12 +25,32 @@ final class PlatformCoalescedKeyboard:
 {
     nonisolated(unsafe) let monitor: Any?
     nonisolated(unsafe) let context: UnsafeMutableRawPointer
-    
+    private let flagsState = ModifierFlagsState()
+
+    // Device-specific modifier masks (from IOKit/hidsystem/IOLLEvent.h)
+    private static let NX_DEVICELCTLKEYMASK: UInt   = 0x00000001
+    private static let NX_DEVICELSHIFTKEYMASK: UInt = 0x00000002
+    private static let NX_DEVICERSHIFTKEYMASK: UInt = 0x00000004
+    private static let NX_DEVICELCMDKEYMASK: UInt   = 0x00000008
+    private static let NX_DEVICERCMDKEYMASK: UInt   = 0x00000010
+    private static let NX_DEVICELALTKEYMASK: UInt   = 0x00000020
+    private static let NX_DEVICERALTKEYMASK: UInt   = 0x00000040
+    private static let NX_DEVICERCTLKEYMASK: UInt   = 0x00002000
+
+    // Device-independent modifier masks
+    private static let NX_COMMANDMASK: UInt  = 0x00100000
+    private static let NX_SHIFTMASK: UInt    = 0x00020000
+    private static let NX_CONTROLMASK: UInt  = 0x00040000
+    private static let NX_ALTERNATEMASK: UInt = 0x00080000
+    private static let NX_FUNCTIONMASK: UInt = 0x00800000
+    private static let NX_CAPSLOCKMASK: UInt = 0x00010000
+
     init(context: UnsafeMutableRawPointer) {
         MainActor.shared.dispatchMainThreadFromRustContextDetached {
             NSApplication.shared.setActivationPolicy(.regular)
         }
         self.context = context
+        let flagsState = self.flagsState
         self.monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { event in
             let eventWindow: UnsafeMutableRawPointer?
             if let window = event.window {
@@ -40,47 +65,65 @@ final class PlatformCoalescedKeyboard:
             case .keyUp:
                 raw_input_key_notify_func(context, eventWindow, event.keyCode, false)
             case .flagsChanged:
-                func notifyModifier(event: NSEvent, flag: NSEvent.ModifierFlags) {
-                    if event.modifierFlags.contains(flag) {
-                        raw_input_key_notify_func(context, eventWindow, event.keyCode, true)
-                    }
-                    else {
-                        raw_input_key_notify_func(context, eventWindow, event.keyCode, false)
+                let curr = UInt(event.modifierFlags.rawValue)
+                let prev = flagsState.previousFlags
+
+                // Helper to check modifier state changes
+                func checkModifier(deviceMask: UInt, independentMask: UInt, keyCode: UInt16) {
+                    // A modifier is "active" when both the device-specific bit AND
+                    // the device-independent bit are set
+                    let prevActive = (prev & deviceMask) != 0 && (prev & independentMask) != 0
+                    let currActive = (curr & deviceMask) != 0 && (curr & independentMask) != 0
+
+                    if prevActive && !currActive {
+                        raw_input_key_notify_func(context, eventWindow, keyCode, false)
+                    } else if !prevActive && currActive {
+                        raw_input_key_notify_func(context, eventWindow, keyCode, true)
                     }
                 }
 
-                switch event.keyCode {
-                case 0x3B: //control
-                    notifyModifier(event: event, flag: .control)
-                case 0x3E: //right control
-                    notifyModifier(event: event, flag: .control)
-                case 0x3A: //option
-                    notifyModifier(event: event, flag: .option)
-                case 0x3D://right option
-                    notifyModifier(event: event, flag: .option)
-                case 0x37://command
-                    notifyModifier(event: event, flag: .command)
-                case 0x36: //right command
-                    notifyModifier(event: event, flag: .command)
-                case 0x38: //shift
-                    notifyModifier(event: event, flag: .shift)
-                case 0x3C: //right shift
-                    notifyModifier(event: event, flag: .shift)
-                case 0x3F: //function
-                    notifyModifier(event: event, flag: .function)
-                case 0x39: //caps lock
-                    notifyModifier(event: event, flag: .capsLock)
-                
-                    
-                
-                default:
-                    fatalError("\(event)")
+                // Helper for modifiers without left/right distinction
+                func checkSingleModifier(mask: UInt, keyCode: UInt16) {
+                    let prevActive = (prev & mask) != 0
+                    let currActive = (curr & mask) != 0
+
+                    if prevActive && !currActive {
+                        raw_input_key_notify_func(context, eventWindow, keyCode, false)
+                    } else if !prevActive && currActive {
+                        raw_input_key_notify_func(context, eventWindow, keyCode, true)
+                    }
                 }
+
+                // Check each modifier key
+                // Command keys
+                checkModifier(deviceMask: Self.NX_DEVICELCMDKEYMASK, independentMask: Self.NX_COMMANDMASK, keyCode: 0x37)
+                checkModifier(deviceMask: Self.NX_DEVICERCMDKEYMASK, independentMask: Self.NX_COMMANDMASK, keyCode: 0x36)
+
+                // Shift keys
+                checkModifier(deviceMask: Self.NX_DEVICELSHIFTKEYMASK, independentMask: Self.NX_SHIFTMASK, keyCode: 0x38)
+                checkModifier(deviceMask: Self.NX_DEVICERSHIFTKEYMASK, independentMask: Self.NX_SHIFTMASK, keyCode: 0x3C)
+
+                // Option keys
+                checkModifier(deviceMask: Self.NX_DEVICELALTKEYMASK, independentMask: Self.NX_ALTERNATEMASK, keyCode: 0x3A)
+                checkModifier(deviceMask: Self.NX_DEVICERALTKEYMASK, independentMask: Self.NX_ALTERNATEMASK, keyCode: 0x3D)
+
+                // Control keys
+                checkModifier(deviceMask: Self.NX_DEVICELCTLKEYMASK, independentMask: Self.NX_CONTROLMASK, keyCode: 0x3B)
+                checkModifier(deviceMask: Self.NX_DEVICERCTLKEYMASK, independentMask: Self.NX_CONTROLMASK, keyCode: 0x3E)
+
+                // Function key (no left/right distinction)
+                checkSingleModifier(mask: Self.NX_FUNCTIONMASK, keyCode: 0x3F)
+
+                // Caps Lock (no left/right distinction)
+                checkSingleModifier(mask: Self.NX_CAPSLOCKMASK, keyCode: 0x39)
+
+                flagsState.previousFlags = curr
+
             default:
                 fatalError("Unknown event type \(event.type)")
             }
-            
-            
+
+
             return event
         }
 
