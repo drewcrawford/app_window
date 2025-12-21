@@ -21,7 +21,7 @@ logwise_internal = []
 [dependencies]
 atomic_float = "1.1.0"
 raw-window-handle = "0.6.2"
-logwise = "0.4.0"
+logwise = "0.5.0"
 thiserror = "2.0.15"
 some_executor = "0.6.1"
 continue = "0.1.1"
@@ -31,7 +31,7 @@ send_cells = "0.2.0"
 # needed for gpu example
 wgpu = "27.0.1"
 ampsc = "0.2.0"
-test_executors = "0.3.5" # gpu example
+test_executors = "0.4.1" # gpu example
 
 # needed for submit_to_main_thread_benchmark
 futures = "0.3"
