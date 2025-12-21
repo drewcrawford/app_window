@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-12-20
+
+### Fixed
+
+- **[macOS] Keyboard event crash** - No more mysterious crashes when tabbing between apps! We switched to a flags-based approach for parsing key events, which fixes a fatal error that happened when the system sent us FlagsChanged events with certain key codes. Your app-switching workflow is safe again.
+
+- **[WASM] Mouse precision** - Mouse clicks and movements on WASM now land exactly where you expect them. We switched from page-relative coordinates to canvas-relative offsets, fixing those annoying "off by a few pixels" moments.
+
+### Changed
+
+- **Dependency updates** - Bumped wgpu to 28.0 (hello, newer graphics goodness!), plus refreshed logwise to 0.5, thiserror to 2.0.17, wasm-bindgen to 0.2.106, test_executors to 0.4.1, and a handful of other dependencies. Everything's freshly polished.
+
+- **Documentation** - Added comprehensive docs for keyboard input APIs, making it easier to understand how key events work across platforms.
+
 ## [0.3.1] - 2025-11-27
 
 ### Added
@@ -39,6 +53,7 @@ Previous release. See git history for details.
 
 ---
 
-[Unreleased]: https://github.com/drewcrawford/app_window/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/drewcrawford/app_window/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/drewcrawford/app_window/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/drewcrawford/app_window/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/drewcrawford/app_window/releases/tag/v0.3.0
