@@ -54,7 +54,7 @@ unsafe extern "C" {
 ///
 /// ```no_run
 /// # // no_run because: requires macOS-specific UI interactions that cannot be tested in doctests
-/// use app_window::input::keyboard::macos::debug_window_show;
+/// use app_window::input::debug_window_show;
 ///
 /// // Show the debug window to inspect keyboard events
 /// debug_window_show();
@@ -77,7 +77,7 @@ pub fn debug_window_show() {
 ///
 /// ```no_run
 /// # // no_run because: requires macOS-specific UI interactions that cannot be tested in doctests
-/// use app_window::input::keyboard::macos::{debug_window_show, debug_window_hide};
+/// use app_window::input::{debug_window_show, debug_window_hide};
 ///
 /// // Show the debug window
 /// debug_window_show();

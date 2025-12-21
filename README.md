@@ -173,9 +173,30 @@ use app_window::input::{
 let keyboard = Keyboard::coalesced().await;
 let mut mouse = Mouse::coalesced().await;
 
-// Check keyboard state
+// Check keyboard state - KeyboardKey represents physical keys,
+// not logical characters, making it ideal for game controls and shortcuts.
+// Supports comprehensive key mappings including alphanumeric, function keys,
+// numeric keypad, media controls, navigation keys, and international layouts.
 if keyboard.is_pressed(KeyboardKey::Space) {
     println!("Space key is pressed!");
+}
+
+if keyboard.is_pressed(KeyboardKey::F11) {
+    println!("F11 (fullscreen) pressed!");
+}
+
+if keyboard.is_pressed(KeyboardKey::W) {
+    println!("W key pressed - move forward!");
+}
+
+// Media control keys
+if keyboard.is_pressed(KeyboardKey::Play) {
+    println!("Play/Pause media key pressed!");
+}
+
+// Numeric keypad keys
+if keyboard.is_pressed(KeyboardKey::KeypadEnter) {
+    println!("Numeric keypad Enter pressed!");
 }
 
 // Check mouse state

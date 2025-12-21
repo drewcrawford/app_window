@@ -188,9 +188,30 @@ use app_window::input::{
 let keyboard = Keyboard::coalesced().await;
 let mut mouse = Mouse::coalesced().await;
 
-// Check keyboard state
+// Check keyboard state - KeyboardKey represents physical keys,
+// not logical characters, making it ideal for game controls and shortcuts.
+// Supports comprehensive key mappings including alphanumeric, function keys,
+// numeric keypad, media controls, navigation keys, and international layouts.
 if keyboard.is_pressed(KeyboardKey::Space) {
     println!("Space key is pressed!");
+}
+
+if keyboard.is_pressed(KeyboardKey::F11) {
+    println!("F11 (fullscreen) pressed!");
+}
+
+if keyboard.is_pressed(KeyboardKey::W) {
+    println!("W key pressed - move forward!");
+}
+
+// Media control keys
+if keyboard.is_pressed(KeyboardKey::Play) {
+    println!("Play/Pause media key pressed!");
+}
+
+// Numeric keypad keys
+if keyboard.is_pressed(KeyboardKey::KeypadEnter) {
+    println!("Numeric keypad Enter pressed!");
 }
 
 // Check mouse state
@@ -370,6 +391,28 @@ pub mod surface;
 /// This module provides keyboard and mouse input functionality that integrates
 /// with app_window. It handles platform-specific input events and provides
 /// a unified API across Windows, macOS, Linux, and WebAssembly.
+///
+/// # Keyboard Input
+///
+/// The keyboard module uses physical key mappings rather than logical characters.
+/// This means [`input::keyboard::key::KeyboardKey`] represents actual physical keys on the
+/// keyboard (e.g., the key labeled 'A' on QWERTY), independent of keyboard layout.
+/// This approach is ideal for game controls and shortcuts but not for text input.
+///
+/// Comprehensive key mappings include:
+/// - Standard alphanumeric keys (A-Z, 0-9) and symbol keys (brackets, quotes, etc.)
+/// - Function keys (F1-F24) with extensive coverage up to F24
+/// - Numeric keypad keys with full support (0-9, operators, decimal, Enter, Clear/Num Lock)
+/// - Media control keys (Play/Pause, Stop, Volume Up/Down, Mute, Previous/Next Track)
+/// - Navigation keys (arrows, Home, End, Page Up/Down, Insert, Delete)
+/// - Modifier keys (Shift, Control, Option/Alt, Command/Windows, Function)
+/// - International keyboard layouts (Japanese JIS keys: Yen, Kana, Eisu, Convert; ISO Section key)
+/// - Browser and application launcher keys
+/// - Editing keys (Undo, Copy, Cut, Paste, Find, Select)
+///
+/// On macOS, debug windows are available via `input::keyboard::macos::debug_window_show()`
+/// and `input::keyboard::macos::debug_window_hide()` to inspect real-time raw keyboard events,
+/// useful for debugging keyboard handling and understanding platform-specific key codes.
 ///
 /// # Example
 /// ```
