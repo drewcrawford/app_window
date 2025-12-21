@@ -38,10 +38,55 @@ unsafe extern "C" {
     fn SwiftRawInputDebugWindowHide();
 }
 
+/// Shows the debug window for raw keyboard input on macOS.
+///
+/// This function displays a debug window that shows real-time information about
+/// keyboard input events being received by the application. This is useful for
+/// debugging keyboard handling, understanding key codes, and troubleshooting
+/// input-related issues.
+///
+/// # Platform Support
+///
+/// This function is only available on macOS. The debug window provides macOS-specific
+/// information about keyboard events.
+///
+/// # Examples
+///
+/// ```no_run
+/// # // no_run because: requires macOS-specific UI interactions that cannot be tested in doctests
+/// use app_window::input::keyboard::macos::debug_window_show;
+///
+/// // Show the debug window to inspect keyboard events
+/// debug_window_show();
+/// ```
 pub fn debug_window_show() {
     unsafe { SwiftRawInputDebugWindowShow() }
 }
 
+/// Hides the debug window for raw keyboard input on macOS.
+///
+/// This function hides the debug window that was previously shown by
+/// [`debug_window_show`]. Call this when you're done debugging keyboard input
+/// to remove the debug window from the screen.
+///
+/// # Platform Support
+///
+/// This function is only available on macOS.
+///
+/// # Examples
+///
+/// ```no_run
+/// # // no_run because: requires macOS-specific UI interactions that cannot be tested in doctests
+/// use app_window::input::keyboard::macos::{debug_window_show, debug_window_hide};
+///
+/// // Show the debug window
+/// debug_window_show();
+///
+/// // ... do some debugging ...
+///
+/// // Hide the debug window when done
+/// debug_window_hide();
+/// ```
 pub fn debug_window_hide() {
     unsafe { SwiftRawInputDebugWindowHide() }
 }
@@ -68,6 +113,48 @@ impl Drop for PlatformCoalescedKeyboard {
 
 //keyboard codes, HIToolbox/Events.h
 impl KeyboardKey {
+    /// Converts a macOS hardware key code to a `KeyboardKey`.
+    ///
+    /// This function maps macOS-specific hardware key codes (as defined in
+    /// HIToolbox/Events.h) to the platform-independent `KeyboardKey` enum.
+    /// These are the raw key codes received from NSEvent on macOS.
+    ///
+    /// # Arguments
+    ///
+    /// * `code` - A 16-bit hardware key code from macOS NSEvent
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(KeyboardKey)` if the code maps to a known key, or `None`
+    /// if the code is unrecognized or unmapped.
+    ///
+    /// # Platform Support
+    ///
+    /// This function is specific to macOS and uses macOS hardware key codes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use app_window::input::keyboard::key::KeyboardKey;
+    ///
+    /// // macOS hardware code 0x00 is the 'A' key
+    /// # #[cfg(target_os = "macos")]
+    /// let key = KeyboardKey::from_code(0x00);
+    /// # #[cfg(target_os = "macos")]
+    /// assert_eq!(key, Some(KeyboardKey::A));
+    ///
+    /// // macOS hardware code 0x31 is the Space key
+    /// # #[cfg(target_os = "macos")]
+    /// let key = KeyboardKey::from_code(0x31);
+    /// # #[cfg(target_os = "macos")]
+    /// assert_eq!(key, Some(KeyboardKey::Space));
+    ///
+    /// // Unknown codes return None
+    /// # #[cfg(target_os = "macos")]
+    /// let key = KeyboardKey::from_code(0xFFFF);
+    /// # #[cfg(target_os = "macos")]
+    /// assert_eq!(key, None);
+    /// ```
     pub fn from_code(code: u16) -> Option<KeyboardKey> {
         match code {
             0x00 => Some(KeyboardKey::A),
