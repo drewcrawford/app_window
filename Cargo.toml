@@ -47,7 +47,7 @@ swift-rs = { version = "1.0.7", features = ["build"] }
 
 # wasm32
 [target.'cfg(target_arch="wasm32")'.dependencies]
-web-sys = { version = "0.3.85", features=["CssStyleDeclaration","HtmlCanvasElement","KeyboardEvent","Window","Document","MouseEvent","WheelEvent"] }
+web-sys = { version = "0.3.85", features=["CssStyleDeclaration","HtmlCanvasElement","KeyboardEvent","Window","Document","MouseEvent","WheelEvent","WorkerGlobalScope"] }
 wasm-bindgen = "0.2.108"
 wasm-bindgen-futures = "0.4.58"
 continue_stream = "0.1.0"
@@ -84,7 +84,7 @@ wayland-protocols = {version = "0.32.9", features = ["client"]}
 wayland-cursor = "0.31.11"
 memmap2 = "0.9.7"
 io-uring = "0.7.9"
-zune-png = "0.4.10"
+zune-png = "0.5.1"
 # probably at some point this will be a global requirement,
 # for now we only NEED it to advertise decorations on linux
 accesskit = "0.21.0"
