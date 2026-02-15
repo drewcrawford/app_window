@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-c/*!
+/*!
 A cross-platform window management crate with async-first APIs.
 
 ![logo](https://github.com/drewcrawford/app_window/raw/main/art/logo.png)

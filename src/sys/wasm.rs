@@ -262,7 +262,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 
     // logwise::info_sync!("wasm_thread WILL spawn");
 
-    wasm_thread::spawn(|| {
+    wasm_safe_thread::spawn(|| {
         // logwise::info_sync!("wasm_thread spawn");
         let new_context = Context::new_task(
             Some(push_context_2),

@@ -12,7 +12,7 @@ logwise::declare_logging_domain!();
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 #[cfg(target_arch = "wasm32")]
-use wasm_thread as thread;
+use wasm_safe_thread as thread;
 
 use some_executor::task::{Configuration, Task};
 

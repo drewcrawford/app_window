@@ -4,7 +4,6 @@ use app_window::input::keyboard::Keyboard;
 use app_window::input::mouse::Mouse;
 use some_executor::SomeExecutor;
 use some_executor::observer::Observer;
-use wasm_thread as thread;
 
 async fn test_board() {
     #[cfg(target_arch = "wasm32")]
