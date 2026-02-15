@@ -4,6 +4,7 @@ use crate::sys::window::WindowInternal;
 use libc::{MFD_ALLOW_SEALING, MFD_CLOEXEC, c_char, memfd_create};
 use memmap2::MmapMut;
 use std::fs::File;
+use std::io::Cursor;
 use std::os::fd::{AsFd, AsRawFd, FromRawFd};
 use std::sync::{Arc, Mutex};
 use wayland_client::QueueHandle;
@@ -102,9 +103,9 @@ pub(super) fn create_shm_buffer_decor(
     window_internal: Arc<Mutex<WindowInternal>>,
 ) -> AllocatedBuffer {
     let decor = include_bytes!("../../../linux_assets/decor.png");
-    let mut decode_decor = zune_png::PngDecoder::new(decor);
+    let mut decode_decor = zune_png::PngDecoder::new(Cursor::new(&decor[..]));
     let decode = decode_decor.decode().expect("Can't decode decor");
-    let dimensions = decode_decor.get_dimensions().unwrap();
+    let dimensions = decode_decor.dimensions().expect("Can't decode decor");
     let decor = match decode {
         DecodingResult::U8(d) => d,
         _ => todo!(),

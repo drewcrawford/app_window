@@ -3,7 +3,7 @@ use super::{BUTTON_WIDTH, CLOSE_ID, MAXIMIZE_ID, MINIMIZE_ID, TITLEBAR_HEIGHT};
 use crate::coordinates::Size;
 
 use crate::sys::window::WindowInternal;
-use accesskit::{Action, ActionRequest, NodeId, Rect, Role, TreeUpdate};
+use accesskit::{Action, ActionRequest, NodeId, Rect, Role, TreeId, TreeUpdate};
 use std::sync::{Arc, Mutex};
 
 pub fn build_tree_update(title: String, window_size: Size) -> TreeUpdate {
@@ -76,6 +76,7 @@ pub fn build_tree_update(title: String, window_size: Size) -> TreeUpdate {
             (MINIMIZE_ID, minimize_button),
         ],
         tree: Some(tree),
+        tree_id: TreeId::ROOT,
         focus: NodeId(1),
     }
 }
@@ -115,21 +116,21 @@ impl accesskit::ActivationHandler for AX {
 
 impl accesskit::ActionHandler for AX {
     fn do_action(&mut self, request: ActionRequest) {
-        if request.target == CLOSE_ID {
+        if request.target_node == CLOSE_ID {
             match request.action {
                 Action::Click => {
                     self.window_internal.lock().unwrap().close_window();
                 }
                 _ => unimplemented!(),
             }
-        } else if request.target == MAXIMIZE_ID {
+        } else if request.target_node == MAXIMIZE_ID {
             match request.action {
                 Action::Click => {
                     self.window_internal.lock().unwrap().maximize();
                 }
                 _ => unimplemented!(),
             }
-        } else if request.target == MINIMIZE_ID {
+        } else if request.target_node == MINIMIZE_ID {
             match request.action {
                 Action::Click => {
                     self.window_internal.lock().unwrap().minimize();
@@ -137,7 +138,10 @@ impl accesskit::ActionHandler for AX {
                 _ => unimplemented!(),
             }
         } else {
-            unimplemented!("Unknown action target: {target:?}", target = request.target);
+            unimplemented!(
+                "Unknown action target: {target:?}",
+                target = request.target_node
+            );
         }
     }
 }

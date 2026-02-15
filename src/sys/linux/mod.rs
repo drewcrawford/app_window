@@ -23,6 +23,7 @@ use raw_window_handle::{
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fs::File;
+use std::io::Cursor;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 use wayland_client::protocol::wl_compositor::WlCompositor;
@@ -95,9 +96,9 @@ impl AppState {
         shm: WlShm,
     ) -> Arc<Self> {
         let decor = include_bytes!("../../../linux_assets/decor.png");
-        let mut decode_decor = zune_png::PngDecoder::new(decor);
+        let mut decode_decor = zune_png::PngDecoder::new(Cursor::new(&decor[..]));
         let decode = decode_decor.decode().expect("Can't decode decor");
-        let dimensions = decode_decor.get_dimensions().unwrap();
+        let dimensions = decode_decor.dimensions().expect("Can't decode decor");
         let decor = match decode {
             DecodingResult::U8(d) => d,
             _ => todo!(),
