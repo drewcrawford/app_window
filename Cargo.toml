@@ -52,7 +52,6 @@ wasm-bindgen = "0.2.108"
 wasm-bindgen-futures = "0.4.58"
 continue_stream = "0.1.0"
 web-time = "1.1.0"
-portable_async_sleep = "0.1.1"
 wasm_safe_thread = "0.1.1"
 
 
@@ -87,8 +86,8 @@ io-uring = "0.7.9"
 zune-png = "0.5.1"
 # probably at some point this will be a global requirement,
 # for now we only NEED it to advertise decorations on linux
-accesskit = "0.21.0"
-accesskit_unix = "0.17.0"
+accesskit = "0.24.0"
+accesskit_unix = "0.20.0"
 # input dependencies
 tempfile = "3.21.0"
 atspi = {version = "0.29.0", features=[]}
