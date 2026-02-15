@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
-/*!
+c/*!
 A cross-platform window management crate with async-first APIs.
 
-![logo](../../../art/logo.png)
+![logo](https://github.com/drewcrawford/app_window/raw/main/art/logo.png)
 
 `app_window` provides a modern alternative to winit for creating and managing windows across
 Windows, macOS, Linux, and WebAssembly. The crate's primary goal is to provide a unified,
