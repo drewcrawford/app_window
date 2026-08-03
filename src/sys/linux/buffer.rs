@@ -82,6 +82,9 @@ impl AllocatedBuffer {
             queue_handle,
             release_info,
         );
+        //destroy the pool now; the server keeps the storage alive until the buffer
+        //is destroyed.  Otherwise each pool (and its whole mapping) leaks server-side.
+        pool.destroy();
         let allocated_buffer = AllocatedBuffer {
             buffer: buf,
             width,
@@ -162,6 +165,8 @@ pub(super) fn create_shm_buffer_decor(
         queue_handle,
         release_info,
     );
+    //see note in AllocatedBuffer::new
+    pool.destroy();
     let allocated_buffer = AllocatedBuffer {
         buffer: buf,
         width: dimensions.0 as i32,
