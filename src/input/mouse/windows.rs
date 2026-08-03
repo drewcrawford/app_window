@@ -5,7 +5,6 @@ use std::mem::MaybeUninit;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClientRect, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL,
     WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
@@ -78,11 +77,6 @@ pub(crate) fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM
             let window = NonNull::new(hwnd.0).map(Window);
             let x = get_x_lparam(l_param);
             let y = get_y_lparam(l_param);
-            let mut point = MaybeUninit::uninit();
-            unsafe { ClientToScreen(hwnd, point.as_mut_ptr()) }
-                .expect("failed to get client to screen");
-            // let point = unsafe{point.assume_init()};
-
             let mut rect = MaybeUninit::uninit();
             unsafe { GetClientRect(hwnd, rect.as_mut_ptr()) }.expect("failed to get client rect");
 
@@ -142,7 +136,9 @@ pub(crate) fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM
                 x if x == XBUTTON1 => 3,
                 x if x == XBUTTON2 => 4,
                 _ => {
-                    unimplemented!("Unknown xbutton {:?}", xbutton)
+                    //synthesized input can carry other values; don't panic in the wndproc
+                    logwise::warn_sync!("Unknown xbutton {xbutton}", xbutton = xbutton);
+                    return LRESULT(1);
                 }
             };
             apply_all(|shared| {
@@ -156,7 +152,8 @@ pub(crate) fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM
                 x if x == XBUTTON1 => 3,
                 x if x == XBUTTON2 => 4,
                 _ => {
-                    unimplemented!("Unknown xbutton {:?}", xbutton)
+                    logwise::warn_sync!("Unknown xbutton {xbutton}", xbutton = xbutton);
+                    return LRESULT(1);
                 }
             };
             apply_all(|shared| {
@@ -166,7 +163,9 @@ pub(crate) fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM
         }
         msg if msg == WM_MOUSEWHEEL => {
             //todo: should this be scaled in some way?
-            let delta = get_wheel_delta_wparam(w_param);
+            //WM_MOUSEWHEEL is positive scrolling away from the user; other platforms
+            //(wayland, DOM) are positive toward the user, so negate for consistency
+            let delta = -get_wheel_delta_wparam(w_param);
             apply_all(|shared| {
                 shared.add_scroll_delta(0.0, delta as f64, hwnd.0);
             });
