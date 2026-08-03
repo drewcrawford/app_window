@@ -125,22 +125,26 @@ impl Dispatch<WlSurface, SurfaceEvents> for App {
         match event {
             wayland_client::protocol::wl_surface::Event::Enter { output } => {
                 if let SurfaceEvents::Standard(window_internal) = data {
-                    let output_id = output.id().protocol_id();
-                    window_internal
-                        .lock()
-                        .unwrap()
-                        .current_outputs
-                        .insert(output_id);
+                    //key by the registry global name (the bind user data), matching
+                    //the App outputs map; protocol object ids are a different numbering
+                    if let Some(output_id) = output.data::<u32>().copied() {
+                        window_internal
+                            .lock()
+                            .unwrap()
+                            .current_outputs
+                            .insert(output_id);
+                    }
                 }
             }
             wayland_client::protocol::wl_surface::Event::Leave { output } => {
                 if let SurfaceEvents::Standard(window_internal) = data {
-                    let output_id = output.id().protocol_id();
-                    window_internal
-                        .lock()
-                        .unwrap()
-                        .current_outputs
-                        .remove(&output_id);
+                    if let Some(output_id) = output.data::<u32>().copied() {
+                        window_internal
+                            .lock()
+                            .unwrap()
+                            .current_outputs
+                            .remove(&output_id);
+                    }
                 }
             }
             _ => {
@@ -168,10 +172,21 @@ impl Dispatch<XdgSurface, Arc<Mutex<WindowInternal>>> for App {
                 let proposed = locked_data.proposed_configure.take();
                 if let Some(mut configure) = proposed {
                     let app_state = locked_data.app_state.upgrade().unwrap();
-                    if configure.width == 0 && configure.height == 0 {
-                        //pick our own size
-                        configure.width = 800;
-                        configure.height = 600;
+                    //zero means "client decides", per dimension; use the requested
+                    //(or last-applied) size rather than a hardcoded one
+                    if configure.width == 0 {
+                        configure.width = locked_data
+                            .applied_configure
+                            .as_ref()
+                            .map(|c| c.width)
+                            .unwrap_or(800);
+                    }
+                    if configure.height == 0 {
+                        configure.height = locked_data
+                            .applied_configure
+                            .as_ref()
+                            .map(|c| c.height)
+                            .unwrap_or(600);
                     }
                     //check size (always attach on first configure)
                     let size_changed = locked_data
@@ -262,6 +277,11 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<XdgToplevel, A> for App {
 
                 data.as_ref().lock().unwrap().proposed_configure =
                     Some(Configure { width, height });
+            }
+            xdg_toplevel::Event::Close => {
+                //compositor-initiated close (Alt-F4, taskbar close, etc.);
+                //behave like the in-app close button
+                data.as_ref().lock().unwrap().close_window();
             }
             _ => {
                 //?
@@ -423,11 +443,30 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
             wayland_client::protocol::wl_pointer::Event::Enter {
                 serial,
                 surface,
-                surface_x: _,
-                surface_y: _,
+                surface_x,
+                surface_y,
             } => {
                 data.wl_pointer_enter_serial = Some(serial);
                 data.wl_pointer_enter_surface = Some(surface);
+                //record the position so a Button with no preceding Motion doesn't
+                //observe a missing or stale (pre-Leave) position
+                let (parent_surface_x, parent_surface_y) =
+                    if data.wl_pointer_enter_surface != data.wl_surface {
+                        //we're in the decor; slide by decor dimensions
+                        let surface_dimensions = data
+                            .applied_configure
+                            .clone()
+                            .expect("No surface dimensions");
+                        (
+                            surface_x + surface_dimensions.width as f64
+                                - data.app_state.upgrade().unwrap().decor_dimensions.0 as f64,
+                            surface_y,
+                        )
+                    } else {
+                        (surface_x, surface_y)
+                    };
+                data.wl_pointer_pos
+                    .replace(Position::new(parent_surface_x, parent_surface_y));
                 //set cursor?
                 let app = data.app_state.upgrade().expect("App state gone");
                 let cursor_request = app
@@ -576,6 +615,16 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                     }
                 }
             }
+            wayland_client::protocol::wl_pointer::Event::Axis { time, axis, value } => {
+                if let wayland_client::WEnum::Value(axis) = axis {
+                    crate::input::linux::axis_event(
+                        time,
+                        axis as u32,
+                        value,
+                        data.wl_surface.as_ref().unwrap().id(),
+                    );
+                }
+            }
             _ => {
                 //?
             }
@@ -610,6 +659,9 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlKeyboard, A> for App {
                 serial: _,
                 surface: _,
             } => {
+                //release events for held keys go elsewhere after focus loss;
+                //clear state so keys don't stick down
+                crate::input::linux::wl_keyboard_focus_leave();
                 if let Some(e) = data.as_ref().lock().unwrap().adapter.as_mut() {
                     e.update_window_focus_state(false)
                 }
