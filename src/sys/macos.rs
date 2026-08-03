@@ -66,7 +66,9 @@ extern "C" fn on_main_thread_callback<F: FnOnce()>(ctx: *mut MainThreadClosure<F
     (b.closure)();
 }
 
-pub fn on_main_thread<F: FnOnce()>(closure: F) {
+//the closure escapes the calling thread and runs later on the main thread,
+//so it must be Send + 'static like the other platform backends
+pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let context = MainThreadClosure { closure };
     let boxed_ptr = Box::into_raw(Box::new(context)) as *mut c_void;
     unsafe { SwiftAppWindow_OnMainThread(boxed_ptr, on_main_thread_callback::<F> as *mut c_void) }
