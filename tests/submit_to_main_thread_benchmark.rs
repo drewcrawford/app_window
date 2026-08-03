@@ -13,13 +13,13 @@ logwise::declare_logging_domain!();
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 #[cfg(target_arch = "wasm32")]
-use wasm_safe_thread as thread;
+use wasm_lite_std as thread;
 
 use some_executor::task::{Configuration, Task};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
 #[cfg(target_arch = "wasm32")]
-use web_time::{Duration, Instant};
+use wasm_lite_std::time::{Duration, Instant};
 
 #[cfg(target_arch = "wasm32")]
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

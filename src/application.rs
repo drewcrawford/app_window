@@ -101,7 +101,7 @@ use std::sync::atomic::AtomicBool;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use std::time;
 #[cfg(target_arch = "wasm32")]
-pub(crate) use web_time as time;
+pub(crate) use wasm_lite_std::time;
 
 use crate::sys;
 

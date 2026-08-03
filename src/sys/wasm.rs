@@ -220,9 +220,11 @@ pub fn is_main_thread() -> bool {
         return false;
     }
 
-    // Node: detect environment, then query worker_threads.isMainThread
+    // Node was answered here via an `inline_js` shim calling
+    // `require('node:worker_threads').isMainThread`. wasm_lite cannot express
+    // that and does not target Node. Say so rather than guessing.
     if is_node_env(&g) {
-        return node_is_main_thread_cjs(); // sync, works when `require` is available
+        panic!("app_window on wasm_lite does not support Node; run in a browser");
     }
 
     // Unknown host
@@ -244,21 +246,6 @@ fn is_node_env(g: &wasm_bindgen::JsValue) -> bool {
 
 // --- Node (CommonJS): synchronous path ---
 // Uses `require('node:worker_threads').isMainThread` if `require` exists.
-#[wasm_bindgen(inline_js = r#"
-export function nodeIsMainThreadCJS() {
-  try {
-    if (typeof require !== 'undefined') {
-      return require('node:worker_threads').isMainThread;
-    }
-  } catch (_) {}
-  // If require isn't available, caller can try the async ESM variant.
-  return true; // sensible default on main thread
-}
-"#)]
-extern "C" {
-    #[wasm_bindgen(js_name = nodeIsMainThreadCJS)]
-    fn node_is_main_thread_cjs() -> bool;
-}
 pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let (sender, receiver) = continue_stream::continuation();
 
@@ -274,7 +261,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
 
     // logwise::info_sync!("wasm_thread WILL spawn");
 
-    wasm_safe_thread::spawn(|| {
+    wasm_lite_std::spawn(|| {
         // logwise::info_sync!("wasm_thread spawn");
         let new_context = Context::new_task(
             Some(push_context_2),

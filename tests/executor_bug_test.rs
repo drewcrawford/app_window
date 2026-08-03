@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 #[cfg(target_arch = "wasm32")]
-use web_time::Duration;
+use wasm_lite_std::time::Duration;
 
 use std::thread;
 
