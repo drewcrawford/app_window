@@ -415,7 +415,6 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 ///
 /// ```
 /// #[cfg(target_arch = "wasm32")] {
-///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 /// }
 /// use app_window::test_support::doctest_main;
 /// doctest_main(|| {
@@ -459,7 +458,6 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 ///
 /// ```
 /// #[cfg(target_arch = "wasm32")] {
-///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 /// }
 /// use app_window::test_support::doctest_main;
 /// doctest_main(|| {

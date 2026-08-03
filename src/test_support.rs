@@ -33,7 +33,7 @@ Then in `tests/your_custom_test_name.rs`:
 ```rust,no_run
 # // no_run because: this is a code example
 # #[allow(clippy::needless_doctest_main)]
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
 fn main() {
     app_window::test_support::integration_test_harness(|| {
         test_fn_1();
@@ -48,7 +48,7 @@ fn main() {
 # Caveats
 
 * This must be called from the main thread.
-* On wasm32, this should be marked #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+* On wasm32, this should be marked #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
 */
 pub fn integration_test_harness<C>(c: C)
 where
@@ -75,7 +75,6 @@ Note: wasm_thread does not generally work in node.js, so you may need to run you
 
 ```
 #[cfg(target_arch = "wasm32")] {
-    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 }
 use app_window::test_support::doctest_main;
 eprintln!("Will call doctest_main");

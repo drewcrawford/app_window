@@ -56,7 +56,7 @@ wasm_lite_std = { path = "../wasm_lite/crates/wasm_lite_std" }
 
 [target.'cfg(target_arch="wasm32")'.dev-dependencies]
 console_error_panic_hook = "0.1.7"
-wasm-bindgen-test = "0.3.56"
+wasm_lite = { path = "../wasm_lite/crates/wasm_lite" }
 
 
 # windows

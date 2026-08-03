@@ -435,7 +435,6 @@ pub mod input;
 /// # Example
 /// ```
 /// #[cfg(target_arch = "wasm32")] {
-///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 /// }
 /// use app_window::test_support::doctest_main;
 /// use some_executor::task::{Configuration, Task};
@@ -520,7 +519,6 @@ pub mod main_thread_cell;
 /// For doctests that use async window operations:
 /// ```
 /// #[cfg(target_arch = "wasm32")] {
-///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 /// }
 /// use app_window::test_support::doctest_main;
 ///

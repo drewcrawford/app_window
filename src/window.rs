@@ -16,7 +16,6 @@
 //!
 //! ```
 //! #[cfg(target_arch = "wasm32")] {
-//!     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 //! }
 //! use app_window::test_support::doctest_main;
 //! use some_executor::task::{Configuration, Task};
@@ -58,7 +57,6 @@ use std::fmt::Display;
 ///
 /// ```
 /// #[cfg(target_arch = "wasm32")] {
-///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 /// }
 /// use app_window::test_support::doctest_main;
 /// use some_executor::task::{Configuration, Task};
@@ -136,7 +134,6 @@ impl Window {
     ///
     /// ```
     /// #[cfg(target_arch = "wasm32")] {
-    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
     /// }
     /// use app_window::test_support::doctest_main;
     /// use some_executor::task::{Configuration, Task};
@@ -189,7 +186,6 @@ impl Window {
     ///
     /// ```
     /// #[cfg(target_arch = "wasm32")] {
-    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
     /// }
     /// use app_window::test_support::doctest_main;
     /// use some_executor::task::{Configuration, Task};
@@ -241,7 +237,6 @@ impl Window {
     ///
     /// ```
     /// #[cfg(target_arch = "wasm32")] {
-    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
     /// }
     /// use app_window::test_support::doctest_main;
     /// use some_executor::task::{Configuration, Task};
@@ -290,7 +285,6 @@ impl Window {
     ///
     /// ```
     /// #[cfg(target_arch = "wasm32")] {
-    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
     /// }
     /// use app_window::test_support::doctest_main;
     /// use some_executor::task::{Configuration, Task};
@@ -328,7 +322,7 @@ impl Window {
 mod test {
     use crate::window::Window;
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
     #[test]
     fn test_send() {
         fn assert_send<T: Send>() {}

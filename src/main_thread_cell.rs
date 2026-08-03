@@ -326,7 +326,7 @@ mod tests {
     #[cfg(target_arch = "wasm32")]
     use wasm_lite_std as thread;
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
     #[test]
     fn test_cell_construction() {
         // Verify we can construct cells
@@ -339,7 +339,7 @@ mod tests {
         std::mem::forget(cell_default);
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
     #[test]
     fn test_debug_impl() {
         let cell = MainThreadCell::new(42);
@@ -354,8 +354,6 @@ mod tests {
         //for the time being, wasm_thread only works in browser
         //see https://github.com/rustwasm/wasm-bindgen/issues/4534,
         //though we also need wasm_thread support.
-        #[cfg(target_arch = "wasm32")]
-        wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
         let cell = MainThreadCell::new(42);
         let (c, f) = r#continue::continuation();
 

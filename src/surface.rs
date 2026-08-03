@@ -100,7 +100,6 @@ impl Surface {
     ///
     /// ```
     /// #[cfg(target_arch = "wasm32")] {
-    ///     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
     /// }
     /// use app_window::test_support::doctest_main;
     /// use some_executor::task::{Configuration, Task};
@@ -283,7 +282,7 @@ impl Surface {
 mod tests {
     use crate::surface::Surface;
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+    #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
     #[test]
     fn send_sync() {
         fn assert_send<T: Send + Sync>() {}

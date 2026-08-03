@@ -30,14 +30,12 @@ use wasm_lite_std as thread;
 //for the time being, wasm_thread only works in browser
 //see https://github.com/rustwasm/wasm-bindgen/issues/4534,
 //though we also need wasm_thread support.
-#[cfg(target_arch = "wasm32")]
-wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 fn main() {
     test_executors::sleep_on(test())
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
 async fn test() {
     let (s, r) = std::sync::mpsc::channel();
     let (s2, r2) = r#continue::continuation();

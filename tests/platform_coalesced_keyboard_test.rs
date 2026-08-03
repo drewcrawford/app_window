@@ -16,9 +16,6 @@ use wasm_lite_std as thread;
 use some_executor::task::{Configuration, Task};
 logwise::declare_logging_domain!();
 
-#[cfg(target_arch = "wasm32")]
-wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
-
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
     logwise::warn_sync!("=== PlatformCoalescedKeyboard Non-Main Thread Test ===");
