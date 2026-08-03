@@ -77,7 +77,7 @@ unsafe impl Send for Window {}
 pub mod linux {
     pub use crate::input::keyboard::linux::{wl_keyboard_event, wl_keyboard_focus_leave};
     pub use crate::input::mouse::linux::{
-        button_event, motion_event, xdg_toplevel_configure_event,
+        axis_event, button_event, motion_event, xdg_toplevel_configure_event,
     };
 }
 
