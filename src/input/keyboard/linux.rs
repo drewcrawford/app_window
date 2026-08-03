@@ -496,7 +496,7 @@ impl KeyboardKey {
             96 => Some(KeyboardKey::KeypadEnter),
             97 => Some(KeyboardKey::RightControl),
             98 => Some(KeyboardKey::KeypadDivide),
-            //sysreq
+            99 => Some(KeyboardKey::PrintScreen), //KEY_SYSRQ
             100 => Some(KeyboardKey::RightOption),
             //linefeed
             102 => Some(KeyboardKey::Home),

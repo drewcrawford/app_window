@@ -212,7 +212,7 @@ impl KeyboardKey {
             "ArrowDown" => KeyboardKey::DownArrow,
             "PageDown" => KeyboardKey::PageDown,
             "Insert" => KeyboardKey::Insert,
-            "Delete" => KeyboardKey::Delete,
+            "Delete" => KeyboardKey::ForwardDelete,
             "MetaLeft" => KeyboardKey::Command,
             "MetaRight" => KeyboardKey::RightCommand,
             "ContextMenu" => KeyboardKey::ContextMenu,
