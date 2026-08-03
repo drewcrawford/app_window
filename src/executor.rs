@@ -117,6 +117,9 @@ thread_local! {
     static RUNNING: Cell<Option<HashMap<usize, Task>>> = const { Cell::new(None) };
     // Thread-local storage for task IDs that are ready to be polled.
     static POLLABLE: Cell<Vec<usize>> = const { Cell::new(Vec::new()) };
+    // Task IDs currently checked out of RUNNING and being polled somewhere up the
+    // stack.  A wake for one of these must be deferred, not dropped.
+    static IN_FLIGHT: Cell<Vec<usize>> = const { Cell::new(Vec::new()) };
 }
 
 /// Runs the specified future on the main thread and returns its result.
@@ -262,12 +265,35 @@ fn main_executor_iter() {
         None => {
             //No more pollable tasks, nothing to do.
         }
-        Some(task) => {
+        Some(woke_task_id) => {
+            //If this task is being polled higher up the stack (it woke itself inline
+            //during its own poll), defer the wake: put it back for the iteration
+            //scheduled when that poll completes.
+            let in_flight = IN_FLIGHT.take();
+            let is_in_flight = in_flight.contains(&woke_task_id);
+            IN_FLIGHT.replace(in_flight);
+            if is_in_flight {
+                let mut pollable = POLLABLE.take();
+                pollable.push(woke_task_id);
+                POLLABLE.replace(pollable);
+                return;
+            }
             // Get the task from RUNNING
             let mut running = RUNNING.take().unwrap_or_default();
-            let mut task = running.remove(&task).unwrap();
-            let task_id = task.context.task_id();
+            let task = running.remove(&woke_task_id);
             RUNNING.replace(Some(running));
+            let mut task = match task {
+                Some(task) => task,
+                None => {
+                    //A wake of a task that already completed.  The Waker contract
+                    //requires this to be a no-op, not a panic.
+                    return;
+                }
+            };
+            let task_id = task.context.task_id();
+            let mut in_flight = IN_FLIGHT.take();
+            in_flight.push(task.our_task_id);
+            IN_FLIGHT.replace(in_flight);
 
             //with that out of the way, we can poll the task
             let waker = Waker {
@@ -280,6 +306,9 @@ fn main_executor_iter() {
             let mut context = Context::from_waker(&into_waker);
             let poll_result = task.future.as_mut().poll(&mut context);
             parent.set_current();
+            let mut in_flight = IN_FLIGHT.take();
+            in_flight.retain(|&id| id != task.our_task_id);
+            IN_FLIGHT.replace(in_flight);
             match poll_result {
                 std::task::Poll::Ready(()) => {
                     // Task completed, don't put it back
