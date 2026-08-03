@@ -49,9 +49,11 @@ impl PlatformCoalescedMouse {
                         .unwrap_or(0.0);
                     let window = Some(Window(NonNull::new(ARBITRARY_WINDOW_PTR).unwrap()));
 
+                    //clientX/Y are viewport-relative, matching inner_width/inner_height;
+                    //offsetX/Y would be relative to whatever element the pointer is over.
                     shared.set_window_location(MouseWindowLocation::new(
-                        event.offset_x() as f64,
-                        event.offset_y() as f64,
+                        event.client_x() as f64,
+                        event.client_y() as f64,
                         width,
                         height,
                         window,
