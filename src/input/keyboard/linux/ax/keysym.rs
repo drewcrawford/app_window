@@ -49,9 +49,9 @@ pub fn key_to_id(key: KeyboardKey, is_numlock_enabled: bool) -> i32 {
             if is_numlock_enabled {
                 0xffb0
             } else {
-                0xff95
+                0xff9e
             }
-        } // XK_KP_0, XK_KP_HOME
+        } // XK_KP_0, XK_KP_Insert
         KeyboardKey::Keypad1 => {
             if is_numlock_enabled {
                 0xffb1
@@ -98,16 +98,16 @@ pub fn key_to_id(key: KeyboardKey, is_numlock_enabled: bool) -> i32 {
             if is_numlock_enabled {
                 0xffb7
             } else {
-                0xff97
+                0xff95
             }
-        } // XK_KP_7, XK_KP_UP
+        } // XK_KP_7, XK_KP_Home
         KeyboardKey::Keypad8 => {
             if is_numlock_enabled {
                 0xffb8
             } else {
-                0xff9a
+                0xff97
             }
-        } // XK_KP_8, XK_KP_PAGE_UP
+        } // XK_KP_8, XK_KP_Up
         KeyboardKey::Keypad9 => {
             if is_numlock_enabled {
                 0xffb9
@@ -242,15 +242,16 @@ pub fn key_to_id(key: KeyboardKey, is_numlock_enabled: bool) -> i32 {
         KeyboardKey::InternationalBackslash => 0x5c, // XK_backslash
 
         // Edit keys
-        KeyboardKey::Again => 0xff66,  // XK_Redo
-        KeyboardKey::Undo => 0xff65,   // XK_Undo
-        KeyboardKey::Cut => 0xff63,    // XK_Cut
-        KeyboardKey::Copy => 0xff62,   // XK_Copy
-        KeyboardKey::Paste => 0xff63,  // XK_Paste
-        KeyboardKey::Find => 0xff68,   // XK_Find
-        KeyboardKey::Props => 0xff62,  // XK_Execute
-        KeyboardKey::Select => 0xff60, // XK_Select
-        KeyboardKey::Open => 0xff62,   // XK_Execute
+        //there are no core XK_Cut/Copy/Paste keysyms; use the XF86/Sun ones
+        KeyboardKey::Again => 0xff66,     // XK_Redo
+        KeyboardKey::Undo => 0xff65,      // XK_Undo
+        KeyboardKey::Cut => 0x1008ff58,   // XF86XK_Cut
+        KeyboardKey::Copy => 0x1008ff57,  // XF86XK_Copy
+        KeyboardKey::Paste => 0x1008ff6d, // XF86XK_Paste
+        KeyboardKey::Find => 0xff68,      // XK_Find
+        KeyboardKey::Props => 0x1005ff70, // XK_SunProps
+        KeyboardKey::Select => 0xff60,    // XK_Select
+        KeyboardKey::Open => 0x1008ff6b,  // XF86XK_Open
 
         // Japanese input conversion
         KeyboardKey::Convert => 0xff21,    // XK_Convert
