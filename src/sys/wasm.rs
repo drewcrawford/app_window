@@ -74,11 +74,23 @@ impl CanvasHolder {
         let closure = Closure::<dyn FnMut()>::new(move || {
             match canvas_weak.upgrade() {
                 None => { /* deallocated? */ }
-                Some(canvas) => {
-                    let width = canvas.width();
-                    let height = canvas.height();
+                Some(_canvas) => {
+                    //report the window's logical size, matching size_scale/size_main.
+                    //The canvas width/height attributes are the buffer size, which this
+                    //crate never sets, so reading them would report a stale/default size.
+                    let w = web_sys::window().expect("No window?");
+                    let width = w
+                        .inner_width()
+                        .expect("No width?")
+                        .as_f64()
+                        .expect("No width?");
+                    let height = w
+                        .inner_height()
+                        .expect("No height?")
+                        .as_f64()
+                        .expect("No height?");
                     if let Some(closure) = move_closure_box.lock().unwrap().as_ref() {
-                        closure(Size::new(width as f64, height as f64));
+                        closure(Size::new(width, height));
                     }
                 }
             }
