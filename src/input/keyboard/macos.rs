@@ -19,8 +19,11 @@ unsafe extern "C" fn raw_input_key_notify_func(
 ) {
     let shared = unsafe { Weak::from_raw(ctx as *const Shared) };
     if let Some(shared) = shared.upgrade() {
-        let key_code = KeyboardKey::from_code(key_code).expect("Unknown key code {key_code}");
-        shared.set_key_state(key_code, down, window);
+        //ignore unknown key codes; panicking would unwind out of extern "C" and abort
+        match KeyboardKey::from_code(key_code) {
+            Some(key_code) => shared.set_key_state(key_code, down, window),
+            None => logwise::warn_sync!("Unknown key code {key_code}", key_code = key_code),
+        }
     }
     std::mem::forget(shared); //keep weak reference alive as it is still owned by the target function
 }

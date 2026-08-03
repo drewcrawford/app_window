@@ -23,14 +23,13 @@ impl PlatformCoalescedKeyboard {
                 let window = web_sys::window().expect("no global window exists");
                 let document = window.document().expect("no document on window");
                 let keydown_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-                    let key = event.key();
                     let code = event.code();
 
                     if let Some(shared) = weak.upgrade() {
-                        let key = KeyboardKey::from_js_code(&code)
-                            .unwrap_or_else(|| panic!("Unknown key: {}", key));
-
-                        shared.set_key_state(key, true, ARBITRARY_WINDOW_PTR);
+                        //ignore keys we can't map; panicking here would abort the wasm module
+                        if let Some(key) = KeyboardKey::from_js_code(&code) {
+                            shared.set_key_state(key, true, ARBITRARY_WINDOW_PTR);
+                        }
                     }
                 })
                     as Box<dyn FnMut(KeyboardEvent)>);
@@ -43,12 +42,12 @@ impl PlatformCoalescedKeyboard {
                 keydown_callback.forget();
 
                 let keyup_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-                    let key = event.key();
                     let code = event.code();
                     if let Some(shared) = weak_up.upgrade() {
-                        let key = KeyboardKey::from_js_code(&code)
-                            .unwrap_or_else(|| panic!("Unknown key: {}", key));
-                        shared.set_key_state(key, false, ARBITRARY_WINDOW_PTR);
+                        //ignore keys we can't map; panicking here would abort the wasm module
+                        if let Some(key) = KeyboardKey::from_js_code(&code) {
+                            shared.set_key_state(key, false, ARBITRARY_WINDOW_PTR);
+                        }
                     }
                 })
                     as Box<dyn FnMut(KeyboardEvent)>);
