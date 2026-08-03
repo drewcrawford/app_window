@@ -251,7 +251,12 @@ fn main_executor_iter() {
     // Pop off a pollable task
     // let iter = perfwarn_begin!("main_executor_iter");
     let mut swap_pollable = POLLABLE.take();
-    let poll = swap_pollable.pop();
+    //FIFO so a frequently-woken task can't starve older pollable tasks
+    let poll = if swap_pollable.is_empty() {
+        None
+    } else {
+        Some(swap_pollable.remove(0))
+    };
     POLLABLE.replace(swap_pollable);
     match poll {
         None => {
