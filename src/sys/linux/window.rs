@@ -115,9 +115,12 @@ impl WindowInternal {
             if let Some(s) = self.xdg_surface.as_ref() {
                 s.destroy()
             }
-        }
-        if let Some(s) = self.wl_surface.as_ref() {
-            s.destroy()
+            // The wl_surface must be destroyed after its role objects; destroying it
+            // while they are alive is a defunct_role_object protocol error on
+            // wl_compositor v6, which kills the whole connection.
+            if let Some(s) = self.wl_surface.as_ref() {
+                s.destroy()
+            }
         }
     }
 
