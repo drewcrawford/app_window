@@ -197,7 +197,8 @@ impl MouseWindowLocation {
 struct Shared {
     window: std::sync::Mutex<Option<MouseWindowLocation>>,
 
-    buttons: [AtomicBool; 255],
+    //256 so any u8 button id is a valid index
+    buttons: [AtomicBool; 256],
     scroll_delta_x: AtomicF64,
     scroll_delta_y: AtomicF64,
     last_window: AtomicPtr<c_void>,
@@ -206,7 +207,7 @@ impl Shared {
     fn new() -> Self {
         Shared {
             window: std::sync::Mutex::new(None),
-            buttons: [const { AtomicBool::new(false) }; 255],
+            buttons: [const { AtomicBool::new(false) }; 256],
             scroll_delta_x: AtomicF64::new(0.0),
             scroll_delta_y: AtomicF64::new(0.0),
             last_window: AtomicPtr::new(std::ptr::null_mut()),
