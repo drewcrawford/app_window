@@ -25,7 +25,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CW_USEDEFAULT, CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, IDC_ARROW,
     LoadCursorW, MSG, RegisterClassExW, SW_SHOWNORMAL, ShowWindow, TranslateMessage,
-    WINDOW_EX_STYLE, WM_KEYDOWN, WM_KEYUP, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
+    WINDOW_EX_STYLE, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_SYSKEYDOWN, WM_SYSKEYUP, WNDCLASSEXW,
+    WS_OVERLAPPEDWINDOW,
 };
 use windows::core::{PCWSTR, w};
 
@@ -76,11 +77,13 @@ Processes window key events.
 
 Returns LResult(0) if we handled the message, or nonzero otherwise.
 */
-pub fn kbd_window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, _l_param: LPARAM) -> LRESULT {
+pub fn kbd_window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
     let window_ptr = hwnd.0;
     match msg {
-        m if m == WM_KEYDOWN => {
-            if let Some(key) = KeyboardKey::from_vk(w_param.0) {
+        //WM_SYSKEYDOWN/WM_SYSKEYUP arrive for Alt itself and for keys pressed/released
+        //while Alt is held; ignoring them leaves keys stuck down.
+        m if m == WM_KEYDOWN || m == WM_SYSKEYDOWN => {
+            if let Some(key) = KeyboardKey::from_vk(disambiguate_vk(w_param.0, l_param.0)) {
                 KEYBOARD_STATE
                     .get_or_init(Mutex::default)
                     .lock()
@@ -88,14 +91,19 @@ pub fn kbd_window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, _l_param: LPARAM) 
                     .apply_all(|shared| {
                         shared.set_key_state(key, true, window_ptr);
                     });
-                LRESULT(0)
+                //let DefWindowProc see sys keys so system behaviors (e.g. Alt+F4) still work
+                if m == WM_KEYDOWN {
+                    LRESULT(0)
+                } else {
+                    LRESULT(1)
+                }
             } else {
                 logwise::warn_sync!("Unknown key {key}", key = w_param.0);
                 LRESULT(1)
             }
         }
-        m if m == WM_KEYUP => {
-            if let Some(key) = KeyboardKey::from_vk(w_param.0) {
+        m if m == WM_KEYUP || m == WM_SYSKEYUP => {
+            if let Some(key) = KeyboardKey::from_vk(disambiguate_vk(w_param.0, l_param.0)) {
                 KEYBOARD_STATE
                     .get_or_init(Mutex::default)
                     .lock()
@@ -103,13 +111,61 @@ pub fn kbd_window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, _l_param: LPARAM) 
                     .apply_all(|shared| {
                         shared.set_key_state(key, false, window_ptr);
                     });
-                LRESULT(0)
+                if m == WM_KEYUP {
+                    LRESULT(0)
+                } else {
+                    LRESULT(1)
+                }
             } else {
                 logwise::warn_sync!("Unknown key {key}", key = w_param.0);
                 LRESULT(1)
             }
         }
+        m if m == WM_KILLFOCUS => {
+            //release events for keys held at focus loss go to the newly focused
+            //window, so they'd otherwise be stuck down forever
+            KEYBOARD_STATE
+                .get_or_init(Mutex::default)
+                .lock()
+                .unwrap()
+                .apply_all(|shared| shared.release_all_keys());
+            LRESULT(1) //let DefWindowProc also see it
+        }
         _ => LRESULT(1),
+    }
+}
+
+/**
+Key messages report the generic VK_SHIFT/VK_CONTROL/VK_MENU in wParam; the left/right
+variants must be recovered from the scancode/extended bit in lParam.
+*/
+fn disambiguate_vk(vk: usize, l_param: isize) -> usize {
+    const RIGHT_SHIFT_SCANCODE: isize = 0x36;
+    let scancode = (l_param >> 16) & 0xFF;
+    let extended = (l_param >> 24) & 0x1 != 0;
+    match vk {
+        v if v == VK_SHIFT.0 as usize => {
+            if scancode == RIGHT_SHIFT_SCANCODE {
+                VK_RSHIFT.0 as usize
+            } else {
+                VK_LSHIFT.0 as usize
+            }
+        }
+        v if v == VK_CONTROL.0 as usize => {
+            if extended {
+                VK_RCONTROL.0 as usize
+            } else {
+                VK_LCONTROL.0 as usize
+            }
+        }
+        v if v == VK_MENU.0 as usize => {
+            if extended {
+                VK_RMENU.0 as usize
+            } else {
+                VK_LMENU.0 as usize
+            }
+        }
+        v => v,
     }
 }
 
@@ -216,7 +272,7 @@ impl KeyboardKey {
             v if v == VK_RIGHT.0 as usize => Some(KeyboardKey::RightArrow),
             v if v == VK_DOWN.0 as usize => Some(KeyboardKey::DownArrow),
             v if v == VK_SELECT.0 as usize => Some(KeyboardKey::Select),
-            v if v == VK_PRINT.0 as usize => Some(KeyboardKey::KeypadMultiply),
+            //vk_print (legacy Print key) has no corresponding KeyboardKey
             //vk_execute?
             v if v == VK_SNAPSHOT.0 as usize => Some(KeyboardKey::PrintScreen),
             v if v == VK_INSERT.0 as usize => Some(KeyboardKey::Insert),
@@ -260,7 +316,7 @@ impl KeyboardKey {
             0x5A => Some(KeyboardKey::Z),
             v if v == VK_LWIN.0 as usize => Some(KeyboardKey::Command),
             v if v == VK_RWIN.0 as usize => Some(KeyboardKey::RightCommand),
-            v if v == VK_APPS.0 as usize => Some(KeyboardKey::Function),
+            v if v == VK_APPS.0 as usize => Some(KeyboardKey::ContextMenu),
             //vk_sleep?
             v if v == VK_NUMPAD0.0 as usize => Some(KeyboardKey::Keypad0),
             v if v == VK_NUMPAD1.0 as usize => Some(KeyboardKey::Keypad1),
@@ -338,7 +394,7 @@ impl KeyboardKey {
             v if VK_OEM_5.0 as usize == v => Some(KeyboardKey::Backslash),
             v if VK_OEM_6.0 as usize == v => Some(KeyboardKey::RightBracket),
             v if VK_OEM_7.0 as usize == v => Some(KeyboardKey::Quote),
-            v if VK_OEM_102.0 as usize == v => Some(KeyboardKey::Comma),
+            v if VK_OEM_102.0 as usize == v => Some(KeyboardKey::InternationalBackslash),
             //vk_processkey?
             //vk_packet?
             //vk_attn, crsel, excel, erase eof,
