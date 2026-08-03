@@ -314,7 +314,8 @@ impl Window {
     pub async fn default() -> Self {
         assert!(
             crate::application::is_main_thread_running(),
-            "Call app_window::application::run_main_thread"
+            "{}",
+            CALL_MAIN
         );
         Window {
             sys: crate::sys::Window::default().await,
