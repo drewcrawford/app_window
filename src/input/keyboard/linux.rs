@@ -325,6 +325,20 @@ pub fn wl_keyboard_event(_serial: u32, _time: u32, key: u32, state: u32, surface
     }
 }
 
+/**
+Call this from [WlKeyboard] dispatch for [wayland_client::protocol::wl_keyboard::Event::Leave] event.
+
+Wayland does not deliver release events for keys held when focus leaves the surface,
+so all keys are marked released.
+*/
+pub fn wl_keyboard_focus_leave() {
+    KEYBOARD_STATE
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap()
+        .apply_all(|shared| shared.release_all_keys());
+}
+
 impl Dispatch<WlKeyboard, ObjectId> for AppData {
     fn event(
         _state: &mut Self,

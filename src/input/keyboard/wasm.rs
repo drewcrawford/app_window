@@ -20,6 +20,7 @@ impl PlatformCoalescedKeyboard {
             move || {
                 let weak = Arc::downgrade(&shared);
                 let weak_up = weak.clone();
+                let weak_blur = weak.clone();
                 let window = web_sys::window().expect("no global window exists");
                 let document = window.document().expect("no document on window");
                 let keydown_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
@@ -58,6 +59,21 @@ impl PlatformCoalescedKeyboard {
                     )
                     .expect("Can't add event listener");
                 keyup_callback.forget();
+
+                //keyup for keys held when the page loses focus is never delivered,
+                //so clear all key state on blur
+                let blur_callback = Closure::wrap(Box::new(move || {
+                    if let Some(shared) = weak_blur.upgrade() {
+                        shared.release_all_keys();
+                    }
+                }) as Box<dyn FnMut()>);
+                window
+                    .add_event_listener_with_callback(
+                        "blur",
+                        blur_callback.as_ref().unchecked_ref(),
+                    )
+                    .expect("Can't add event listener");
+                blur_callback.forget();
 
                 PlatformCoalescedKeyboard {}
             },

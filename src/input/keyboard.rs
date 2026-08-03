@@ -176,6 +176,18 @@ impl Shared {
             .store(window_ptr, std::sync::atomic::Ordering::Relaxed);
         self.key_states[key as usize].store(state, std::sync::atomic::Ordering::Relaxed);
     }
+
+    /// Marks every key as released.
+    ///
+    /// Used when keyboard focus is lost: release events for keys held at that moment
+    /// are delivered to another window (or not at all), so they would otherwise be
+    /// stuck down forever.
+    #[allow(dead_code)] //not used on all platforms
+    fn release_all_keys(&self) {
+        for key in &self.key_states {
+            key.store(false, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
 }
 
 /// A cross-platform keyboard input handler.
