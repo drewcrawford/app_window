@@ -78,6 +78,10 @@ Call this to handle [wayland_protocols::xdg::shell::client::xdg_toplevel::Event:
 Call this from your wayland dispatch queue.
 */
 pub fn xdg_toplevel_configure_event(width: i32, height: i32) {
+    //zero means "client decides" per xdg-shell; it is not a real dimension
+    if width == 0 || height == 0 {
+        return;
+    }
     let mut lock = MOUSE_STATE.get_or_init(Mutex::default).lock().unwrap();
     lock.recent_window_width = Some(width);
     lock.recent_window_height = Some(height);
