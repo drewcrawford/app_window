@@ -10,16 +10,18 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt::Display;
 use std::num::NonZero;
-use windows::Win32::Foundation::{GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Foundation::{
+    ERROR_CLASS_ALREADY_EXISTS, GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM,
+};
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
-    GetSystemMetrics, IDC_ARROW, LoadCursorW, MSG, PM_NOREMOVE, PeekMessageW, PostQuitMessage,
-    PostThreadMessageW, RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, ShowWindow,
-    TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WM_SIZE, WM_USER, WNDCLASSEXW,
-    WS_OVERLAPPEDWINDOW, WS_POPUP,
+    GetSystemMetrics, HWND_MESSAGE, IDC_ARROW, LoadCursorW, MSG, PostMessageW, PostQuitMessage,
+    RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOWNORMAL, ShowWindow, TranslateMessage,
+    WINDOW_EX_STYLE, WINDOW_STYLE, WM_DESTROY, WM_SIZE, WM_USER, WNDCLASSEXW, WS_OVERLAPPEDWINDOW,
+    WS_POPUP,
 };
 use windows::core::{HSTRING, PCWSTR, w};
 
@@ -67,14 +69,77 @@ thread_local! {
     static HWND_IMPS: RefCell<HashMap<*mut c_void /* hwnd */, HwndImp>> = RefCell::new(HashMap::new());
 }
 
-pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
-    //need to create a message queue first
-    let mut message = MSG::default();
-    _ = unsafe { PeekMessageW(&mut message, None, WM_USER, WM_USER, PM_NOREMOVE) }; //create a message queue
-    //we don't care about the return value of PeekMessageW, it simply tells us if messages are available or not
+//The message-only window that receives WM_RUN_FUNCTION.  We post closures to a window
+//rather than via PostThreadMessageW because thread messages are silently discarded by
+//modal message loops (window move/size, menus, dialogs), which would leak the closure
+//and hang the awaiting future.
+static DISPATCH_HWND: std::sync::atomic::AtomicPtr<c_void> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
-    //now the queue is available so subsequent calls to PostMessageW will work
-    closure(); //I think it's ok to run inline on windows?
+extern "system" fn dispatch_window_proc(
+    hwnd: HWND,
+    msg: u32,
+    w_param: WPARAM,
+    l_param: LPARAM,
+) -> LRESULT {
+    match msg {
+        WM_RUN_FUNCTION => {
+            let as_usize = w_param.0;
+            let winclosure = unsafe { Box::from_raw(as_usize as *mut WinClosure) };
+            winclosure.0();
+            LRESULT(0)
+        }
+        _ => unsafe { DefWindowProcW(hwnd, msg, w_param, l_param) },
+    }
+}
+
+pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
+    //create the message-only dispatch window; this also creates the message queue
+    let instance = unsafe { GetModuleHandleW(PCWSTR::null()) }.expect("Can't get module");
+    let class_name = w!("app_window_main_dispatch");
+    let window_class = WNDCLASSEXW {
+        cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
+        style: Default::default(),
+        lpfnWndProc: Some(dispatch_window_proc),
+        cbClsExtra: 0,
+        cbWndExtra: 0,
+        hInstance: instance.into(),
+        hIcon: Default::default(),
+        hCursor: Default::default(),
+        hbrBackground: HBRUSH::default(),
+        lpszMenuName: PCWSTR::null(),
+        lpszClassName: class_name,
+        hIconSm: Default::default(),
+    };
+    let r = unsafe { RegisterClassExW(&window_class) };
+    assert_ne!(r, 0, "failed to register dispatch class: {:?}", unsafe {
+        GetLastError()
+    });
+    let dispatch_window = unsafe {
+        CreateWindowExW(
+            WINDOW_EX_STYLE(0),
+            class_name,
+            PCWSTR::null(),
+            WINDOW_STYLE(0),
+            0,
+            0,
+            0,
+            0,
+            Some(HWND_MESSAGE), //message-only window
+            None,
+            None,
+            None,
+        )
+    }
+    .expect("failed to create dispatch window");
+    DISPATCH_HWND.store(dispatch_window.0, std::sync::atomic::Ordering::Release);
+
+    //Run the closure on a secondary thread, like other platforms.  Running it inline
+    //would deadlock any closure that blocks on a future needing the main-thread
+    //message loop (e.g. the documented `block_on(Window::default())` pattern),
+    //since the loop below wouldn't be running yet.
+    std::thread::spawn(closure);
+    let mut message = MSG::default();
     loop {
         let message_ret = unsafe { GetMessageW(&mut message, None, 0, 0) };
         if message_ret.0 == 0 {
@@ -82,20 +147,11 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
         } else if message_ret.0 == -1 {
             panic!("GetMessageW failed");
         }
-        match message.message {
-            WM_RUN_FUNCTION => {
-                let as_usize = message.wParam.0;
-                let winclosure = unsafe { Box::from_raw(as_usize as *mut WinClosure) };
-                winclosure.0();
-            }
-            _ => {
-                unsafe {
-                    //ms code seems to ignore this return value in practice
-                    //see https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessage
-                    _ = TranslateMessage(&message);
-                    DispatchMessageW(&message);
-                }
-            }
+        unsafe {
+            //ms code seems to ignore this return value in practice
+            //see https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getmessage
+            _ = TranslateMessage(&message);
+            DispatchMessageW(&message);
         }
     }
 }
@@ -104,15 +160,17 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let boxed_closure = Box::new(WinClosure(Box::new(closure)));
     let closure_ptr = Box::into_raw(boxed_closure) as *mut ();
     let as_usize = closure_ptr as usize;
-    unsafe {
-        PostThreadMessageW(
-            main_thread_id(),
-            WM_RUN_FUNCTION,
-            WPARAM(as_usize),
-            LPARAM(0),
-        )
-    }
-    .expect("PostThreadMessageW failed");
+    //The dispatch window is created slightly after IS_MAIN_THREAD_RUNNING is set;
+    //briefly wait for it rather than failing.
+    let hwnd = loop {
+        let ptr = DISPATCH_HWND.load(std::sync::atomic::Ordering::Acquire);
+        if !ptr.is_null() {
+            break HWND(ptr);
+        }
+        std::thread::yield_now();
+    };
+    unsafe { PostMessageW(Some(hwnd), WM_RUN_FUNCTION, WPARAM(as_usize), LPARAM(0)) }
+        .expect("PostMessageW failed");
 }
 
 pub fn stop_main_thread() {
@@ -148,13 +206,29 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: L
             let width = (l_param.0 as u32 & 0xFFFF) as i32; // LOWORD(lParam)
             let height = ((l_param.0 as u32 >> 16) & 0xFFFF) as i32; // HIWORD(lParam)
             let size = Size::new(width as f64, height as f64);
-            HWND_IMPS.with_borrow_mut(|c| {
-                let entry = c.entry(hwnd.0).or_default();
-                if let Some(f) = entry.size_notify.as_ref() {
-                    f(size)
-                }
-            });
+            //take the callback out of the map before calling it: window procs are
+            //re-entrant on the same thread, and a callback that sends a message
+            //would otherwise hit a nested RefCell borrow (panic → abort).
+            let notify =
+                HWND_IMPS.with_borrow_mut(|c| c.entry(hwnd.0).or_default().size_notify.take());
+            if let Some(f) = notify {
+                f(size);
+                HWND_IMPS.with_borrow_mut(|c| {
+                    let entry = c.entry(hwnd.0).or_default();
+                    //don't clobber a callback registered during the call
+                    if entry.size_notify.is_none() {
+                        entry.size_notify = Some(f);
+                    }
+                });
+            }
             LRESULT(0)
+        }
+        m if m == WM_DESTROY => {
+            //drop any registered callback so the entry can't fire for a recycled HWND
+            HWND_IMPS.with_borrow_mut(|c| {
+                c.remove(&hwnd.0);
+            });
+            unsafe { DefWindowProcW(hwnd, msg, w_param, l_param) }
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, w_param, l_param) },
     }
@@ -164,7 +238,7 @@ fn create_window_impl(position: Position, size: Size, title: String, style: WIND
     let cursor =
         unsafe { LoadCursorW(Some(HINSTANCE::default()), IDC_ARROW) }.expect("Can't load cursor");
     let winstr: HSTRING = title.into();
-    let class_name = w!("raw_input_debug_window");
+    let class_name = w!("app_window_window");
     let window_class = WNDCLASSEXW {
         cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
         style: Default::default(),
@@ -180,9 +254,16 @@ fn create_window_impl(position: Position, size: Size, title: String, style: WIND
         hIconSm: Default::default(),
     };
     let r = unsafe { RegisterClassExW(&window_class) };
-    assert_ne!(r, 0, "failed to register window class: {:?}", unsafe {
-        GetLastError()
-    });
+    if r == 0 {
+        //the class persists for the process lifetime, so a second window
+        //re-registers it; that's fine
+        let err = unsafe { GetLastError() };
+        assert_eq!(
+            err, ERROR_CLASS_ALREADY_EXISTS,
+            "failed to register window class: {:?}",
+            err
+        );
+    }
 
     let window = unsafe {
         CreateWindowExW(
