@@ -27,15 +27,14 @@ use std::thread;
 #[cfg(target_arch = "wasm32")]
 use wasm_lite_std as thread;
 
-//for the time being, wasm_thread only works in browser
+//wasm_lite's runner always drives a real browser
 //see https://github.com/rustwasm/wasm-bindgen/issues/4534,
-//though we also need wasm_thread support.
+//and threading comes from wasm_lite_std.
 
 fn main() {
     test_executors::sleep_on(test())
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
 async fn test() {
     let (s, r) = std::sync::mpsc::channel();
     let (s2, r2) = r#continue::continuation();
@@ -51,4 +50,13 @@ async fn test() {
         s2.send(());
     });
     r2.await;
+}
+
+// The native `main` above drives this with `sleep_on`. On wasm the body
+// cannot block, so a `#[wasm_lite_test]` entry point hands it to
+// `async_doctest!`, which defers the verdict until the future settles.
+#[cfg(target_arch = "wasm32")]
+#[wasm_lite::wasm_lite_test]
+fn wasm_main_closure_executes() {
+    wasm_lite_std::async_doctest!(test());
 }

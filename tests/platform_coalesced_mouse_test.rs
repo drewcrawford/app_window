@@ -38,28 +38,30 @@ fn main() {
 fn main() {}
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen_test::wasm_bindgen_test]
-async fn wasm_main() {
-    assert!(app_window::application::is_main_thread());
+#[wasm_lite::wasm_lite_test]
+fn wasm_main() {
+    wasm_lite_std::async_doctest!(async {
+        assert!(app_window::application::is_main_thread());
 
-    let (c, r) = r#continue::continuation();
+        let (c, r) = r#continue::continuation();
 
-    app_window::application::main(move || {
-        logwise::warn_sync!("=== PlatformCoalescedMouse Non-Main Thread Test ===");
+        app_window::application::main(move || {
+            logwise::warn_sync!("=== PlatformCoalescedMouse Non-Main Thread Test ===");
 
-        let t = Task::without_notifications(
-            "platform_coalesced_mouse_test".to_string(),
-            Configuration::default(),
-            async move {
-                logwise::info_sync!("WASM main thread started");
-                test_platform_coalesced_mouse_creation().await;
-                c.send(());
-            },
-        );
-        t.spawn_static_current();
+            let t = Task::without_notifications(
+                "platform_coalesced_mouse_test".to_string(),
+                Configuration::default(),
+                async move {
+                    logwise::info_sync!("WASM main thread started");
+                    test_platform_coalesced_mouse_creation().await;
+                    c.send(());
+                },
+            );
+            t.spawn_static_current();
+        });
+
+        r.await;
     });
-
-    r.await;
 }
 
 async fn test_platform_coalesced_mouse_creation() {

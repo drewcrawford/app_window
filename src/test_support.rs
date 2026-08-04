@@ -71,7 +71,7 @@ doctests generally pick one of two execution models:
 This function implements a version of `main` that works in both cases.
 It brings up a temporary main thread environment for the duration of the test.
 
-Note: wasm_thread does not generally work in node.js, so you may need to run your tests in a browser.
+Note: wasm_lite's runner always drives a real browser, so there is no Node case to work around.
 
 ```
 #[cfg(target_arch = "wasm32")] {

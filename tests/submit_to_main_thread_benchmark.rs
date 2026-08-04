@@ -130,28 +130,30 @@ fn main() {
 fn main() {}
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen_test::wasm_bindgen_test]
-async fn wasm_main() {
-    assert!(app_window::application::is_main_thread());
-    let (c, r) = r#continue::continuation();
-    logwise::info_sync!("WILL call main thread");
-    app_window::application::main(move || {
-        logwise::warn_sync!("=== submit_to_main_thread_benchmark ===");
+#[wasm_lite::wasm_lite_test]
+fn wasm_main() {
+    wasm_lite_std::async_doctest!(async {
+        assert!(app_window::application::is_main_thread());
+        let (c, r) = r#continue::continuation();
+        logwise::info_sync!("WILL call main thread");
+        app_window::application::main(move || {
+            logwise::warn_sync!("=== submit_to_main_thread_benchmark ===");
 
-        let t = Task::without_notifications(
-            "submit_to_main_thread_benchmark".to_string(),
-            Configuration::default(),
-            async move {
-                logwise::info_sync!("WASM main thread started");
-                run_benchmark().await;
-                c.send(());
-            },
-        );
-        t.spawn_static_current();
+            let t = Task::without_notifications(
+                "submit_to_main_thread_benchmark".to_string(),
+                Configuration::default(),
+                async move {
+                    logwise::info_sync!("WASM main thread started");
+                    run_benchmark().await;
+                    c.send(());
+                },
+            );
+            t.spawn_static_current();
+        });
+        logwise::info_sync!("Awaiting benchmark completion...");
+        r.await;
+        logwise::info_sync!("Benchmark completed, exiting...");
     });
-    logwise::info_sync!("Awaiting benchmark completion...");
-    r.await;
-    logwise::info_sync!("Benchmark completed, exiting...");
 }
 
 async fn run_benchmark() {

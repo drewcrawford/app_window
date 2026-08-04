@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
-use wasm_bindgen_test::wasm_bindgen_test_configure;
-
-//at the moment, wasm_thread does not work in node
+//wasm_lite's runner always drives a real browser, so there is nothing to
+//configure and no Node case to exclude.
 
 #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
 fn main() {
