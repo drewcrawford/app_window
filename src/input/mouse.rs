@@ -30,6 +30,20 @@ use atomic_float::AtomicF64;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
+// Not `std::sync::Mutex` for `Shared::window`: it is written from the DOM
+// `mousemove` handler, which is the **browser main thread**, and read from
+// whatever thread polls `window_pos` (in Metropolis, the input loop, on a
+// worker, at ~100 Hz). A contended `std::sync::Mutex` on the main thread is
+// `memory.atomic.wait32`, which traps there.
+//
+// Worth stating because a headless soak cannot find this one: with no pointer
+// device, `set_window_location` is never called, so the main thread never takes
+// the lock. It needs a real mouse over a real page.
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Mutex;
+#[cfg(target_arch = "wasm32")]
+use wasm_lite_std::Mutex;
+
 /// Mouse button constant for the left mouse button.
 ///
 /// # Examples
@@ -195,7 +209,7 @@ impl MouseWindowLocation {
 
 #[derive(Debug)]
 struct Shared {
-    window: std::sync::Mutex<Option<MouseWindowLocation>>,
+    window: Mutex<Option<MouseWindowLocation>>,
 
     //256 so any u8 button id is a valid index
     buttons: [AtomicBool; 256],
@@ -206,11 +220,26 @@ struct Shared {
 impl Shared {
     fn new() -> Self {
         Shared {
-            window: std::sync::Mutex::new(None),
+            window: Mutex::new(None),
             buttons: [const { AtomicBool::new(false) }; 256],
             scroll_delta_x: AtomicF64::new(0.0),
             scroll_delta_y: AtomicF64::new(0.0),
             last_window: AtomicPtr::new(std::ptr::null_mut()),
+        }
+    }
+
+    /// Acquire `window`, by whichever means this target allows.
+    ///
+    /// See the `Mutex` import above for why this is not just `.lock().unwrap()`.
+    #[inline]
+    fn window_lock(&self) -> impl std::ops::DerefMut<Target = Option<MouseWindowLocation>> + '_ {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.window.lock().unwrap()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.window.lock_sync()
         }
     }
 
@@ -219,7 +248,7 @@ impl Shared {
             "Set mouse window location {location}",
             location = logwise::privacy::LogIt(&location)
         );
-        *self.window.lock().unwrap() = Some(location);
+        *self.window_lock() = Some(location);
         self.last_window.store(
             location.window.map(|e| e.0.as_ptr()).unwrap_or_default(),
             Ordering::Relaxed,
@@ -322,7 +351,7 @@ impl Mouse {
         You may need to create a window first, using APIs in this crate.
     */
     pub fn window_pos(&self) -> Option<MouseWindowLocation> {
-        *self.shared.window.lock().unwrap()
+        *self.shared.window_lock()
     }
 
     /// Determines if the specified mouse button is currently pressed.
