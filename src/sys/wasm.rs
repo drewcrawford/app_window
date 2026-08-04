@@ -9,9 +9,24 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
+
+// Not `std::sync::Mutex` for `SharedSizeCallback`: it is read inside the
+// `onresize` handler, which is the **browser main thread**, and written by
+// `Surface::size_update` from whatever thread drives rendering (a worker, in
+// practice). A contended `std::sync::Mutex` on the main thread is
+// `memory.atomic.wait32`, which traps there.
+//
+// Like the mouse-location lock, no headless test can reach this: nothing
+// resizes the window, so the handler never runs.
+//
+// The import is crate-wide in this module, so the fullscreen one-shot senders
+// below use it too. Those are main-thread-only and effectively uncontended (one
+// of the two promise callbacks fires), so it changes nothing for them beyond
+// consistency.
 use wasm_lite::Closure;
 use wasm_lite::dom::{Element, window};
+use wasm_lite_std::Mutex;
 
 #[derive(Debug)]
 pub struct Window {}
@@ -73,7 +88,8 @@ impl CanvasHolder {
                     // Fully qualified: the enclosing scope binds `window` to a
                     // `Window` value, which would shadow the function.
                     let w = wasm_lite::dom::window().expect("No window?");
-                    if let Some(closure) = move_closure_box.lock().unwrap().as_ref() {
+                    // `lock_sync`: spins on the main thread, blocks on a worker.
+                    if let Some(closure) = move_closure_box.lock_sync().as_ref() {
                         closure(Size::new(w.inner_width(), w.inner_height()));
                     }
                 }
@@ -114,12 +130,12 @@ impl Window {
         let main_thread_job =
             crate::application::on_main_thread("Window::fullscreen".to_string(), move || {
                 let strong_closure = Closure::new_with_arg(move |_| {
-                    if let Some(lock) = sender_mutex.lock().unwrap().take() {
+                    if let Some(lock) = sender_mutex.lock_sync().take() {
                         lock.send(Ok(()));
                     }
                 });
                 let error_closure = Closure::new_with_arg(move |a: wasm_lite::JsValue| {
-                    if let Some(lock) = sender_mutex_error.lock().unwrap().take() {
+                    if let Some(lock) = sender_mutex_error.lock_sync().take() {
                         // `Display` renders the rejection the way JS would; the
                         // old code cast it to a `TypeError` first, which was an
                         // unchecked cast to a type it might not have been.
@@ -343,6 +359,6 @@ impl Surface {
     Run the attached callback when size changes.
     */
     pub fn size_update<F: Fn(Size) + Send + 'static>(&mut self, update: F) {
-        self.closure_box.0.lock().unwrap().replace(Box::new(update));
+        self.closure_box.0.lock_sync().replace(Box::new(update));
     }
 }
