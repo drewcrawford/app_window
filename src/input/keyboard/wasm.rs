@@ -3,8 +3,8 @@ use crate::input::keyboard::Shared;
 use crate::input::keyboard::key::KeyboardKey;
 use std::ffi::c_void;
 use std::sync::Arc;
-use wasm_bindgen::prelude::*;
-use web_sys::KeyboardEvent;
+use wasm_lite::Closure;
+use wasm_lite::dom::{KeyboardEvent, window};
 
 #[derive(Debug)]
 pub(super) struct PlatformCoalescedKeyboard {}
@@ -21,10 +21,10 @@ impl PlatformCoalescedKeyboard {
                 let weak = Arc::downgrade(&shared);
                 let weak_up = weak.clone();
                 let weak_blur = weak.clone();
-                let window = web_sys::window().expect("no global window exists");
+                let window = window().expect("no global window exists");
                 let document = window.document().expect("no document on window");
-                let keydown_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-                    let code = event.code();
+                let keydown_callback = Closure::new_with_arg(move |event| {
+                    let code = KeyboardEvent::from_js(event).code();
 
                     if let Some(shared) = weak.upgrade() {
                         //ignore keys we can't map; panicking here would abort the wasm module
@@ -32,46 +32,35 @@ impl PlatformCoalescedKeyboard {
                             shared.set_key_state(key, true, ARBITRARY_WINDOW_PTR);
                         }
                     }
-                })
-                    as Box<dyn FnMut(KeyboardEvent)>);
+                });
                 document
-                    .add_event_listener_with_callback(
-                        "keydown",
-                        keydown_callback.as_ref().unchecked_ref(),
-                    )
+                    .add_event_listener("keydown", keydown_callback.as_js_value())
                     .expect("Can't add event listener");
                 keydown_callback.forget();
 
-                let keyup_callback = Closure::wrap(Box::new(move |event: KeyboardEvent| {
-                    let code = event.code();
+                let keyup_callback = Closure::new_with_arg(move |event| {
+                    let code = KeyboardEvent::from_js(event).code();
                     if let Some(shared) = weak_up.upgrade() {
                         //ignore keys we can't map; panicking here would abort the wasm module
                         if let Some(key) = KeyboardKey::from_js_code(&code) {
                             shared.set_key_state(key, false, ARBITRARY_WINDOW_PTR);
                         }
                     }
-                })
-                    as Box<dyn FnMut(KeyboardEvent)>);
+                });
                 document
-                    .add_event_listener_with_callback(
-                        "keyup",
-                        keyup_callback.as_ref().unchecked_ref(),
-                    )
+                    .add_event_listener("keyup", keyup_callback.as_js_value())
                     .expect("Can't add event listener");
                 keyup_callback.forget();
 
                 //keyup for keys held when the page loses focus is never delivered,
                 //so clear all key state on blur
-                let blur_callback = Closure::wrap(Box::new(move || {
+                let blur_callback = Closure::new_with_arg(move |_event| {
                     if let Some(shared) = weak_blur.upgrade() {
                         shared.release_all_keys();
                     }
-                }) as Box<dyn FnMut()>);
+                });
                 window
-                    .add_event_listener_with_callback(
-                        "blur",
-                        blur_callback.as_ref().unchecked_ref(),
-                    )
+                    .add_event_listener("blur", blur_callback.as_js_value())
                     .expect("Can't add event listener");
                 blur_callback.forget();
 

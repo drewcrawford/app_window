@@ -47,15 +47,15 @@ swift-rs = { version = "1.0.7", features = ["build"] }
 
 # wasm32
 [target.'cfg(target_arch="wasm32")'.dependencies]
-web-sys = { version = "0.3.85", features=["CssStyleDeclaration","HtmlCanvasElement","KeyboardEvent","Window","Document","MouseEvent","WheelEvent","WorkerGlobalScope"] }
-wasm-bindgen = "0.2.108"
-wasm-bindgen-futures = "0.4.58"
+# Replaces web-sys/wasm-bindgen/wasm-bindgen-futures: the DOM surface this crate
+# needs is `wasm_lite::dom`. No feature list, because the bindings are
+# hand-written rather than generated per-interface.
+wasm_lite = { path = "../wasm_lite/crates/wasm_lite" }
 continue_stream = "0.1.0"
 
-
-[target.'cfg(target_arch="wasm32")'.dev-dependencies]
-console_error_panic_hook = "0.1.7"
-wasm_lite = { path = "../wasm_lite/crates/wasm_lite" }
+# `wasm_lite` is a real dependency now (above), so #[wasm_lite_test] needs no
+# dev-dependency of its own. `console_error_panic_hook` is replaced by
+# `wasm_lite::set_panic_hook`.
 
 
 # windows
@@ -118,6 +118,13 @@ path = "tests/platform_coalesced_keyboard_test.rs"
 harness = false
 
 [patch.crates-io]
+# `continue_stream` is migrated to wasm_lite in its own checkout and still
+# published against wasm_safe_thread; without this the published version walks
+# wasm-bindgen back into the wasm32 graph and the runner refuses the test module.
+continue_stream = { path = "../continue_stream" }
+# Likewise `send_cells`: this crate uses it for `SendCell<HWND>` on Win32 and it
+# is migrated locally, but the published 0.2.2 still depends on wasm_safe_thread.
+send_cells = { path = "../send_cells" }
 # Dev-cycle self-patch (NEEDS_REVIEW §32): the published test_executors expands
 # #[async_test] to #[wasm_bindgen_test], so the wasm32 test target does not
 # compile here without this. The rest come along because the Instant flag-day is

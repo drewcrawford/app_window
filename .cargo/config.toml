@@ -3,25 +3,40 @@
 build-std = ["std", "panic_abort"]
 
 [target.'cfg(target_arch="wasm32")']
-runner = "wasm-server-runner"
+# The wasm_lite runner. This crate's DOM surface is `wasm_lite::dom` now, so the
+# test binary is no longer a wasm-bindgen interop module (which the runner
+# refuses). `wgpu` still is one — it is on the shim track, not this one — which
+# is why the `gpu` example is not run this way.
+runner = "../wasm_lite/target/debug/runner"
+
+# The two wasm-bindgen workarounds that used to be here left with it:
+# `--export=__heap_base` (its threading pass injected thread ids) and
+# `-Csymbol-mangling-version=legacy` (its duplicate-declaration bug, #4820).
 rustflags = [
-    "-C", "target-feature=+atomics",
-    # see https://github.com/rustwasm/wasm-bindgen/issues/4727
-    # and https://github.com/rust-lang/rust/pull/147225
-    "-Clink-arg=--shared-memory",
-    # 4GB
-    "-Clink-arg=--max-memory=4294967296",
-    "-Clink-arg=--import-memory",
-    "-Clink-arg=--export=__wasm_init_tls",
-    "-Clink-arg=--export=__tls_size",
-    "-Clink-arg=--export=__tls_align",
-    "-Clink-arg=--export=__tls_base",
-    # wasm-bindgen's threading pass needs __heap_base to inject thread ids
-    "-Clink-arg=--export=__heap_base",
-    # Workaround for wasm-bindgen duplicate function declarations with v0 mangling
-    # see https://github.com/rustwasm/wasm-bindgen/issues/4820
-    "-Csymbol-mangling-version=legacy",
-    "-Zunstable-options"
+    "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
+    "-C", "link-arg=--shared-memory",
+    "-C", "link-arg=--max-memory=1073741824",
+    "-C", "link-arg=--import-memory",
+    "-C", "link-arg=--export=__stack_pointer",
+    "-C", "link-arg=--export=__wasm_init_tls",
+    "-C", "link-arg=--export=__tls_size",
+    "-C", "link-arg=--export=__tls_align",
+    "-C", "link-arg=--export=__tls_base",
+]
+
+# cfg() predicates do not apply to rustdoc flags, so doctests need the exact
+# triple to get the same shared-memory build.
+[target.wasm32-unknown-unknown]
+rustdocflags = [
+    "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
+    "-C", "link-arg=--shared-memory",
+    "-C", "link-arg=--max-memory=1073741824",
+    "-C", "link-arg=--import-memory",
+    "-C", "link-arg=--export=__stack_pointer",
+    "-C", "link-arg=--export=__wasm_init_tls",
+    "-C", "link-arg=--export=__tls_size",
+    "-C", "link-arg=--export=__tls_align",
+    "-C", "link-arg=--export=__tls_base",
 ]
 
 [target.'cfg(test)']

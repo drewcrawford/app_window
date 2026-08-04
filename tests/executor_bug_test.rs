@@ -28,7 +28,14 @@ use std::time::Duration;
 #[cfg(target_arch = "wasm32")]
 use wasm_lite_std::time::Duration;
 
+// `std::thread` on wasm32-unknown-unknown is unimplemented: `spawn` returns
+// `Unsupported` and `sleep` panics. The suite silently "passed" for exactly that
+// reason — the spawn failed, so none of the four tests below ever ran. Use the
+// veneer that works there.
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
+#[cfg(target_arch = "wasm32")]
+use wasm_lite_std as thread;
 
 fn main() {
     println!("=== Testing Main Thread Executor Nested Submission Bug ===\n");
@@ -129,7 +136,7 @@ fn test_nested_main_thread_submit_bug() -> bool {
         );
 
         // Wait a bit for async execution to complete
-        std::thread::sleep(Duration::from_millis(3000));
+        thread::sleep(Duration::from_millis(3000));
 
         // Check results
         let final_count = completion_counter.load(Ordering::Relaxed);
@@ -205,7 +212,7 @@ fn test_deep_nested_submissions() -> bool {
         create_nested_task(0, max_depth, completion_counter.clone());
 
         // Wait for completion
-        std::thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(200));
         let final_count = completion_counter.load(Ordering::Relaxed);
 
         println!(
@@ -270,7 +277,7 @@ fn test_debug_output_pattern() -> bool {
             },
         );
 
-        std::thread::sleep(Duration::from_millis(50));
+        thread::sleep(Duration::from_millis(50));
 
         let mut result = test_result_clone.lock().unwrap();
         *result = Some(true); // Test completed
@@ -320,7 +327,7 @@ fn test_concurrent_submissions() -> bool {
             });
         }
 
-        std::thread::sleep(Duration::from_millis(300));
+        thread::sleep(Duration::from_millis(300));
         let final_count = completion_counter.load(Ordering::Relaxed);
 
         println!(

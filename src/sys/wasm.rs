@@ -10,12 +10,8 @@ use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, OnceLock};
-use wasm_bindgen::closure::Closure;
-use wasm_bindgen::prelude::wasm_bindgen;
-use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::js_sys::Promise;
-use web_sys::js_sys::TypeError;
-use web_sys::{HtmlCanvasElement, window};
+use wasm_lite::Closure;
+use wasm_lite::dom::{Element, window};
 
 #[derive(Debug)]
 pub struct Window {}
@@ -35,12 +31,11 @@ static MAIN_THREAD_SENDER: OnceLock<continue_stream::Sender<MainThreadEvent>> = 
 
 struct CanvasHolder {
     handle: WebWindowHandle,
-    canvas: Rc<HtmlCanvasElement>,
+    canvas: Rc<Element>,
     closure_box: SharedSizeCallback,
 }
 impl CanvasHolder {
     fn new_main() -> CanvasHolder {
-        use web_sys::wasm_bindgen::__rt::IntoJsResult;
         let closure_box: SharedSizeCallback = Arc::new(Mutex::new(None));
         let move_closure_box = closure_box.clone();
 
@@ -48,14 +43,14 @@ impl CanvasHolder {
 
         let document = window.document().expect("Can't get document");
 
-        let element = document
+        // One `Element`, so no casts: web-sys needed `Element` -> `HtmlElement`
+        // -> `HtmlCanvasElement` to reach `style()` and `set_attribute`, and
+        // none of those steps did anything at runtime.
+        let canvas = document
             .create_element("canvas")
             .expect("Can't create canvas");
-        let html_element = web_sys::HtmlElement::from(
-            element.into_js_result().expect("Can't create html element"),
-        );
 
-        let style = html_element.style();
+        let style = canvas.style();
         style
             .set_property("width", "100vw")
             .expect("Can't set width");
@@ -63,46 +58,34 @@ impl CanvasHolder {
             .set_property("height", "100vh")
             .expect("Can't set height");
 
-        let canvas = web_sys::HtmlCanvasElement::from(
-            html_element.into_js_result().expect("Can't get canvas"),
-        );
         canvas
             .set_attribute("data-raw-handle", "1")
             .expect("Can't set data-raw-handle");
         let canvas_rc = Rc::new(canvas);
         let canvas_weak = Rc::downgrade(&canvas_rc);
-        let closure = Closure::<dyn FnMut()>::new(move || {
+        let closure = Closure::new(move || {
             match canvas_weak.upgrade() {
                 None => { /* deallocated? */ }
                 Some(_canvas) => {
                     //report the window's logical size, matching size_scale/size_main.
                     //The canvas width/height attributes are the buffer size, which this
                     //crate never sets, so reading them would report a stale/default size.
-                    let w = web_sys::window().expect("No window?");
-                    let width = w
-                        .inner_width()
-                        .expect("No width?")
-                        .as_f64()
-                        .expect("No width?");
-                    let height = w
-                        .inner_height()
-                        .expect("No height?")
-                        .as_f64()
-                        .expect("No height?");
+                    // Fully qualified: the enclosing scope binds `window` to a
+                    // `Window` value, which would shadow the function.
+                    let w = wasm_lite::dom::window().expect("No window?");
                     if let Some(closure) = move_closure_box.lock().unwrap().as_ref() {
-                        closure(Size::new(width, height));
+                        closure(Size::new(w.inner_width(), w.inner_height()));
                     }
                 }
             }
         });
 
-        //I think this is safe??
-        window.set_onresize(Some(closure.as_ref().unchecked_ref()));
+        window.set_onresize(Some(closure.as_js_value()));
         closure.forget();
 
         document
             .body()
-            .unwrap()
+            .expect("Can't get body")
             .append_child(canvas_rc.as_ref())
             .expect("Can't append canvas to body");
         CanvasHolder {
@@ -123,13 +106,6 @@ impl Display for FullscreenError {
 }
 impl Error for FullscreenError {}
 
-#[wasm_bindgen]
-extern "C" {
-    type Element2;
-    #[wasm_bindgen::prelude::wasm_bindgen(method,js_class="Element",js_name=requestFullscreen)]
-    fn request_fullscreen_2(this: &Element2) -> Promise;
-}
-
 impl Window {
     pub async fn fullscreen(title: String) -> Result<Self, FullscreenError> {
         let (sender, fut) = r#continue::continuation();
@@ -137,28 +113,37 @@ impl Window {
         let sender_mutex_error = sender_mutex.clone();
         let main_thread_job =
             crate::application::on_main_thread("Window::fullscreen".to_string(), move || {
-                let strong_closure = Closure::once(move |_| {
-                    let lock = sender_mutex.lock().unwrap().take().expect("already sent?");
-                    lock.send(Ok(()));
+                let strong_closure = Closure::new_with_arg(move |_| {
+                    if let Some(lock) = sender_mutex.lock().unwrap().take() {
+                        lock.send(Ok(()));
+                    }
                 });
-                let error_closure = Closure::once(move |a: JsValue| {
-                    let lock = sender_mutex_error
-                        .lock()
-                        .unwrap()
-                        .take()
-                        .expect("already sent?");
-                    let a_typeerror: TypeError = a.unchecked_into();
-                    let a_string = a_typeerror.to_string();
-
-                    lock.send(Err(ToString::to_string(&a_string)));
+                let error_closure = Closure::new_with_arg(move |a: wasm_lite::JsValue| {
+                    if let Some(lock) = sender_mutex_error.lock().unwrap().take() {
+                        // `Display` renders the rejection the way JS would; the
+                        // old code cast it to a `TypeError` first, which was an
+                        // unchecked cast to a type it might not have been.
+                        lock.send(Err(a.to_string()));
+                    }
                 });
                 let window = window().expect("Can't get window");
                 let doc = window.document().expect("Can't get document");
                 let canvas = CanvasHolder::new_main();
-                let as_element_2: &Element2 = canvas.canvas.as_ref().unchecked_ref();
                 doc.set_title(&title);
-                let promise = as_element_2.request_fullscreen_2();
-                drop(promise.then2(&strong_closure, &error_closure));
+                match canvas.canvas.request_fullscreen() {
+                    Ok(promise) => {
+                        drop(promise_then2(
+                            &promise,
+                            strong_closure.as_js_value(),
+                            error_closure.as_js_value(),
+                        ));
+                    }
+                    // Fullscreen refused before it even returned a promise.
+                    // Report through the same channel the rejection would use.
+                    Err(e) => {
+                        error_closure_call(error_closure.as_js_value(), &e);
+                    }
+                }
                 CANVAS_HOLDER.replace(Some(canvas));
                 SendCell::new((strong_closure, error_closure))
             });
@@ -209,43 +194,17 @@ impl Window {
     }
 }
 
+/// Whether this is the browser main thread.
+///
+/// One `instanceof Window`, where web-sys needed two downcasts plus a
+/// `Reflect`-based Node probe. Node was never supported on this path — the
+/// probe existed only to produce a better panic — and wasm_lite does not target
+/// Node at all, so the whole branch is gone: a worker answers `false`, and
+/// anything else has no `Window`, which is the same answer.
 pub fn is_main_thread() -> bool {
-    let g = web_sys::js_sys::global();
-
-    // Browser: main thread vs Web Worker
-    if g.dyn_ref::<web_sys::Window>().is_some() {
-        return true;
-    }
-    if g.dyn_ref::<web_sys::WorkerGlobalScope>().is_some() {
-        return false;
-    }
-
-    // Node was answered here via an `inline_js` shim calling
-    // `require('node:worker_threads').isMainThread`. wasm_lite cannot express
-    // that and does not target Node. Say so rather than guessing.
-    if is_node_env(&g) {
-        panic!("app_window on wasm_lite does not support Node; run in a browser");
-    }
-
-    // Unknown host
-    panic!("Unknown global object type: {:?}", g);
+    wasm_lite::dom::is_main_thread()
 }
 
-fn is_node_env(g: &wasm_bindgen::JsValue) -> bool {
-    // typeof process === 'object' && !!process?.versions?.node
-    if let Ok(process) = web_sys::js_sys::Reflect::get(g, &"process".into())
-        && !process.is_undefined()
-        && !process.is_null()
-        && let Ok(versions) = web_sys::js_sys::Reflect::get(&process, &"versions".into())
-        && let Ok(node) = web_sys::js_sys::Reflect::get(&versions, &"node".into())
-    {
-        return !node.is_undefined() && !node.is_null();
-    }
-    false
-}
-
-// --- Node (CommonJS): synchronous path ---
-// Uses `require('node:worker_threads').isMainThread` if `require` exists.
 pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let (sender, receiver) = continue_stream::continuation();
 
@@ -291,7 +250,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
             }
         }
     });
-    wasm_bindgen_futures::spawn_local(apply_context);
+    wasm_lite_std::spawn_local(apply_context);
 }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
@@ -315,9 +274,30 @@ pub fn stop_main_thread() {
 pub async fn alert(message: String) {
     crate::application::on_main_thread("alert".to_string(), move || {
         let window = window().expect("Can't get window");
-        window.alert_with_message(&message).expect("Alert failed");
+        window.alert(&message).expect("Alert failed");
     })
     .await
+}
+
+mod promise {
+    use wasm_lite::JsValue;
+    wasm_lite::import! {
+        "Promise" {
+            /// `promise.then(onFulfilled, onRejected)`.
+            fn then2(this: &JsValue, on_ok: &JsValue, on_err: &JsValue) -> JsValue as "then";
+        }
+        "Function" {
+            /// `f.call(undefined, arg)` — used to report a synchronous
+            /// fullscreen refusal through the same closure the rejection would.
+            fn call1(this: &JsValue, this_arg: &JsValue, arg: &JsValue) -> JsValue as "call";
+        }
+    }
+}
+
+use promise::then2 as promise_then2;
+
+fn error_closure_call(closure: &wasm_lite::JsValue, error: &wasm_lite::JsValue) {
+    promise::call1(closure, &wasm_lite::JsValue::UNDEFINED, error);
 }
 
 #[derive(Clone)]
@@ -337,38 +317,20 @@ impl Surface {
     pub async fn size_scale(&self) -> (Size, f64) {
         crate::application::on_main_thread("size_scale".to_string(), || {
             let w = window().expect("No window?");
-            let width = w
-                .inner_width()
-                .expect("No width?")
-                .as_f64()
-                .expect("No width?");
-            let height = w
-                .inner_height()
-                .expect("No height?")
-                .as_f64()
-                .expect("No height?");
-            let px = w.device_pixel_ratio();
-
-            (Size::new(width, height), px)
+            (
+                Size::new(w.inner_width(), w.inner_height()),
+                w.device_pixel_ratio(),
+            )
         })
         .await
     }
 
     pub fn size_main(&self) -> (Size, f64) {
         let w = window().expect("No window?");
-        let width = w
-            .inner_width()
-            .expect("No width?")
-            .as_f64()
-            .expect("No width?");
-        let height = w
-            .inner_height()
-            .expect("No height?")
-            .as_f64()
-            .expect("No height?");
-        let px = w.device_pixel_ratio();
-
-        (Size::new(width, height), px)
+        (
+            Size::new(w.inner_width(), w.inner_height()),
+            w.device_pixel_ratio(),
+        )
     }
 
     pub fn raw_window_handle(&self) -> RawWindowHandle {

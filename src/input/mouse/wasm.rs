@@ -4,8 +4,8 @@ use crate::input::keyboard::wasm::ARBITRARY_WINDOW_PTR;
 use crate::input::mouse::MouseWindowLocation;
 use std::ptr::NonNull;
 use std::sync::Arc;
-use wasm_bindgen::prelude::*;
-use web_sys::{MouseEvent, WheelEvent};
+use wasm_lite::Closure;
+use wasm_lite::dom::{DeltaMode, MouseEvent, WheelEvent, window};
 
 fn js_button_to_rust(button: i16) -> u8 {
     match button {
@@ -24,7 +24,7 @@ impl PlatformCoalescedMouse {
         let shared = shared.clone();
 
         crate::application::on_main_thread("PlatformCoalescedMouse setup".to_string(), move || {
-            let window = web_sys::window().expect("no global window exists");
+            let window = window().expect("no global window exists");
             let document = window.document().expect("no document on window");
 
             let weak = Arc::downgrade(&shared);
@@ -33,43 +33,35 @@ impl PlatformCoalescedMouse {
             let weak_wheel = weak.clone();
 
             // Mouse move callback
-            let mousemove_callback = Closure::wrap(Box::new(move |event: MouseEvent| {
+            let mousemove_callback = Closure::new_with_arg(move |event| {
+                let event = MouseEvent::from_js(event);
                 if let Some(shared) = weak.upgrade() {
-                    let window = web_sys::window().expect("no global window exists");
-                    let width = window
-                        .inner_width()
-                        .expect("failed to get width")
-                        .as_f64()
-                        .unwrap_or(0.0);
-
-                    let height = window
-                        .inner_height()
-                        .expect("failed to get height")
-                        .as_f64()
-                        .unwrap_or(0.0);
+                    // Fully qualified: the enclosing scope binds `window` to a
+                    // `Window` value, which would shadow the function.
+                    let w = wasm_lite::dom::window().expect("no global window exists");
+                    let width = w.inner_width();
+                    let height = w.inner_height();
                     let window = Some(Window(NonNull::new(ARBITRARY_WINDOW_PTR).unwrap()));
 
                     //clientX/Y are viewport-relative, matching inner_width/inner_height;
                     //offsetX/Y would be relative to whatever element the pointer is over.
                     shared.set_window_location(MouseWindowLocation::new(
-                        event.client_x() as f64,
-                        event.client_y() as f64,
+                        event.client_x(),
+                        event.client_y(),
                         width,
                         height,
                         window,
                     ));
                 }
-            }) as Box<dyn FnMut(MouseEvent)>);
+            });
 
             document
-                .add_event_listener_with_callback(
-                    "mousemove",
-                    mousemove_callback.as_ref().unchecked_ref(),
-                )
+                .add_event_listener("mousemove", mousemove_callback.as_js_value())
                 .expect("Can't add event listener");
             mousemove_callback.forget();
 
-            let mousedown_callback = Closure::wrap(Box::new(move |event: MouseEvent| {
+            let mousedown_callback = Closure::new_with_arg(move |event| {
+                let event = MouseEvent::from_js(event);
                 if let Some(shared) = weak_down.upgrade() {
                     shared.set_key_state(
                         js_button_to_rust(event.button()),
@@ -77,16 +69,14 @@ impl PlatformCoalescedMouse {
                         ARBITRARY_WINDOW_PTR,
                     );
                 }
-            }) as Box<dyn FnMut(MouseEvent)>);
+            });
             document
-                .add_event_listener_with_callback(
-                    "mousedown",
-                    mousedown_callback.as_ref().unchecked_ref(),
-                )
+                .add_event_listener("mousedown", mousedown_callback.as_js_value())
                 .expect("Can't add event listener");
             mousedown_callback.forget();
 
-            let mouseup_callback = Closure::wrap(Box::new(move |event: MouseEvent| {
+            let mouseup_callback = Closure::new_with_arg(move |event| {
+                let event = MouseEvent::from_js(event);
                 if let Some(shared) = weak_up.upgrade() {
                     shared.set_key_state(
                         js_button_to_rust(event.button()),
@@ -94,31 +84,31 @@ impl PlatformCoalescedMouse {
                         ARBITRARY_WINDOW_PTR,
                     );
                 }
-            }) as Box<dyn FnMut(MouseEvent)>);
+            });
             document
-                .add_event_listener_with_callback(
-                    "mouseup",
-                    mouseup_callback.as_ref().unchecked_ref(),
-                )
+                .add_event_listener("mouseup", mouseup_callback.as_js_value())
                 .expect("Can't add event listener");
             mouseup_callback.forget();
 
-            let wheel_callback = Closure::wrap(Box::new(move |event: WheelEvent| {
+            let wheel_callback = Closure::new_with_arg(move |event| {
+                let event = WheelEvent::from_js(event);
                 let raw_x = event.delta_x();
                 let raw_y = event.delta_y();
-                let mode = event.delta_mode();
-                let (x, y) = match mode {
-                    1 => (raw_x * 10.0, raw_y * 10.0),
-                    2 => (raw_x * 100.0, raw_y * 100.0),
-                    _ => (raw_x, raw_y),
+                //deltas are in whatever unit the event says; treating lines or
+                //pages as pixels scrolls ~10x or ~100x too slowly.
+                let (x, y) = match event.delta_mode() {
+                    DeltaMode::Pixel => (raw_x, raw_y),
+                    DeltaMode::Line => (raw_x * 10.0, raw_y * 10.0),
+                    DeltaMode::Page => (raw_x * 100.0, raw_y * 100.0),
+                    DeltaMode::Other(_) => (raw_x, raw_y),
                 };
 
                 if let Some(shared) = weak_wheel.upgrade() {
                     shared.add_scroll_delta(x, y, ARBITRARY_WINDOW_PTR);
                 }
-            }) as Box<dyn FnMut(WheelEvent)>);
+            });
             document
-                .add_event_listener_with_callback("wheel", wheel_callback.as_ref().unchecked_ref())
+                .add_event_listener("wheel", wheel_callback.as_js_value())
                 .expect("Can't add event listener");
             wheel_callback.forget();
 

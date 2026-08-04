@@ -7,7 +7,7 @@ use some_executor::observer::Observer;
 
 async fn test_board() {
     #[cfg(target_arch = "wasm32")]
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    wasm_lite::set_panic_hook();
     let _k = Keyboard::coalesced().await;
     let _m = Mouse::coalesced().await;
 
