@@ -19,6 +19,7 @@ logwise_internal = []
 
 
 [dependencies]
+wasm_lite_std = { path = "../wasm_lite/crates/wasm_lite_std" }
 atomic_float = "1.1.0"
 raw-window-handle = "0.6.2"
 logwise = "0.5.1"
@@ -30,7 +31,6 @@ send_cells = "0.2.1"
 [dev-dependencies]
 # needed for gpu example
 wgpu = "28.0.0"
-ampsc = "0.2.0"
 test_executors = "0.4.1" # gpu example
 
 # needed for submit_to_main_thread_benchmark
@@ -51,7 +51,6 @@ web-sys = { version = "0.3.85", features=["CssStyleDeclaration","HtmlCanvasEleme
 wasm-bindgen = "0.2.108"
 wasm-bindgen-futures = "0.4.58"
 continue_stream = "0.1.0"
-wasm_lite_std = { path = "../wasm_lite/crates/wasm_lite_std" }
 
 
 [target.'cfg(target_arch="wasm32")'.dev-dependencies]
@@ -89,7 +88,6 @@ accesskit_unix = "0.20.0"
 # input dependencies
 tempfile = "3.21.0"
 atspi = {version = "0.29.0", features=[]}
-ampsc = "0.2.0"
 
 
 [[example]]

@@ -117,12 +117,12 @@ mod gpu {
     async fn wgpu_run(mut window: Window) {
         logwise::warn_sync!("main_run");
         let mut app_surface = window.surface().await;
-        let (sender, mut receiver) = ampsc::channel();
+        let (sender, mut receiver) = wasm_lite_std::mpsc::channel();
         let (size, _scale) = app_surface.size_scale().await;
         let latest_size = Arc::new(Mutex::new(size));
         let move_latest_size = latest_size.clone();
         app_surface.size_update(move |size| {
-            let mut update_sender = sender.clone();
+            let update_sender = sender.clone();
             let mut some_executor = some_executor::current_executor::current_executor();
             //it's nice to do this inline so that if we get many size updates back-to-back the last one wins
             *move_latest_size.lock().unwrap() = size;
@@ -130,8 +130,7 @@ mod gpu {
             let task = some_executor::task::Task::new_objsafe(
                 "resize".into(),
                 Box::new(async move {
-                    update_sender.send(Message::SizeChanged).await.unwrap();
-                    update_sender.async_drop().await;
+                    update_sender.send_async(Message::SizeChanged).await.unwrap();
                     Box::new(()) as Box<dyn std::any::Any + Send>
                 }),
                 Configuration::new(
@@ -232,7 +231,7 @@ mod gpu {
         };
         render(&state);
         loop {
-            let msg = receiver.receive().await;
+            let msg = receiver.recv_async().await;
             match msg {
                 Ok(Message::SizeChanged) => {
                     let new_size = *latest_size.lock().unwrap();

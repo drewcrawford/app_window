@@ -99,7 +99,7 @@ if __name__ == "__main__":
  */
 
 use crate::input::keyboard::key::KeyboardKey;
-use ampsc::{ChannelConsumer, ChannelProducer};
+use wasm_lite_std::mpsc::{Receiver, Sender};
 use atspi::events::mouse::ButtonEvent;
 use atspi::proxy::device_event_controller::{DeviceEvent, DeviceEventControllerProxy, EventType};
 use some_executor::hint::Hint;
@@ -118,14 +118,14 @@ use keycode::key_to_x11;
 use keyname::key_to_name;
 use keysym::key_to_id;
 
-static ONCE_SENDER: OnceLock<ChannelProducer<Event>> = OnceLock::new();
+static ONCE_SENDER: OnceLock<Sender<Event>> = OnceLock::new();
 
 enum Event {
     Key(KeyboardKey, bool),
     Mouse(),
 }
 
-async fn ax_loop(mut receiver: ChannelConsumer<Event>) {
+async fn ax_loop(mut receiver: Receiver<Event>) {
     let connection = atspi::AccessibilityConnection::new().await;
     let connection = match connection {
         Ok(c) => c,
@@ -146,7 +146,7 @@ async fn ax_loop(mut receiver: ChannelConsumer<Event>) {
     let mut modifiers: i32 = 0;
 
     loop {
-        let event = receiver.receive().await.expect("No event");
+        let event = receiver.recv_async().await.expect("No event");
         match event {
             Event::Key(key, pressed) => {
                 let event_type = if pressed {
@@ -234,10 +234,10 @@ async fn ax_loop(mut receiver: ChannelConsumer<Event>) {
     }
 }
 
-fn ax_init() -> ChannelProducer<Event> {
+fn ax_init() -> Sender<Event> {
     ONCE_SENDER
         .get_or_init(|| {
-            let (sender, receiver) = ampsc::channel();
+            let (sender, receiver) = wasm_lite_std::mpsc::channel();
 
             let mut ex = some_executor::current_executor::current_executor();
             let t = Task::without_notifications(
@@ -260,12 +260,10 @@ pub fn ax_press(key: KeyboardKey, pressed: bool) {
         "linux ax".to_string(),
         Configuration::new(Hint::IO, Priority::UserInteractive, Instant::now()),
         async move {
-            let mut sender = sender;
             sender
-                .send(Event::Key(key, pressed))
+                .send_async(Event::Key(key, pressed))
                 .await
                 .expect("Failed to send event");
-            sender.async_drop().await;
         },
     )
     .into_objsafe();
@@ -280,12 +278,10 @@ pub fn ax_mouse() {
         "linux ax".to_string(),
         Configuration::new(Hint::IO, Priority::UserInteractive, Instant::now()),
         async move {
-            let mut sender = sender;
             sender
-                .send(Event::Mouse())
+                .send_async(Event::Mouse())
                 .await
                 .expect("Failed to send event");
-            sender.async_drop().await;
         },
     )
     .into_objsafe();
