@@ -118,3 +118,11 @@ path = "tests/platform_coalesced_keyboard_test.rs"
 harness = false
 
 [patch.crates-io]
+# Dev-cycle self-patch (NEEDS_REVIEW §32): the published test_executors expands
+# #[async_test] to #[wasm_bindgen_test], so the wasm32 test target does not
+# compile here without this. The rest come along because the Instant flag-day is
+# all-or-nothing and the registry copies still pull wasm_safe_thread back in.
+test_executors = { path = "../test_executors" }
+logwise = { path = "../logwise" }
+some_executor = { path = "../some_executor" }
+continue = { path = "../continue" }
