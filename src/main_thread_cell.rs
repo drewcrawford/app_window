@@ -351,9 +351,9 @@ mod tests {
 
     #[test_executors::async_test]
     async fn test_send_across_threads() {
-        //for the time being, wasm_thread only works in browser
+        //wasm_lite's runner always drives a real browser
         //see https://github.com/rustwasm/wasm-bindgen/issues/4534,
-        //though we also need wasm_thread support.
+        //and threading comes from wasm_lite_std.
         let cell = MainThreadCell::new(42);
         let (c, f) = r#continue::continuation();
 

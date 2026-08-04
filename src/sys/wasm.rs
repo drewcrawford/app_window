@@ -259,10 +259,10 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     let push_context = Context::current();
     let push_context_2 = push_context.clone();
 
-    // logwise::info_sync!("wasm_thread WILL spawn");
+    // logwise::info_sync!("worker WILL spawn");
 
     wasm_lite_std::spawn(|| {
-        // logwise::info_sync!("wasm_thread spawn");
+        // logwise::info_sync!("worker spawn");
         let new_context = Context::new_task(
             Some(push_context_2),
             "app_window after MT context".to_string(),
