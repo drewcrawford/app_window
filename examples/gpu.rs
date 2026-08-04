@@ -130,7 +130,10 @@ mod gpu {
             let task = some_executor::task::Task::new_objsafe(
                 "resize".into(),
                 Box::new(async move {
-                    update_sender.send_async(Message::SizeChanged).await.unwrap();
+                    update_sender
+                        .send_async(Message::SizeChanged)
+                        .await
+                        .unwrap();
                     Box::new(()) as Box<dyn std::any::Any + Send>
                 }),
                 Configuration::new(

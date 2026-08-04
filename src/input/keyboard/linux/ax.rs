@@ -99,7 +99,6 @@ if __name__ == "__main__":
  */
 
 use crate::input::keyboard::key::KeyboardKey;
-use wasm_lite_std::mpsc::{Receiver, Sender};
 use atspi::events::mouse::ButtonEvent;
 use atspi::proxy::device_event_controller::{DeviceEvent, DeviceEventControllerProxy, EventType};
 use some_executor::hint::Hint;
@@ -107,6 +106,7 @@ use some_executor::task::{Configuration, Task};
 use some_executor::{Priority, SomeExecutor};
 use std::sync::OnceLock;
 use std::time::Instant;
+use wasm_lite_std::mpsc::{Receiver, Sender};
 
 mod helpers;
 mod keycode;
