@@ -16,7 +16,9 @@ wasm_lite::test_main!();
 #[wasm_lite::wasm_lite_test]
 fn wgpu_surface_renders_a_frame() {
     wasm_lite_std::async_doctest!(async {
+        use futures::FutureExt;
         use some_executor::task::{Configuration, Task};
+        use std::panic::AssertUnwindSafe;
 
         assert!(app_window::application::is_main_thread());
         let (sender, receiver) = r#continue::continuation();
@@ -27,15 +29,17 @@ fn wgpu_surface_renders_a_frame() {
                     "wgpu_test".to_owned(),
                     Configuration::default(),
                     async move {
-                        render_one_frame().await;
-                        sender.send(());
+                        let outcome = AssertUnwindSafe(render_one_frame()).catch_unwind().await;
+                        sender.send(outcome);
                     },
                 )
                 .spawn_static_current();
             });
         });
 
-        receiver.await;
+        if let Err(panic) = receiver.await {
+            std::panic::resume_unwind(panic);
+        }
     });
 }
 

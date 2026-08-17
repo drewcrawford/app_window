@@ -130,4 +130,4 @@ harness = false
 # Temporary until wasm_lite's bounded wasm-bindgen compatibility shim has a
 # release/distribution path. wgpu remains unmodified; the shim lowers its
 # wasm-bindgen surface onto wasm_lite.
-wasm-bindgen = { git = "https://github.com/drewcrawford/wasm_lite", rev = "cdf81d3396afaff81880dcdad94de7b962c19e1d" }
+wasm-bindgen = { git = "https://github.com/drewcrawford/wasm_lite", rev = "b6e1177dfd2abeacf64e7f835c6ad2aa11263158" }
