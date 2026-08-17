@@ -48,6 +48,11 @@ jobs:
           rustup +nightly component add rustfmt clippy
           rustup +nightly component add rust-src
 
+      # Temporary until the WebGPU-capable runner is released.
+      - name: Install pinned wasm_lite runner
+        if: matrix.target == 'wasm32'
+        run: cargo install wasm_lite_cli --git https://github.com/drewcrawford/wasm_lite --rev b6e1177dfd2abeacf64e7f835c6ad2aa11263158 --locked --force
+
       - name: Install Wayland components
         if: matrix.target == 'native' && !(env.GITEA_ACTIONS == 'true')
         run: |

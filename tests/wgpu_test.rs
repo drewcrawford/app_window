@@ -16,9 +16,7 @@ wasm_lite::test_main!();
 #[wasm_lite::wasm_lite_test]
 fn wgpu_surface_renders_a_frame() {
     wasm_lite_std::async_doctest!(async {
-        use futures::FutureExt;
         use some_executor::task::{Configuration, Task};
-        use std::panic::AssertUnwindSafe;
 
         assert!(app_window::application::is_main_thread());
         let (sender, receiver) = r#continue::continuation();
@@ -29,7 +27,7 @@ fn wgpu_surface_renders_a_frame() {
                     "wgpu_test".to_owned(),
                     Configuration::default(),
                     async move {
-                        let outcome = AssertUnwindSafe(render_one_frame()).catch_unwind().await;
+                        let outcome = render_one_frame().await;
                         sender.send(outcome);
                     },
                 )
@@ -37,14 +35,14 @@ fn wgpu_surface_renders_a_frame() {
             });
         });
 
-        if let Err(panic) = receiver.await {
-            std::panic::resume_unwind(panic);
-        }
+        receiver
+            .await
+            .expect("the WebGPU render task should complete successfully");
     });
 }
 
 #[cfg(target_arch = "wasm32")]
-async fn render_one_frame() {
+async fn render_one_frame() -> Result<(), String> {
     use app_window::window::Window;
     use wgpu::SurfaceTargetUnsafe;
 
@@ -61,7 +59,9 @@ async fn render_one_frame() {
                 raw_display_handle: app_surface.raw_display_handle(),
                 raw_window_handle: app_surface.raw_window_handle(),
             })
-            .expect("wgpu should create a surface from app_window's raw handles")
+            .map_err(|err| {
+                format!("wgpu should create a surface from app_window's raw handles: {err}")
+            })?
     };
 
     let adapter = instance
@@ -70,7 +70,7 @@ async fn render_one_frame() {
             ..Default::default()
         })
         .await
-        .expect("GPU-enabled Chrome should provide a WebGPU adapter");
+        .map_err(|err| format!("GPU-enabled Chrome should provide a WebGPU adapter: {err}"))?;
 
     let (device, queue) = adapter
         .request_device(&wgpu::DeviceDescriptor {
@@ -80,16 +80,16 @@ async fn render_one_frame() {
             ..Default::default()
         })
         .await
-        .expect("the WebGPU adapter should create a device");
+        .map_err(|err| format!("the WebGPU adapter should create a device: {err}"))?;
 
     let config = surface
         .get_default_config(&adapter, size.width() as u32, size.height() as u32)
-        .expect("the adapter should support the app_window surface");
+        .ok_or_else(|| "the adapter should support the app_window surface".to_owned())?;
     surface.configure(&device, &config);
 
     let frame = surface
         .get_current_texture()
-        .expect("the configured surface should provide a frame");
+        .map_err(|err| format!("the configured surface should provide a frame: {err}"))?;
     let view = frame
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
@@ -116,4 +116,5 @@ async fn render_one_frame() {
     }
     queue.submit([encoder.finish()]);
     frame.present();
+    Ok(())
 }
