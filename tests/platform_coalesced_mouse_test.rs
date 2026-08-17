@@ -6,7 +6,7 @@
 //! of the app_window crate.
 //!
 //! Run with: `cargo test --test platform_coalesced_mouse_test`
-//! Run on WASM with: CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' cargo +nightly test --target wasm32-unknown-unknown -Z build-std=std,panic_abort
+//! Run on WASM with: `scripts/wasm32/tests --test platform_coalesced_mouse_test`
 logwise::declare_logging_domain!();
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -35,7 +35,7 @@ fn main() {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn main() {}
+wasm_lite::test_main!();
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_lite::wasm_lite_test]

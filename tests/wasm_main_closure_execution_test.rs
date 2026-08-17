@@ -28,7 +28,7 @@ use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    test_executors::sleep_on(test())
+    wasm_lite_std::block_on(test())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -53,7 +53,7 @@ async fn test() {
     r2.await;
 }
 
-// The native `main` above drives this with `sleep_on`. On wasm the body
+// The native `main` above drives this with `block_on`. On wasm the body
 // cannot block, so a `#[wasm_lite_test]` entry point hands it to
 // `async_doctest!`, which defers the verdict until the future settles.
 #[cfg(target_arch = "wasm32")]

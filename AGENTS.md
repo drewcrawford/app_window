@@ -19,7 +19,7 @@
 
 ## Testing Guidelines
 - Prefer integration-style tests in `tests/` named `*_test.rs`; platform-specific behaviors belong near their backend modules.
-- Wasm tests rely on `wasm-bindgen-test` via `cargo +nightly test --target wasm32-unknown-unknown`; ensure new async code works under that target.
+- Wasm tests rely on the `wasm_lite` runner via `scripts/wasm32/tests`; ensure new async code works under that target.
 - Examples can double as smoke tests; keep them building with `cargo test --examples`.
 
 ## Commit & Pull Request Guidelines

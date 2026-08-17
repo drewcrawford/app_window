@@ -7,7 +7,7 @@
 //! statistics about the timing.
 //!
 //! Run with: `cargo test --test submit_to_main_thread_benchmark`
-//! Run on WASM with: CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm-bindgen-test-runner" RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' cargo +nightly test --target wasm32-unknown-unknown -Z build-std=std,panic_abort
+//! Run on WASM with: `scripts/wasm32/tests --test submit_to_main_thread_benchmark`
 logwise::declare_logging_domain!();
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -127,7 +127,7 @@ fn main() {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn main() {}
+wasm_lite::test_main!();
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_lite::wasm_lite_test]

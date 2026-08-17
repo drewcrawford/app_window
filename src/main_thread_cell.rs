@@ -383,10 +383,11 @@ mod tests {
         std::mem::forget(cell);
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn construction_off_main_thread_panics() {
-        let result = std::thread::spawn(|| MainThreadCell::new(42)).join();
+    #[wasm_lite::wasm_lite_test]
+    async fn construction_off_main_thread_panics() {
+        let result = wasm_lite_std::spawn(|| MainThreadCell::new(42))
+            .join_async()
+            .await;
         assert!(result.is_err());
     }
 

@@ -3,18 +3,15 @@
 build-std = ["std", "panic_abort"]
 
 [target.'cfg(target_arch="wasm32")']
-runner = "wasm-bindgen-test-runner"
+runner = ["wasm_lite", "run"]
 rustflags = [
-    # these flags must be present
-    "-C", "target-feature=+atomics",
-    # see https://github.com/wasm-bindgen/wasm-bindgen/issues/4727
-    # and https://github.com/rust-lang/rust/pull/147225
-    "-Clink-arg=--shared-memory",
-    # 4GB
-    "-Clink-arg=--max-memory=4294967296",
-    "-Clink-arg=--import-memory",
-    "-Clink-arg=--export=__wasm_init_tls",
-    "-Clink-arg=--export=__tls_size",
-    "-Clink-arg=--export=__tls_align",
-    "-Clink-arg=--export=__tls_base"
+    "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
+    "-C", "link-arg=--shared-memory",
+    "-C", "link-arg=--max-memory=1073741824",
+    "-C", "link-arg=--import-memory",
+    "-C", "link-arg=--export=__stack_pointer",
+    "-C", "link-arg=--export=__wasm_init_tls",
+    "-C", "link-arg=--export=__tls_size",
+    "-C", "link-arg=--export=__tls_align",
+    "-C", "link-arg=--export=__tls_base",
 ]

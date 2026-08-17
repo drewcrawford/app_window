@@ -31,7 +31,6 @@ send_cells = "0.2.5"
 [dev-dependencies]
 # needed for gpu example
 wgpu = "28.0.0"
-test_executors = "0.6.0"
 wasm_lite = "0.1.2"
 
 # needed for submit_to_main_thread_benchmark

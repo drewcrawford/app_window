@@ -37,49 +37,67 @@ use std::thread;
 #[cfg(target_arch = "wasm32")]
 use wasm_lite_std as thread;
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
     println!("=== Testing Main Thread Executor Nested Submission Bug ===\n");
 
     app_window::application::main(|| {
-        //this can't really run on the main thread I think
         thread::Builder::new()
             .name("executor_bug_tests".to_string())
             .spawn(|| {
-                let mut test_results = Vec::new();
-
-                // Test 1: Basic nested submission
-                test_results.push(("nested_submission", test_nested_main_thread_submit_bug()));
-
-                // Test 2: Multiple nested levels
-                test_results.push(("deep_nested", test_deep_nested_submissions()));
-
-                // Test 3: Debug output pattern
-                test_results.push(("debug_pattern", test_debug_output_pattern()));
-
-                // Test 4: Concurrent submissions
-                test_results.push(("concurrent", test_concurrent_submissions()));
-
-                // Report results
-                let passed = test_results.iter().filter(|(_, result)| *result).count();
-                let total = test_results.len();
-
-                println!("\n=== Test Results ===");
-                for (name, result) in &test_results {
-                    let status = if *result { "PASS" } else { "FAIL" };
-                    println!("{}: {}", name, status);
-                }
-                println!("\nPassed: {}/{}", passed, total);
-
-                if passed == total {
-                    println!("All tests passed!");
-                    std::process::exit(0);
-                } else {
-                    println!("Some tests failed - this indicates the bug is present!");
-                    std::process::exit(1);
-                }
+                let success = report_results(&run_tests());
+                std::process::exit(if success { 0 } else { 1 });
             })
             .unwrap();
     });
+}
+
+#[cfg(target_arch = "wasm32")]
+wasm_lite::test_main!();
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_lite::wasm_lite_test]
+async fn nested_main_thread_submissions_complete() {
+    println!("=== Testing Main Thread Executor Nested Submission Bug ===\n");
+    let (sender, receiver) = r#continue::continuation();
+
+    app_window::application::main(move || {
+        thread::Builder::new()
+            .name("executor_bug_tests".to_string())
+            .spawn(move || sender.send(run_tests()))
+            .unwrap();
+    });
+
+    assert!(report_results(&receiver.await));
+}
+
+fn run_tests() -> Vec<(&'static str, bool)> {
+    vec![
+        ("nested_submission", test_nested_main_thread_submit_bug()),
+        ("deep_nested", test_deep_nested_submissions()),
+        ("debug_pattern", test_debug_output_pattern()),
+        ("concurrent", test_concurrent_submissions()),
+    ]
+}
+
+fn report_results(test_results: &[(&str, bool)]) -> bool {
+    let passed = test_results.iter().filter(|(_, result)| *result).count();
+    let total = test_results.len();
+
+    println!("\n=== Test Results ===");
+    for (name, result) in test_results {
+        let status = if *result { "PASS" } else { "FAIL" };
+        println!("{}: {}", name, status);
+    }
+    println!("\nPassed: {}/{}", passed, total);
+
+    if passed == total {
+        println!("All tests passed!");
+        true
+    } else {
+        println!("Some tests failed - this indicates the bug is present!");
+        false
+    }
 }
 
 /// Test that reproduces the bug where nested on_main_thread_submit calls can cause task drops

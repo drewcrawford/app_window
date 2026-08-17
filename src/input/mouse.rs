@@ -438,6 +438,7 @@ impl Hash for Mouse {
 mod test {
     use crate::input::mouse::Mouse;
 
+    #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
     #[test]
     fn test_send_sync() {
         //I think basically the platform keyboard type operates as a kind of lifetime marker
