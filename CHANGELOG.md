@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A lighter WASM stack** - The browser backend and test suite have moved from `wasm-bindgen`, `web-sys`, and `wasm_safe_thread` to `wasm_lite` 0.1.2 and its released CLI runner. Browser tests now exercise the real threaded paths instead of quietly skipping them.
 
-- **WASM tests with receipts** - Removed `test_executors` in favor of `wasm_lite`'s own test support, brought the remaining unit and thread-affinity checks into the browser suite, and turned an executor regression target that reported zero tests into one that actually runs. A passing test is much more persuasive when it has met the code.
+- **WASM tests with receipts** - Removed `test_executors` in favor of `wasm_lite`'s own test support, brought the remaining unit and thread-affinity checks into the browser suite, and turned an executor regression target that reported zero tests into one that actually runs. The suite now also drives unmodified wgpu through wasm_lite's compatibility shim in GPU-enabled Chrome, creating an adapter and device before rendering and presenting a real surface frame. A passing test is much more persuasive when it has met the code.
 
 - **Published dependency refresh** - Removed the sibling-checkout patches and moved to released versions of `continue`, `continue_stream`, `logwise`, `send_cells`, and `some_executor`. The minimum supported Rust version is now 1.95.
 

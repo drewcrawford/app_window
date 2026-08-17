@@ -17,10 +17,13 @@ if ! command -v wasm_lite >/dev/null 2>&1; then
     exit 1
 fi
 
-# `--lib --tests`, not a bare `cargo test`: the `gpu` example dev-depends on
-# wgpu, which is still a wasm-bindgen crate (the shim track, not this one), and
-# the runner refuses a wasm-bindgen interop module.
+# Headless Firefox has no WebGPU. Chrome needs the explicit GPU switch to use
+# SwiftShader instead of starting with --disable-gpu.
+export WASM_LITE_BROWSER="${WASM_LITE_BROWSER:-chrome}"
+export WASM_LITE_GPU="${WASM_LITE_GPU:-1}"
+
 CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm_lite run" \
     RUSTFLAGS="$WASM32_RUSTFLAGS" \
     RUSTDOCFLAGS="$WASM32_RUSTDOCFLAGS" \
-    cargo +nightly test --target=wasm32-unknown-unknown --lib --tests "${CARGO_ARGS[@]}"
+    cargo +nightly test \
+        --target=wasm32-unknown-unknown --lib --tests --examples "${CARGO_ARGS[@]}"
