@@ -137,14 +137,14 @@ impl Dispatch<WlSurface, SurfaceEvents> for App {
                 }
             }
             wayland_client::protocol::wl_surface::Event::Leave { output } => {
-                if let SurfaceEvents::Standard(window_internal) = data {
-                    if let Some(output_id) = output.data::<u32>().copied() {
-                        window_internal
-                            .lock()
-                            .unwrap()
-                            .current_outputs
-                            .remove(&output_id);
-                    }
+                if let SurfaceEvents::Standard(window_internal) = data
+                    && let Some(output_id) = output.data::<u32>().copied()
+                {
+                    window_internal
+                        .lock()
+                        .unwrap()
+                        .current_outputs
+                        .remove(&output_id);
                 }
             }
             _ => {
@@ -615,15 +615,17 @@ impl<A: AsRef<Mutex<WindowInternal>>> Dispatch<WlPointer, A> for App {
                     }
                 }
             }
-            wayland_client::protocol::wl_pointer::Event::Axis { time, axis, value } => {
-                if let wayland_client::WEnum::Value(axis) = axis {
-                    crate::input::linux::axis_event(
-                        time,
-                        axis as u32,
-                        value,
-                        data.wl_surface.as_ref().unwrap().id(),
-                    );
-                }
+            wayland_client::protocol::wl_pointer::Event::Axis {
+                time,
+                axis: wayland_client::WEnum::Value(axis),
+                value,
+            } => {
+                crate::input::linux::axis_event(
+                    time,
+                    axis as u32,
+                    value,
+                    data.wl_surface.as_ref().unwrap().id(),
+                );
             }
             _ => {
                 //?

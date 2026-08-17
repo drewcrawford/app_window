@@ -31,9 +31,13 @@ use wasm_lite_std as thread;
 //see https://github.com/rustwasm/wasm-bindgen/issues/4534,
 //and threading comes from wasm_lite_std.
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
     test_executors::sleep_on(test())
 }
+
+#[cfg(target_arch = "wasm32")]
+wasm_lite::test_main!();
 
 async fn test() {
     let (s, r) = std::sync::mpsc::channel();

@@ -10,7 +10,7 @@ license = "MPL-2.0"
 keywords = ["window", "windowing", "input", "keyboard", "mouse"]
 categories = ["gui", "os", "wasm", "asynchronous"]
 exclude = [".*"]
-rust-version = "1.88.0"
+rust-version = "1.95.0"
 
 #[lib]
 
@@ -19,19 +19,20 @@ logwise_internal = []
 
 
 [dependencies]
-wasm_lite_std = { path = "../wasm_lite/crates/wasm_lite_std" }
+wasm_lite_std = "0.1.2"
 atomic_float = "1.1.0"
 raw-window-handle = "0.6.2"
-logwise = "0.5.1"
+logwise = "0.6.1"
 thiserror = "2.0.17"
-some_executor = "0.6.1"
-continue = "0.1.1"
-send_cells = "0.2.1"
+some_executor = "0.7.1"
+continue = "0.1.3"
+send_cells = "0.2.5"
 
 [dev-dependencies]
 # needed for gpu example
 wgpu = "28.0.0"
-test_executors = "0.4.1" # gpu example
+test_executors = "0.6.0"
+wasm_lite = "0.1.2"
 
 # needed for submit_to_main_thread_benchmark
 futures = "0.3"
@@ -50,12 +51,10 @@ swift-rs = { version = "1.0.7", features = ["build"] }
 # Replaces web-sys/wasm-bindgen/wasm-bindgen-futures: the DOM surface this crate
 # needs is `wasm_lite::dom`. No feature list, because the bindings are
 # hand-written rather than generated per-interface.
-wasm_lite = { path = "../wasm_lite/crates/wasm_lite" }
-continue_stream = "0.1.0"
+wasm_lite = "0.1.2"
+continue_stream = "0.1.3"
 
-# `wasm_lite` is a real dependency now (above), so #[wasm_lite_test] needs no
-# dev-dependency of its own. `console_error_panic_hook` is replaced by
-# `wasm_lite::set_panic_hook`.
+# `console_error_panic_hook` is replaced by `wasm_lite::set_panic_hook`.
 
 
 # windows
@@ -116,20 +115,3 @@ harness = false
 name = "platform_coalesced_keyboard_test"
 path = "tests/platform_coalesced_keyboard_test.rs"
 harness = false
-
-[patch.crates-io]
-# `continue_stream` is migrated to wasm_lite in its own checkout and still
-# published against wasm_safe_thread; without this the published version walks
-# wasm-bindgen back into the wasm32 graph and the runner refuses the test module.
-continue_stream = { path = "../continue_stream" }
-# Likewise `send_cells`: this crate uses it for `SendCell<HWND>` on Win32 and it
-# is migrated locally, but the published 0.2.2 still depends on wasm_safe_thread.
-send_cells = { path = "../send_cells" }
-# Dev-cycle self-patch (NEEDS_REVIEW §32): the published test_executors expands
-# #[async_test] to #[wasm_bindgen_test], so the wasm32 test target does not
-# compile here without this. The rest come along because the Instant flag-day is
-# all-or-nothing and the registry copies still pull wasm_safe_thread back in.
-test_executors = { path = "../test_executors" }
-logwise = { path = "../logwise" }
-some_executor = { path = "../some_executor" }
-continue = { path = "../continue" }

@@ -9,22 +9,18 @@ for arg in "$@"; do
     fi
 done
 source "$(dirname "$0")/_env"
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
-# The wasm_lite runner, built from the sibling checkout. `.cargo/config.toml`
-# names it too; this makes the dependency explicit and fails with a useful
-# message rather than "No such file or directory" from cargo.
-RUNNER="$REPO_ROOT/../wasm_lite/target/debug/runner"
-if [ ! -x "$RUNNER" ]; then
-    echo "wasm_lite runner not built: expected $RUNNER" >&2
-    echo "build it with: (cd ../wasm_lite && cargo build -p runner)" >&2
+# The released wasm_lite CLI is the Cargo runner named in `.cargo/config.toml`.
+if ! command -v wasm_lite >/dev/null 2>&1; then
+    echo "wasm_lite runner not installed" >&2
+    echo "install it with: cargo install wasm_lite_cli" >&2
     exit 1
 fi
 
 # `--lib --tests`, not a bare `cargo test`: the `gpu` example dev-depends on
 # wgpu, which is still a wasm-bindgen crate (the shim track, not this one), and
 # the runner refuses a wasm-bindgen interop module.
-CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="$RUNNER" \
+CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm_lite run" \
     RUSTFLAGS="$WASM32_RUSTFLAGS" \
     RUSTDOCFLAGS="$WASM32_RUSTDOCFLAGS" \
     cargo +nightly test --target=wasm32-unknown-unknown --lib --tests "${CARGO_ARGS[@]}"

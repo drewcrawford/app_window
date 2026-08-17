@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **[Linux] Complete external input dispatch** - Applications driving their own Wayland queue can now forward scroll events and keyboard focus loss through the public `axis_event` and `wl_keyboard_focus_leave` hooks.
+
+### Fixed
+
+- **Main-thread executor fairness** - Ready tasks now run in FIFO order, self-wakes wait for the current poll to finish, and late wakes from completed tasks quietly do nothing. Busy tasks can no longer cut the line forever or trip an executor panic on their way out.
+
+- **Keyboard state across platforms** - Linux, Windows, and the browser now release held keys when focus moves away. Unknown key codes are ignored safely, several keypad/edit-key mappings are corrected, and Windows properly distinguishes left/right modifiers and Alt-modified key messages.
+
+- **Mouse and window events** - Fixed the full `u8` mouse-button range, browser viewport coordinates, Windows wheel direction, Wayland scroll and compositor-close delivery, pointer position on enter, output tracking, and zero-sized configure handling. A surprisingly eventful cleanup for events.
+
+- **Platform lifecycle reliability** - Wayland shared-memory pools and role objects now tear down in protocol-safe order, Windows main-thread closures survive modal loops via a message-only window, and macOS test binaries can find the Swift runtime without a fallback environment variable.
+
+- **[WASM] Main-thread synchronization** - Mouse-location and resize-callback state now use wasm-aware locks, avoiding atomic waits that trap on the browser main thread.
+
+### Changed
+
+- **A lighter WASM stack** - The browser backend and test suite have moved from `wasm-bindgen`, `web-sys`, and `wasm_safe_thread` to `wasm_lite` 0.1.2 and its released CLI runner. Browser tests now exercise the real threaded paths instead of quietly skipping them.
+
+- **Published dependency refresh** - Removed the sibling-checkout patches and moved to released versions of `continue`, `continue_stream`, `logwise`, `send_cells`, `some_executor`, and `test_executors`. The minimum supported Rust version is now 1.95.
+
 ## [0.3.3] - 2026-02-15
 
 ### Fixed

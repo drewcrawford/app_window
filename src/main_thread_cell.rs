@@ -349,7 +349,7 @@ mod tests {
         std::mem::forget(cell);
     }
 
-    #[test_executors::async_test]
+    #[wasm_lite::wasm_lite_test]
     async fn test_send_across_threads() {
         //wasm_lite's runner always drives a real browser
         //see https://github.com/rustwasm/wasm-bindgen/issues/4534,

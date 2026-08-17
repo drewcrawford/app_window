@@ -7,7 +7,7 @@ build-std = ["std", "panic_abort"]
 # test binary is no longer a wasm-bindgen interop module (which the runner
 # refuses). `wgpu` still is one — it is on the shim track, not this one — which
 # is why the `gpu` example is not run this way.
-runner = "../wasm_lite/target/debug/runner"
+runner = ["wasm_lite", "run"]
 
 # The two wasm-bindgen workarounds that used to be here left with it:
 # `--export=__heap_base` (its threading pass injected thread ids) and
