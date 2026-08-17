@@ -74,6 +74,7 @@ pub struct Window(pub std::ptr::NonNull<std::ffi::c_void>);
 unsafe impl Send for Window {}
 
 #[cfg(target_os = "linux")]
+/// Linux-specific hooks for forwarding Wayland input and window events.
 pub mod linux {
     pub use crate::input::keyboard::linux::{wl_keyboard_event, wl_keyboard_focus_leave};
     pub use crate::input::mouse::linux::{

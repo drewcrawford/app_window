@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Manages Wayland cursor images, pointer regions, and cursor requests.
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

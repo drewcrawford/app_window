@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Converts keys into accessibility modifier and text-input classifications.
 
 use crate::input::keyboard::key::KeyboardKey;
 

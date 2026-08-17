@@ -34,7 +34,7 @@
 //! Every `app_window` application follows this pattern:
 //!
 //! ```no_run
-//! # // ALLOW_NORUN_DOCTEST: Requires full application initialization which blocks the thread
+//! # // no_run because: requires full application initialization which blocks the thread
 //! use app_window::application;
 //!
 //! fn main() {
@@ -163,7 +163,7 @@ pub(crate) const CALL_MAIN: &str = "Call app_window::application::main";
 /// ## Basic Setup
 ///
 /// ```no_run
-/// # // ALLOW_NORUN_DOCTEST: Function blocks indefinitely running the event loop
+/// # // no_run because: function blocks indefinitely running the event loop
 /// app_window::application::main(|| {
 ///     println!("Application ready!");
 ///     // Your app initialization here

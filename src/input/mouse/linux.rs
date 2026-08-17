@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Collects Wayland pointer events and distributes them to mouse handles.
 use crate::input::Window;
 use crate::input::mouse::{MouseWindowLocation, Shared};
 use std::ffi::c_void;
@@ -122,6 +123,7 @@ pub fn button_event(_time: u32, button: u32, state: u32, window: ObjectId) {
     crate::input::keyboard::linux::ax::ax_mouse();
 }
 
+/// Forwards a Wayland axis event to all registered mouse handles.
 pub fn axis_event(_time: u32, axis: u32, value: f64, window: ObjectId) {
     if axis == 0 {
         //vertical

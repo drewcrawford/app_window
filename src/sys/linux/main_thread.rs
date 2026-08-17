@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Runs the Linux Wayland connection and main-thread task queue.
 use super::{App, AppState};
 use crate::application::IS_MAIN_THREAD_RUNNING;
 use libc::{EFD_SEMAPHORE, SYS_gettid, c_int, c_void, eventfd, getpid, pid_t, syscall};

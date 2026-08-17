@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /*!
+# app_window
+
 A cross-platform window management crate with async-first APIs.
 
 ![logo](https://github.com/drewcrawford/app_window/raw/main/art/logo.png)
@@ -24,7 +26,7 @@ requirements.
 First, initialize the application from your main function:
 
 ```no_run
-# // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
+# // no_run because: application::main() must be called from the actual main thread, which is not available in doctests
 use app_window::application;
 fn main() {
     application::main(|| {
@@ -236,7 +238,7 @@ if scroll_y != 0.0 {
 For wgpu integration, use the platform-specific strategy:
 
 ```no_run
-# // ALLOW_NORUN_DOCTEST: Full wgpu example requires graphics setup beyond scope of doctest
+# // no_run because: full wgpu example requires graphics setup beyond scope of doctest
 # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 use app_window::{window::Window, application, WGPU_STRATEGY, WGPUStrategy};
 
@@ -266,6 +268,24 @@ match WGPU_STRATEGY {
 
 See `examples/gpu.rs` for a complete wgpu integration example.
 
+## WASM + wgpu
+
+`wgpu` uses the wasm-bindgen API on WebAssembly, while this crate's browser
+backend uses `wasm_lite`. To build an application that combines both, add the
+wasm_lite compatibility patch to the application manifest:
+
+```toml
+[patch.crates-io]
+wasm-bindgen = { git = "https://github.com/drewcrawford/wasm_lite", rev = "f47bf4178d666e83017abe056f07bb20d33c14cd" }
+```
+
+The patch belongs in the final application's `Cargo.toml`; Cargo does not
+inherit patches from dependencies. Patch only `wasm-bindgen`—do not replace
+`wasm_lite` or `wasm_lite_std` with git or path dependencies, because the
+compatibility crate now resolves those released runtimes from crates.io. The
+application also needs the released `wasm_lite_cli` runner and the shared-memory
+WASM linker settings shown in this repository's `.cargo/config.toml`.
+
 # Platform Support
 
 | Platform | Backend | Status | Notes |
@@ -290,6 +310,10 @@ The crate implements `raw-window-handle` traits, enabling integration with:
 - **Vulkan** via ash or vulkano
 - **Metal** (macOS) via metal-rs
 - **DirectX** (Windows) via windows-rs
+
+## License
+
+This project is licensed under the Mozilla Public License 2.0 (MPL-2.0).
 
 */
 
@@ -330,7 +354,7 @@ pub mod window;
 ///
 /// # Example
 /// ```no_run
-/// # // ALLOW_NORUN_DOCTEST: application::main() must be called from the actual main thread, which is not available in doctests
+/// # // no_run because: application::main() must be called from the actual main thread, which is not available in doctests
 /// use app_window::application;
 ///
 /// fn main() {
@@ -595,7 +619,7 @@ pub enum WGPUStrategy {
 /// # Example
 ///
 /// ```no_run
-/// # // ALLOW_NORUN_DOCTEST: alert() requires application::main() to be called first, which is not available in doctests
+/// # // no_run because: alert() requires application::main() to be called first, which is not available in doctests
 /// # async fn example() {
 /// use app_window::alert;
 ///

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Defines logical-pixel positions and sizes used by the windowing API.
 
 /**
 A position type.

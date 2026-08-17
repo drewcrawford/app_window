@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Provides drawable window surfaces, size callbacks, and graphics handles.
 
 use crate::coordinates::Size;
 use crate::sys;

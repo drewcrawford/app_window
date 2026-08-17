@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Bridges native macOS mouse callbacks into shared Rust mouse state.
 use crate::input::Window;
 use crate::input::mouse::{MouseWindowLocation, Shared};
 use std::ffi::c_void;

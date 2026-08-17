@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Dispatches Wayland protocol events into Linux window and input state.
 use std::sync::{Arc, Mutex};
 use wayland_client::globals::GlobalListContents;
 use wayland_client::protocol::wl_buffer::{Event, WlBuffer};

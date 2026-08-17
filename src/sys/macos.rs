@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Implements window and surface operations through the macOS Swift bridge.
 
 #![allow(non_snake_case)]
 

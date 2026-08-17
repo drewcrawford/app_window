@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Runs the cross-platform keyboard and mouse input smoke test.
 use app_window::input::debug_window_show;
 use app_window::input::keyboard::Keyboard;
 use app_window::input::mouse::Mouse;

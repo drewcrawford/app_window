@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Provides shared mouse state and selects the platform mouse backend.
 #[cfg(target_os = "macos")]
 pub(crate) mod macos;
 #[cfg(target_arch = "wasm32")]

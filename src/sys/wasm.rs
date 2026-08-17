@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Implements browser window, canvas, and resize operations through wasm_lite.
 
 use crate::coordinates::{Position, Size};
 use logwise::Level;

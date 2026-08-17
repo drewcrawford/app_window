@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-08-17
+
 ### Added
 
 - **[Linux] Complete external input dispatch** - Applications driving their own Wayland queue can now forward scroll events and keyboard focus loss through the public `axis_event` and `wl_keyboard_focus_leave` hooks.
@@ -33,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **A lighter WASM stack** - The browser backend and test suite have moved from `wasm-bindgen`, `web-sys`, and `wasm_safe_thread` to `wasm_lite` 0.1.2 and its released CLI runner. Browser tests now exercise the real threaded paths instead of quietly skipping them.
+- **A lighter WASM stack** - The browser backend and test suite have moved from `wasm-bindgen`, `web-sys`, and `wasm_safe_thread` to `wasm_lite` 0.1.3 and its released CLI runner. Browser tests now exercise the real threaded paths instead of quietly skipping them.
 
 - **WASM tests with receipts** - Removed `test_executors` in favor of `wasm_lite`'s own test support, brought the remaining unit and thread-affinity checks into the browser suite, and turned an executor regression target that reported zero tests into one that actually runs. The suite now also drives unmodified wgpu through wasm_lite's compatibility shim in GPU-enabled Chrome, creating an adapter and device before rendering and presenting a real surface frame. A passing test is much more persuasive when it has met the code.
 
@@ -97,7 +99,8 @@ Previous release. See git history for details.
 
 ---
 
-[Unreleased]: https://github.com/drewcrawford/app_window/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/drewcrawford/app_window/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/drewcrawford/app_window/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/drewcrawford/app_window/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/drewcrawford/app_window/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/drewcrawford/app_window/compare/v0.3.0...v0.3.1

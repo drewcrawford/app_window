@@ -1,10 +1,12 @@
-# matrix v9
+# matrix v12
 on: [push,pull_request]
 jobs:
   ci:
     name: Build (${{ matrix.os }} ${{ matrix.cwd }} ${{ matrix.channel }} ${{ matrix.target }} ${{ matrix.features }})
 
     runs-on: ${{matrix.os}}
+
+    timeout-minutes: 15
 
 
     strategy:
@@ -36,11 +38,9 @@ jobs:
       #        if: runner.os == 'Linux' && !(env.GITEA_ACTIONS == 'true')      #        run: |      #          # at the moment, GitHub is too far behind mainline rust (v1.89.0-v1.91.0-nightly)      #          rustup update
       - name: Install wasm target
         if: matrix.target == 'wasm32' && !(env.GITEA_ACTIONS == 'true')
-        run: rustup +nightly target add wasm32-unknown-unknown
-
-      - name: Install wasm-bindgen-cli
-        if: matrix.target == 'wasm32' && !(env.GITEA_ACTIONS == 'true')
-        run: cargo +nightly install wasm-bindgen-cli
+        run: |
+          rustup target add wasm32-unknown-unknown
+          rustup +nightly target add wasm32-unknown-unknown
 
       - name: Install nightly components
         if: matrix.target == 'wasm32' && !(env.GITEA_ACTIONS == 'true')
@@ -48,10 +48,13 @@ jobs:
           rustup +nightly component add rustfmt clippy
           rustup +nightly component add rust-src
 
-      # Temporary until the WebGPU-capable runner is released.
-      - name: Install pinned wasm_lite runner
-        if: matrix.target == 'wasm32'
-        run: cargo install wasm_lite_cli --git https://github.com/drewcrawford/wasm_lite --rev b6e1177dfd2abeacf64e7f835c6ad2aa11263158 --locked --force
+      # scripts/wasm32/tests drives a browser through the wasm_lite CLI's `run`
+      # subcommand and looks for the binary on PATH. GitHub runners are bare, so
+      # install it there; the Gitea runner is provisioned with it already, which
+      # is why this carries the same GITEA_ACTIONS guard as the steps above.
+      - name: Install wasm_lite runner
+        if: matrix.target == 'wasm32' && !(env.GITEA_ACTIONS == 'true')
+        run: cargo +nightly install wasm_lite_cli
 
       - name: Install Wayland components
         if: matrix.target == 'native' && !(env.GITEA_ACTIONS == 'true')

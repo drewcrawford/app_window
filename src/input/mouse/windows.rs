@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Translates Win32 mouse messages into the Rust mouse state.
 use crate::input::Window;
 use crate::input::mouse::{MouseWindowLocation, Shared};
 use std::mem::MaybeUninit;

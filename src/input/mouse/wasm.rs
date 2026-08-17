@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Connects browser pointer and wheel events to the Rust mouse state.
 use crate::input::Window;
 use crate::input::keyboard::wasm::ARBITRARY_WINDOW_PTR;
 use crate::input::mouse::MouseWindowLocation;

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Provides small functions used to exercise app_window's doctest support.
 /**
 
 # Doctest example
@@ -27,5 +28,4 @@ r.recv().unwrap();
 pub fn example2() {
     println!("Hello, world 2!");
 }
-
 

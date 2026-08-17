@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Maps unified keyboard keys to X11 keysyms for Linux accessibility input.
 
 use crate::input::keyboard::key::KeyboardKey;
 

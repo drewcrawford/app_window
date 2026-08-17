@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Maps unified keyboard keys to AT-SPI key names.
 
 use crate::input::keyboard::key::KeyboardKey;
 

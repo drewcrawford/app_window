@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Defines the platform-independent physical keyboard key enum.
 /// A key on the keyboard.
 ///
 /// This enum represents physical keys on a keyboard, mapped from platform-specific

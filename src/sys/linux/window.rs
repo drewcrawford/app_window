@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Owns Linux window roles, surfaces, decorations, and lifecycle operations.
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex, Weak};

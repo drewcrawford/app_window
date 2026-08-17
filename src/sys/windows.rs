@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Implements Win32 windows, message dispatch, surfaces, and alerts.
 
 use crate::coordinates::{Position, Size};
 use raw_window_handle::{

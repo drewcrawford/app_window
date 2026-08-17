@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Implements keyboard input and Wayland event plumbing on Linux.
 use crate::input::keyboard::Shared;
 use crate::input::keyboard::key::KeyboardKey;
 use crate::input::mouse::linux::motion_event;
@@ -367,6 +368,7 @@ impl Dispatch<WlKeyboard, ObjectId> for AppData {
     }
 }
 
+/// Opens a small Wayland window used to inspect raw keyboard and pointer input.
 pub fn debug_window_show() {
     let conn = Connection::connect_to_env().expect("Can't connect to wayland environment");
     let display = conn.display();
@@ -404,6 +406,7 @@ pub fn debug_window_show() {
     }
 }
 
+/// Hides the Linux debug input window.
 pub fn debug_window_hide() {
     todo!()
 }

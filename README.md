@@ -22,9 +22,9 @@ requirements.
 
 First, initialize the application from your main function:
 
-```rust
+```no_run
+# // no_run because: application::main() must be called from the actual main thread, which is not available in doctests
 use app_window::application;
-
 fn main() {
     application::main(|| {
         // Your application code here
@@ -34,11 +34,13 @@ fn main() {
         futures::executor::block_on(run());
     });
 }
+#[allow(clippy::needless_doctest_main)]
 ```
 
 Then create windows from any async context:
 
-```rust
+```
+# async fn example() {
 use app_window::{window::Window, coordinates::{Position, Size}};
 
 // Create a window at a specific position
@@ -50,6 +52,7 @@ let window = Window::new(
 
 // The window stays open as long as the Window instance exists
 // When dropped, the window automatically closes
+# }
 ```
 
 # Design Principles
@@ -59,7 +62,8 @@ let window = Window::new(
 Unlike traditional windowing libraries, `app_window` uses async functions throughout.
 This design elegantly handles platform differences:
 
-```rust
+```
+# async fn example() {
 use app_window::window::Window;
 
 // This works on any thread, on any platform
@@ -69,19 +73,22 @@ let window = Window::default().await;
 // - On macOS: dispatched to main thread
 // - On Windows/Linux: may run on current thread
 // - On Web: runs on the single thread
+# }
 ```
 
 ## 2. Window Lifetime Management
 
 Windows are tied to their Rust object lifetime. No manual cleanup needed:
 
-```rust
+```
+# async fn example() {
 use app_window::window::Window;
 
 {
     let window = Window::default().await;
     // Window is open and visible
 } // Window automatically closes when dropped
+# }
 ```
 
 ## 3. Platform-Specific Strategies
@@ -119,7 +126,8 @@ This crate abstracts over platform threading differences:
 
 You write the same async code for all platforms:
 
-```rust
+```
+# async fn example() {
 use app_window::application;
 
 // This works everywhere, regardless of platform requirements
@@ -127,13 +135,15 @@ let result = application::on_main_thread("my_task".to_string(), || {
     // Guaranteed to run on main thread
     42
 }).await;
+# }
 ```
 
 # Examples
 
 ## Creating a fullscreen window
 
-```rust
+```
+# async fn example() {
 use app_window::window::Window;
 
 match Window::fullscreen("My Game".to_string()).await {
@@ -144,11 +154,13 @@ match Window::fullscreen("My Game".to_string()).await {
     }
     Err(e) => eprintln!("Failed to create fullscreen window: {:?}", e),
 }
+# }
 ```
 
 ## Handling window resize
 
-```rust
+```
+# async fn example() {
 use app_window::{window::Window, coordinates::Size};
 
 let mut window = Window::default().await;
@@ -159,11 +171,13 @@ surface.size_update(|new_size: Size| {
     println!("Window resized to {}x{}", new_size.width(), new_size.height());
     // Update your rendering viewport...
 });
+# }
 ```
 
 ## Input handling
 
-```rust
+```
+# async fn example() {
 use app_window::input::{
     keyboard::{Keyboard, key::KeyboardKey},
     mouse::{Mouse, MOUSE_BUTTON_LEFT}
@@ -213,13 +227,16 @@ let (scroll_x, scroll_y) = mouse.load_clear_scroll_delta();
 if scroll_y != 0.0 {
     println!("Scrolled vertically by {}", scroll_y);
 }
+# }
 ```
 
 ## Integrating with wgpu
 
 For wgpu integration, use the platform-specific strategy:
 
-```rust
+```no_run
+# // no_run because: full wgpu example requires graphics setup beyond scope of doctest
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
 use app_window::{window::Window, application, WGPU_STRATEGY, WGPUStrategy};
 
 let mut window = Window::default().await;
@@ -242,9 +259,29 @@ match WGPU_STRATEGY {
         // Handle future strategies
     }
 }
+# Ok(())
+# }
 ```
 
 See `examples/gpu.rs` for a complete wgpu integration example.
+
+## WASM + wgpu
+
+`wgpu` uses the wasm-bindgen API on WebAssembly, while this crate's browser
+backend uses `wasm_lite`. To build an application that combines both, add the
+wasm_lite compatibility patch to the application manifest:
+
+```toml
+[patch.crates-io]
+wasm-bindgen = { git = "https://github.com/drewcrawford/wasm_lite", rev = "f47bf4178d666e83017abe056f07bb20d33c14cd" }
+```
+
+The patch belongs in the final application's `Cargo.toml`; Cargo does not
+inherit patches from dependencies. Patch only `wasm-bindgen`—do not replace
+`wasm_lite` or `wasm_lite_std` with git or path dependencies, because the
+compatibility crate now resolves those released runtimes from crates.io. The
+application also needs the released `wasm_lite_cli` runner and the shared-memory
+WASM linker settings shown in this repository's `.cargo/config.toml`.
 
 # Platform Support
 

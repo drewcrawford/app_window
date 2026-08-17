@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+//! Bridges native macOS keyboard callbacks into shared Rust keyboard state.
 use crate::input::keyboard::Shared;
 use crate::input::keyboard::key::KeyboardKey;
 use std::ffi::c_void;
