@@ -49,10 +49,27 @@ impl<T> Drop for Shared<T> {
     fn drop(&mut self) {
         // When we're dropping the last value, we need to do so on the right thread
         if let Some(take) = self.inner.take() {
-            let drop_shared = format!("MainThreadCell::drop({})", std::any::type_name::<T>());
-            application::submit_to_main_thread(drop_shared, || {
+            if application::is_main_thread() {
                 drop(take);
-            });
+            } else if application::is_main_thread_running() {
+                let drop_shared = format!("MainThreadCell::drop({})", std::any::type_name::<T>());
+                // If dispatch itself panics, dropping its closure on this worker
+                // must not also drop the thread-affine value here.
+                let mut deferred = std::mem::ManuallyDrop::new(take);
+                application::submit_to_main_thread(drop_shared, move || {
+                    // SAFETY: this FnOnce closure is the sole owner and runs only
+                    // on the main thread.
+                    unsafe { std::mem::ManuallyDrop::drop(&mut deferred) };
+                });
+            } else {
+                // Dropping T here could violate its thread-affinity invariant. With no
+                // running main-thread dispatcher, leaking is the only safe option.
+                logwise::error_sync!(
+                    "Leaking {type_name}: its MainThreadCell was dropped off the main thread after the dispatcher stopped",
+                    type_name = logwise::privacy::IPromiseItsNotPrivate(std::any::type_name::<T>())
+                );
+                std::mem::forget(take);
+            }
         }
     }
 }
@@ -135,9 +152,22 @@ impl<T> Clone for MainThreadCell<T> {
 impl<T> MainThreadCell<T> {
     /// Creates a new MainThreadCell containing the given value.
     ///
-    /// This can be called from any thread.
+    /// This must be called on the main thread. Constructing the cell elsewhere would
+    /// allow a non-`Send` value (and any aliases it contains) to cross threads.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called from a non-main thread.
     #[inline]
     pub fn new(t: T) -> Self {
+        Self::verify_main_thread();
+        // SAFETY: the value is being created on the only thread where it can be
+        // accessed or destroyed.
+        unsafe { Self::new_unchecked(t) }
+    }
+
+    /// Constructs a cell after the caller has established main-thread affinity.
+    unsafe fn new_unchecked(t: T) -> Self {
         let cell = unsafe { UnsafeSendCell::new_unchecked(UnsafeSyncCell::new(t)) };
         MainThreadCell {
             shared: Some(Arc::new(Shared {
@@ -282,7 +312,7 @@ impl<T> MainThreadCell<T> {
             "MainThreadCell::new_on_main_thread({})",
             std::any::type_name::<T>()
         );
-        let value = application::on_main_thread(new_on_main_thread, || async move {
+        let value = crate::executor::on_main_thread_async(new_on_main_thread, async move {
             logwise::info_sync!("Inside main thread closure");
             let f = c();
             logwise::info_sync!("Calling provided closure f()...");
@@ -290,7 +320,6 @@ impl<T> MainThreadCell<T> {
             logwise::info_sync!("Closure completed, creating MainThreadCell...");
             MainThreadCell::new(r)
         })
-        .await
         .await;
         logwise::info_sync!("Main thread execution completed, returning value");
         value
@@ -326,13 +355,19 @@ mod tests {
     #[cfg(target_arch = "wasm32")]
     use wasm_lite_std as thread;
 
+    fn new_for_test<T>(value: T) -> MainThreadCell<T> {
+        // Native libtest cases run on worker threads. These tests only inspect the
+        // container and deliberately leak it, so no inner access crosses threads.
+        unsafe { MainThreadCell::new_unchecked(value) }
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
     #[test]
     fn test_cell_construction() {
         // Verify we can construct cells
-        let cell = MainThreadCell::new(42);
-        let cell_from: MainThreadCell<i32> = 42.into();
-        let cell_default: MainThreadCell<i32> = Default::default();
+        let cell = new_for_test(42);
+        let cell_from = new_for_test(42);
+        let cell_default = new_for_test(i32::default());
         //these require drop on the main thread, so let's not!
         std::mem::forget(cell);
         std::mem::forget(cell_from);
@@ -342,11 +377,17 @@ mod tests {
     #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
     #[test]
     fn test_debug_impl() {
-        let cell = MainThreadCell::new(42);
+        let cell = new_for_test(42);
         let debug_str = format!("{:?}", cell);
         assert!(debug_str.contains("MainThreadCell"));
-        //can't drop on the main thread, so let's not
         std::mem::forget(cell);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn construction_off_main_thread_panics() {
+        let result = std::thread::spawn(|| MainThreadCell::new(42)).join();
+        assert!(result.is_err());
     }
 
     #[wasm_lite::wasm_lite_test]
@@ -354,7 +395,7 @@ mod tests {
         //wasm_lite's runner always drives a real browser
         //see https://github.com/rustwasm/wasm-bindgen/issues/4534,
         //and threading comes from wasm_lite_std.
-        let cell = MainThreadCell::new(42);
+        let cell = new_for_test(42);
         let (c, f) = r#continue::continuation();
 
         // Verify we can send the cell to another thread

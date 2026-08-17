@@ -18,9 +18,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     VK_NUMPAD0, VK_NUMPAD1, VK_NUMPAD2, VK_NUMPAD3, VK_NUMPAD4, VK_NUMPAD5, VK_NUMPAD6, VK_NUMPAD7,
     VK_NUMPAD8, VK_NUMPAD9, VK_OEM_1, VK_OEM_2, VK_OEM_3, VK_OEM_4, VK_OEM_5, VK_OEM_6, VK_OEM_7,
     VK_OEM_102, VK_OEM_COMMA, VK_OEM_MINUS, VK_OEM_PERIOD, VK_OEM_PLUS, VK_PAUSE, VK_PLAY,
-    VK_PRINT, VK_PRIOR, VK_RCONTROL, VK_RETURN, VK_RIGHT, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SCROLL,
-    VK_SELECT, VK_SEPARATOR, VK_SHIFT, VK_SNAPSHOT, VK_SPACE, VK_SUBTRACT, VK_TAB, VK_UP,
-    VK_VOLUME_DOWN, VK_VOLUME_MUTE, VK_VOLUME_UP,
+    VK_PRIOR, VK_RCONTROL, VK_RETURN, VK_RIGHT, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SCROLL, VK_SELECT,
+    VK_SEPARATOR, VK_SHIFT, VK_SNAPSHOT, VK_SPACE, VK_SUBTRACT, VK_TAB, VK_UP, VK_VOLUME_DOWN,
+    VK_VOLUME_MUTE, VK_VOLUME_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CW_USEDEFAULT, CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, IDC_ARROW,
@@ -276,7 +276,7 @@ impl KeyboardKey {
             //vk_execute?
             v if v == VK_SNAPSHOT.0 as usize => Some(KeyboardKey::PrintScreen),
             v if v == VK_INSERT.0 as usize => Some(KeyboardKey::Insert),
-            v if v == VK_DELETE.0 as usize => Some(KeyboardKey::Delete),
+            v if v == VK_DELETE.0 as usize => Some(KeyboardKey::ForwardDelete),
             v if v == VK_HELP.0 as usize => Some(KeyboardKey::Help),
             0x30 => Some(KeyboardKey::Num0),
             0x31 => Some(KeyboardKey::Num1),

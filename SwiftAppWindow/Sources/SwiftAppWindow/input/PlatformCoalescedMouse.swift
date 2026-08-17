@@ -46,11 +46,11 @@ final class PlatformCoalescedMouse:
                         if let contentView = window.contentView {
                             let contentPoint = contentView.convert(location, from: nil)
                             let contentPointRust = convertToRustCoordinates(absolutePoint: contentPoint, minX: 0, maxY: contentView.frame.size.height)
-                            raw_input_mouse_move(recvContext, eventWindow, contentPointRust.x, contentPointRust.y, 0, contentView.frame.size.height)
+                            raw_input_mouse_move(recvContext, eventWindow, contentPointRust.x, contentPointRust.y, contentView.frame.size.width, contentView.frame.size.height)
                         }
                         else {
                             let windowRustCoords = convertToRustCoordinates(absolutePoint: location, minX: 0, maxY: window.frame.size.height)
-                            raw_input_mouse_move(recvContext, eventWindow, windowRustCoords.x, windowRustCoords.y, 0, window.frame.size.height)
+                            raw_input_mouse_move(recvContext, eventWindow, windowRustCoords.x, windowRustCoords.y, window.frame.size.width, window.frame.size.height)
                         }
                     }
                     

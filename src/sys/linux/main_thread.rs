@@ -145,17 +145,6 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     eventfd_opcode = eventfd_opcode.user_data(CHANNEL_DATA_AVAILABLE);
     unsafe { sqs.push(&eventfd_opcode) }.expect("Can't submit peek");
     drop(sqs);
-    //flush_queue_debug
-    std::thread::Builder::new()
-        .name("flush_queue_debug".to_string())
-        .spawn(move || {
-            for _ in 0..1_000_000 {
-                std::thread::sleep(std::time::Duration::from_millis(1));
-                on_main_thread(|| {}) //wake
-            }
-        })
-        .unwrap();
-
     fn next_read_guard(
         event_queue: &mut wayland_client::EventQueue<App>,
         app: &mut App,

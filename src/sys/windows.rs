@@ -154,6 +154,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
             DispatchMessageW(&message);
         }
     }
+    crate::application::IS_MAIN_THREAD_RUNNING.store(false, std::sync::atomic::Ordering::Release);
 }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
@@ -169,12 +170,19 @@ pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
         }
         std::thread::yield_now();
     };
-    unsafe { PostMessageW(Some(hwnd), WM_RUN_FUNCTION, WPARAM(as_usize), LPARAM(0)) }
-        .expect("PostMessageW failed");
+    if let Err(error) =
+        unsafe { PostMessageW(Some(hwnd), WM_RUN_FUNCTION, WPARAM(as_usize), LPARAM(0)) }
+    {
+        // A failed post did not transfer ownership to the window procedure.
+        drop(unsafe { Box::from_raw(closure_ptr as *mut WinClosure) });
+        panic!("PostMessageW failed: {error}");
+    }
 }
 
 pub fn stop_main_thread() {
-    unsafe { PostQuitMessage(0) };
+    // PostQuitMessage targets the calling thread. Route it through the dispatch
+    // window so callers on worker threads stop the actual UI message loop.
+    on_main_thread(|| unsafe { PostQuitMessage(0) });
 }
 
 pub async fn alert(message: String) {

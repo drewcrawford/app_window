@@ -13,8 +13,7 @@ final class SurfaceView: NSView {
     var sizeNotify: ((CGFloat, CGFloat) -> ())?
     override func layout() {
         super.layout()
-        let scale = window?.backingScaleFactor ?? 1.0
-        sizeNotify?(frame.width * scale, frame.height * scale)
+        sizeNotify?(frame.width, frame.height)
     }
 }
 

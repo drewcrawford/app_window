@@ -483,7 +483,8 @@ pub mod some_executor;
 /// # async fn example() {
 /// use app_window::main_thread_cell::MainThreadCell;
 ///
-/// // Create a cell (can be called from any thread)
+/// // Create a cell on the main thread. From another thread, use
+/// // MainThreadCell::new_on_main_thread instead.
 /// let cell = MainThreadCell::new(42);
 ///
 /// // Access from main thread directly

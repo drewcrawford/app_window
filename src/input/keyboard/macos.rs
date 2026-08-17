@@ -29,7 +29,7 @@ unsafe extern "C" fn raw_input_key_notify_func(
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn raw_input_finish_event_context(ctx: *mut c_void) {
+unsafe extern "C" fn raw_input_finish_key_event_context(ctx: *mut c_void) {
     unsafe { Weak::from_raw(ctx as *const Shared) };
 }
 

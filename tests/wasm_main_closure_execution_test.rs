@@ -18,14 +18,9 @@
 //! Run with: `cargo test --test wasm_main_closure_execution_test`
 
 #[cfg(not(target_arch = "wasm32"))]
-use std::time::Duration;
-#[cfg(target_arch = "wasm32")]
-use wasm_lite_std::time::Duration;
-
-#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
-#[cfg(target_arch = "wasm32")]
-use wasm_lite_std as thread;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Duration;
 
 //wasm_lite's runner always drives a real browser
 //see https://github.com/rustwasm/wasm-bindgen/issues/4534,
@@ -40,16 +35,18 @@ fn main() {
 wasm_lite::test_main!();
 
 async fn test() {
+    #[cfg(not(target_arch = "wasm32"))]
     let (s, r) = std::sync::mpsc::channel();
     let (s2, r2) = r#continue::continuation();
 
+    #[cfg(not(target_arch = "wasm32"))]
     thread::spawn(move || {
         //one message received here
         r.recv_timeout(Duration::from_millis(500)).unwrap();
         std::process::exit(0);
     });
     app_window::application::main(move || {
-        //send two messages to the channel
+        #[cfg(not(target_arch = "wasm32"))]
         s.send(()).unwrap();
         s2.send(());
     });

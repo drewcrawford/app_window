@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Platform lifecycle reliability** - Wayland shared-memory pools and role objects now tear down in protocol-safe order, Windows main-thread closures survive modal loops via a message-only window, and macOS test binaries can find the Swift runtime without a fallback environment variable.
 
+- **Main-thread ownership safety** - `MainThreadCell` construction now stays on the UI thread from start to finish, and thread-affine shared values are never destroyed on a worker after the dispatcher stops. This closes a path to undefined behavior during startup and shutdown.
+
+- **[macOS] Swift binding correctness** - Keyboard event contexts now use their matching destructor, avoiding allocator corruption during teardown. Resize callbacks report logical dimensions, and mouse events include the real window width again.
+
+- **[Windows] Clean shutdown and key mapping** - Stopping the application now quits the UI thread even when requested from a worker, failed callback posts release their allocation, and Delete is correctly reported as Forward Delete.
+
+- **[Linux] No runaway idle wakeups** - Removed a debug wakeup loop that could keep posting work for nearly seventeen minutes after startup.
+
 - **[WASM] Main-thread synchronization** - Mouse-location and resize-callback state now use wasm-aware locks, avoiding atomic waits that trap on the browser main thread.
 
 ### Changed

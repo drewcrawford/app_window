@@ -132,7 +132,7 @@ final class PlatformCoalescedKeyboard:
         if let monitor {
             NSEvent.removeMonitor(monitor)
         }
-        raw_input_finish_mouse_event_context(self.context)
+        raw_input_finish_key_event_context(self.context)
         
     }
 }
