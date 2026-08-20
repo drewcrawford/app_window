@@ -11,6 +11,8 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::fmt::Display;
 use std::num::NonZero;
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::sync::{LazyLock, Mutex};
 use windows::Win32::Foundation::{
     ERROR_CLASS_ALREADY_EXISTS, GetLastError, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM,
 };
@@ -62,6 +64,38 @@ pub fn is_main_thread() -> bool {
 
 struct WinClosure(Box<dyn FnOnce() + Send + 'static>);
 
+// Window messages can be posted by code outside this process. Never put a Rust
+// pointer in one: the receiver has no way to prove that an integer supplied in
+// WPARAM points to a live allocation of the expected type. Keep ownership in a
+// process-local table and send only a one-shot lookup token through Win32.
+static NEXT_CLOSURE_ID: AtomicUsize = AtomicUsize::new(1);
+static PENDING_CLOSURES: LazyLock<Mutex<HashMap<usize, WinClosure>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn store_closure(closure: WinClosure) -> usize {
+    let mut closure = Some(closure);
+    loop {
+        let id = NEXT_CLOSURE_ID.fetch_add(1, Ordering::Relaxed);
+        if id == 0 {
+            // Zero is easy to generate accidentally and is also what Win32
+            // callers conventionally use when a parameter is absent.
+            continue;
+        }
+
+        let mut pending = PENDING_CLOSURES.lock().unwrap();
+        if let std::collections::hash_map::Entry::Vacant(entry) = pending.entry(id) {
+            entry.insert(closure.take().unwrap());
+            return id;
+        }
+        // Atomic wraparound can collide with work that is still pending. Try
+        // the next id rather than replacing (and dropping) live work.
+    }
+}
+
+fn take_closure(id: usize) -> Option<WinClosure> {
+    PENDING_CLOSURES.lock().unwrap().remove(&id)
+}
+
 #[derive(Default)]
 struct HwndImp {
     size_notify: Option<Box<dyn Fn(Size)>>,
@@ -74,8 +108,7 @@ thread_local! {
 //rather than via PostThreadMessageW because thread messages are silently discarded by
 //modal message loops (window move/size, menus, dialogs), which would leak the closure
 //and hang the awaiting future.
-static DISPATCH_HWND: std::sync::atomic::AtomicPtr<c_void> =
-    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+static DISPATCH_HWND: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 extern "system" fn dispatch_window_proc(
     hwnd: HWND,
@@ -85,9 +118,11 @@ extern "system" fn dispatch_window_proc(
 ) -> LRESULT {
     match msg {
         WM_RUN_FUNCTION => {
-            let as_usize = w_param.0;
-            let winclosure = unsafe { Box::from_raw(as_usize as *mut WinClosure) };
-            winclosure.0();
+            // Unknown ids include malformed, forged, duplicated, and replayed
+            // messages. In every case the safe response is to ignore them.
+            if let Some(winclosure) = take_closure(w_param.0) {
+                winclosure.0();
+            }
             LRESULT(0)
         }
         _ => unsafe { DefWindowProcW(hwnd, msg, w_param, l_param) },
@@ -133,7 +168,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
         )
     }
     .expect("failed to create dispatch window");
-    DISPATCH_HWND.store(dispatch_window.0, std::sync::atomic::Ordering::Release);
+    DISPATCH_HWND.store(dispatch_window.0, Ordering::Release);
 
     //Run the closure on a secondary thread, like other platforms.  Running it inline
     //would deadlock any closure that blocks on a future needing the main-thread
@@ -155,28 +190,49 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
             DispatchMessageW(&message);
         }
     }
-    crate::application::IS_MAIN_THREAD_RUNNING.store(false, std::sync::atomic::Ordering::Release);
+    crate::application::IS_MAIN_THREAD_RUNNING.store(false, Ordering::Release);
 }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
-    let boxed_closure = Box::new(WinClosure(Box::new(closure)));
-    let closure_ptr = Box::into_raw(boxed_closure) as *mut ();
-    let as_usize = closure_ptr as usize;
+    let closure_id = store_closure(WinClosure(Box::new(closure)));
     //The dispatch window is created slightly after IS_MAIN_THREAD_RUNNING is set;
     //briefly wait for it rather than failing.
     let hwnd = loop {
-        let ptr = DISPATCH_HWND.load(std::sync::atomic::Ordering::Acquire);
+        let ptr = DISPATCH_HWND.load(Ordering::Acquire);
         if !ptr.is_null() {
             break HWND(ptr);
         }
         std::thread::yield_now();
     };
     if let Err(error) =
-        unsafe { PostMessageW(Some(hwnd), WM_RUN_FUNCTION, WPARAM(as_usize), LPARAM(0)) }
+        unsafe { PostMessageW(Some(hwnd), WM_RUN_FUNCTION, WPARAM(closure_id), LPARAM(0)) }
     {
         // A failed post did not transfer ownership to the window procedure.
-        drop(unsafe { Box::from_raw(closure_ptr as *mut WinClosure) });
+        drop(take_closure(closure_id));
         panic!("PostMessageW failed: {error}");
+    }
+}
+
+#[cfg(test)]
+mod dispatch_tests {
+    use super::{WinClosure, store_closure, take_closure};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn dispatch_tokens_are_one_shot_and_unknown_values_are_ignored() {
+        assert!(take_closure(usize::MAX).is_none());
+
+        let ran = Arc::new(AtomicBool::new(false));
+        let ran_in_closure = ran.clone();
+        let id = store_closure(WinClosure(Box::new(move || {
+            ran_in_closure.store(true, Ordering::Relaxed);
+        })));
+
+        let closure = take_closure(id).expect("stored closure must be available");
+        assert!(take_closure(id).is_none(), "a token cannot be replayed");
+        closure.0();
+        assert!(ran.load(Ordering::Relaxed));
     }
 }
 

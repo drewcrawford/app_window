@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **[Windows] Main-thread dispatch messages no longer carry Rust pointers.**
+  Callback ownership now stays in a process-local, one-shot registry, so a
+  malformed, forged, or replayed window message is ignored instead of being
+  treated as an address to dereference and free.
+
 ## [0.3.4] - 2026-08-17
 
 ### Added
