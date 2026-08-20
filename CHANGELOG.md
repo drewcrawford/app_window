@@ -51,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cannot accidentally reuse backend channels and globals that were designed to
   initialize exactly once.
 
+- **Surfaces now keep their native windows alive.** Dropping a `Window` before
+  its `Surface` can no longer leave safe `raw-window-handle` accessors handing a
+  dangling native handle to wgpu or another renderer. The actual window closes
+  when its last window-or-surface owner goes away.
+
 ## [0.3.4] - 2026-08-17
 
 ### Added

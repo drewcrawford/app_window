@@ -43,6 +43,7 @@ use crate::coordinates::{Position, Size};
 use crate::surface::Surface;
 use crate::sys;
 use std::fmt::Display;
+use std::sync::Arc;
 
 /// A cross-platform window.
 ///
@@ -52,8 +53,9 @@ use std::fmt::Display;
 ///
 /// # Lifecycle
 ///
-/// Windows remain open as long as the `Window` instance exists. Dropping a `Window` will
-/// close it immediately. To keep a window open indefinitely, use [`std::mem::forget`]:
+/// Windows remain open as long as their `Window` or `Surface` exists. Dropping a
+/// `Window` closes it once any surface created from it has also been dropped. To
+/// keep a window open indefinitely, use [`std::mem::forget`]:
 ///
 /// ```
 /// #[cfg(target_arch = "wasm32")] {
@@ -91,16 +93,21 @@ use std::fmt::Display;
 #[derive(Debug)]
 #[must_use = "Dropping a window will close it!"]
 pub struct Window {
-    sys: crate::sys::Window,
+    owner: Arc<WindowOwner>,
     created_surface: bool,
+}
+
+#[derive(Debug)]
+pub(crate) struct WindowOwner {
+    pub(crate) sys: crate::sys::Window,
     /// The registry id, or `None` if the registry was locked when this window
     /// was created. See [`crate::registry`].
     #[cfg(feature = "exfiltrate")]
-    registry_id: Option<u64>,
+    pub(crate) registry_id: Option<u64>,
 }
 
 #[cfg(feature = "exfiltrate")]
-impl Drop for Window {
+impl Drop for WindowOwner {
     fn drop(&mut self) {
         // `std::mem::forget` is a documented way to keep a window open, and it
         // skips this -- correctly, because such a window really is still open.
@@ -184,10 +191,12 @@ impl Window {
             crate::registry::opened(crate::registry::Origin::Fullscreen, title.clone(), None);
         let sys = crate::sys::Window::fullscreen(title).await?;
         Ok(Window {
-            sys,
+            owner: Arc::new(WindowOwner {
+                sys,
+                #[cfg(feature = "exfiltrate")]
+                registry_id,
+            }),
             created_surface: false,
-            #[cfg(feature = "exfiltrate")]
-            registry_id,
         })
     }
     /// Creates a new window with the specified position, size, and title.
@@ -248,11 +257,14 @@ impl Window {
             title.clone(),
             Some((position, size)),
         );
+        let sys = crate::sys::Window::new(position, size, title).await;
         Window {
-            sys: crate::sys::Window::new(position, size, title).await,
+            owner: Arc::new(WindowOwner {
+                sys,
+                #[cfg(feature = "exfiltrate")]
+                registry_id,
+            }),
             created_surface: false,
-            #[cfg(feature = "exfiltrate")]
-            registry_id,
         }
     }
 
@@ -298,16 +310,11 @@ impl Window {
         assert!(!self.created_surface, "Surface already created");
         self.created_surface = true;
         #[cfg(feature = "exfiltrate")]
-        if let Some(id) = self.registry_id {
+        if let Some(id) = self.owner.registry_id {
             crate::registry::surface_attached(id);
         }
-        #[allow(unused_mut)]
-        let mut surface = self.sys.surface().await;
-        #[cfg(feature = "exfiltrate")]
-        {
-            surface.registry_id = self.registry_id;
-        }
-        surface
+        let sys_surface = self.owner.sys.surface().await;
+        Surface::new(sys_surface, self.owner.clone())
     }
 
     /// Creates a new window with platform-appropriate default settings.
@@ -355,11 +362,14 @@ impl Window {
             String::new(),
             None,
         );
+        let sys = crate::sys::Window::default().await;
         Window {
-            sys: crate::sys::Window::default().await,
+            owner: Arc::new(WindowOwner {
+                sys,
+                #[cfg(feature = "exfiltrate")]
+                registry_id,
+            }),
             created_surface: false,
-            #[cfg(feature = "exfiltrate")]
-            registry_id,
         }
     }
 }

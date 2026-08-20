@@ -132,7 +132,7 @@ impl Window {
         let imp = unsafe { SwiftAppWindow_WindowNewFullscreen(SRString::from(title.as_str())) };
         Ok(Window { imp })
     }
-    pub async fn surface(&self) -> crate::surface::Surface {
+    pub async fn surface(&self) -> Surface {
         let (sender, fut) = r#continue::continuation();
 
         let sender_box = Box::into_raw(Box::new(sender));
@@ -144,9 +144,7 @@ impl Window {
             )
         };
 
-        let sys_surface = fut.await;
-
-        crate::surface::Surface::new(sys_surface)
+        fut.await
     }
 }
 

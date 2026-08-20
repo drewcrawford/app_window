@@ -3,7 +3,9 @@
 
 use crate::coordinates::Size;
 use crate::sys;
+use crate::window::WindowOwner;
 use raw_window_handle::{DisplayHandle, RawDisplayHandle, RawWindowHandle, WindowHandle};
+use std::sync::Arc;
 
 /// A type that can be drawn on, e.g. by wgpu.
 ///
@@ -45,25 +47,21 @@ use raw_window_handle::{DisplayHandle, RawDisplayHandle, RawWindowHandle, Window
 #[must_use = "Dropping a surface may release resources"]
 pub struct Surface {
     pub(super) sys: sys::Surface,
-    /// The registry id of the window this belongs to, so geometry the
-    /// application observes can be recorded against it. See
-    /// [`crate::registry`].
-    #[cfg(feature = "exfiltrate")]
-    pub(crate) registry_id: Option<u64>,
+    // Native window handles are valid only while their window exists. Retain
+    // the owner so the safe raw-window-handle implementations below cannot
+    // hand downstream code a dangling handle.
+    _window_owner: Arc<WindowOwner>,
 }
 
 impl Surface {
     /// Wraps a platform surface.
     ///
-    /// A constructor rather than a struct literal in each backend: the
-    /// `exfiltrate` feature adds a field, and four backends -- three of which
-    /// cannot be compiled on any one machine -- should not each have to know
-    /// that.
-    pub(crate) fn new(sys: sys::Surface) -> Surface {
+    /// A constructor rather than a struct literal in each backend keeps native
+    /// surface construction separate from the cross-platform window owner.
+    pub(crate) fn new(sys: sys::Surface, window_owner: Arc<WindowOwner>) -> Surface {
         Surface {
             sys,
-            #[cfg(feature = "exfiltrate")]
-            registry_id: None,
+            _window_owner: window_owner,
         }
     }
 
@@ -99,7 +97,7 @@ impl Surface {
     pub async fn size_scale(&self) -> (Size, f64) {
         let observed = self.sys.size_scale().await;
         #[cfg(feature = "exfiltrate")]
-        if let Some(id) = self.registry_id {
+        if let Some(id) = self._window_owner.registry_id {
             crate::registry::observed(id, observed.0, observed.1);
         }
         observed

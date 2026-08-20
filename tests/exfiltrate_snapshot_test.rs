@@ -100,6 +100,17 @@ mod enabled {
         );
         assert_eq!(recorded_scale, scale);
 
+        // A Surface exposes a safe borrowed raw-window-handle, so the native
+        // window must remain alive for at least as long as the Surface. The
+        // registry follows the actual native lifetime rather than the public
+        // Window wrapper's lifetime.
+        drop(window);
+        assert!(
+            window_row(id).unwrap().is_open(),
+            "the surface keeps its native window alive"
+        );
+        let _ = surface.size_scale().await;
+
         // -- the main thread ------------------------------------------------------
         //
         // Everything above went through `on_main_thread`, so by now the counters
@@ -138,11 +149,10 @@ mod enabled {
         // -- closing --------------------------------------------------------------
 
         drop(surface);
-        drop(window);
         let closed = window_row(id).expect("the record outlives the window");
         assert!(
             !closed.is_open(),
-            "dropping a window closes it, and the record says so"
+            "dropping the final surface closes its retained window"
         );
         assert!(closed.closed_at.is_some());
 

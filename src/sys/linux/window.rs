@@ -271,7 +271,7 @@ impl Window {
         Ok(w)
     }
 
-    pub async fn surface(&self) -> crate::surface::Surface {
+    pub async fn surface(&self) -> Surface {
         let display = crate::application::on_main_thread("surface".to_string(), || {
             let info = MAIN_THREAD_INFO.take().expect("Main thread info not set");
             let display = info.connection.display();
@@ -287,11 +287,11 @@ impl Window {
             .as_ref()
             .expect("No surface")
             .clone();
-        crate::surface::Surface::new(Surface {
+        Surface {
             wl_display: display,
             wl_surface: surface,
             window_internal: self.internal.clone(),
-        })
+        }
     }
 }
 

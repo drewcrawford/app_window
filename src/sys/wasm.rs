@@ -186,8 +186,8 @@ impl Window {
         Window {}
     }
 
-    pub async fn surface(&self) -> crate::surface::Surface {
-        let sys_surface = crate::application::on_main_thread("surface".to_string(), || {
+    pub async fn surface(&self) -> Surface {
+        crate::application::on_main_thread("surface".to_string(), || {
             CANVAS_HOLDER.with_borrow_mut(|canvas| {
                 let canvas = canvas.as_ref().expect("no canvas");
                 Surface {
@@ -196,8 +196,7 @@ impl Window {
                 }
             })
         })
-        .await;
-        crate::surface::Surface::new(sys_surface)
+        .await
     }
     pub async fn default() -> Self {
         Window::new(
