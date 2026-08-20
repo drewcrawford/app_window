@@ -45,9 +45,28 @@ use raw_window_handle::{DisplayHandle, RawDisplayHandle, RawWindowHandle, Window
 #[must_use = "Dropping a surface may release resources"]
 pub struct Surface {
     pub(super) sys: sys::Surface,
+    /// The registry id of the window this belongs to, so geometry the
+    /// application observes can be recorded against it. See
+    /// [`crate::registry`].
+    #[cfg(feature = "exfiltrate")]
+    pub(crate) registry_id: Option<u64>,
 }
 
 impl Surface {
+    /// Wraps a platform surface.
+    ///
+    /// A constructor rather than a struct literal in each backend: the
+    /// `exfiltrate` feature adds a field, and four backends -- three of which
+    /// cannot be compiled on any one machine -- should not each have to know
+    /// that.
+    pub(crate) fn new(sys: sys::Surface) -> Surface {
+        Surface {
+            sys,
+            #[cfg(feature = "exfiltrate")]
+            registry_id: None,
+        }
+    }
+
     /// Returns the size and scale factor of the surface.
     ///
     /// The size is returned in logical pixels, which may differ from physical pixels
@@ -78,7 +97,12 @@ impl Surface {
     /// # }
     /// ```
     pub async fn size_scale(&self) -> (Size, f64) {
-        self.sys.size_scale().await
+        let observed = self.sys.size_scale().await;
+        #[cfg(feature = "exfiltrate")]
+        if let Some(id) = self.registry_id {
+            crate::registry::observed(id, observed.0, observed.1);
+        }
+        observed
     }
 
     /// Returns the size and scale factor of the surface from the main thread.

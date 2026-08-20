@@ -499,6 +499,7 @@ pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, 
     // from whoever asked for it -- which is the whole point of carrying a
     // durable token across the hand-off.
     let submitter = logwise::context::capture();
+    crate::instrument::submitted();
     let perf = move || {
         let start = time::Instant::now();
         // Entered only around the closure. The guard restores the previous
@@ -511,7 +512,9 @@ pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, 
         }
 
         let duration = start.elapsed();
-        if duration > time::Duration::from_millis(10) {
+        let overran = duration > time::Duration::from_millis(10);
+        crate::instrument::completed(duration, overran);
+        if overran {
             // Everything else on the main thread was blocked for this long, so
             // it is an operational fact about the application rather than a
             // developer aside. The label is caller-supplied text, hence local

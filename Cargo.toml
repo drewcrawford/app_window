@@ -24,6 +24,13 @@ logwise-forensic = []
 logwise-performance = []
 # Compatibility alias for consumers that still pass the pre-facade name.
 logwise_internal = ["logwise-diagnostic"]
+# A bounded registry of the windows this process created, exposed through
+# exfiltrate's `snapshot` command. Off by default: it costs a lock and a record
+# per window, and adds a field to `Window` and `Surface`.
+#
+# Main-thread liveness is *not* behind this. A frozen UI is an operational fact
+# about the application, and this crate compiles those in unconditionally.
+exfiltrate = ["dep:exfiltrate"]
 
 
 [dependencies]
@@ -39,6 +46,7 @@ thiserror = "2.0.17"
 some_executor = { git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_executor.git", rev = "45b02a16c410405867c6770144ae3168b58c532e" }
 continue = "0.1.3"
 send_cells = "0.2.5"
+exfiltrate = { git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/exfiltrate.git", rev = "dfbbdbe6f003643557fe2d1b0c5fb97083bdc11c", optional = true }
 
 [dev-dependencies]
 # needed for gpu example
@@ -143,6 +151,13 @@ harness = false
 [[test]]
 name = "logwise_context_test"
 path = "tests/logwise_context_test.rs"
+harness = false
+
+# Same reason: both providers only mean anything once the platform loop is
+# running, so this drives the real one.
+[[test]]
+name = "exfiltrate_snapshot_test"
+path = "tests/exfiltrate_snapshot_test.rs"
 harness = false
 
 [patch.crates-io]

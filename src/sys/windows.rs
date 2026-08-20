@@ -330,9 +330,7 @@ impl Window {
 
     pub async fn surface(&self) -> crate::surface::Surface {
         let copy_hwnd = self.hwnd.copying();
-        crate::surface::Surface {
-            sys: Surface { imp: copy_hwnd },
-        }
+        crate::surface::Surface::new(Surface { imp: copy_hwnd })
     }
 }
 

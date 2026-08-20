@@ -93,6 +93,21 @@ use std::fmt::Display;
 pub struct Window {
     sys: crate::sys::Window,
     created_surface: bool,
+    /// The registry id, or `None` if the registry was locked when this window
+    /// was created. See [`crate::registry`].
+    #[cfg(feature = "exfiltrate")]
+    registry_id: Option<u64>,
+}
+
+#[cfg(feature = "exfiltrate")]
+impl Drop for Window {
+    fn drop(&mut self) {
+        // `std::mem::forget` is a documented way to keep a window open, and it
+        // skips this -- correctly, because such a window really is still open.
+        if let Some(id) = self.registry_id {
+            crate::registry::closed(id);
+        }
+    }
 }
 
 /// An error that can occur when creating a fullscreen window.
@@ -164,10 +179,15 @@ impl Window {
             "{}",
             CALL_MAIN
         );
+        #[cfg(feature = "exfiltrate")]
+        let registry_id =
+            crate::registry::opened(crate::registry::Origin::Fullscreen, title.clone(), None);
         let sys = crate::sys::Window::fullscreen(title).await?;
         Ok(Window {
             sys,
             created_surface: false,
+            #[cfg(feature = "exfiltrate")]
+            registry_id,
         })
     }
     /// Creates a new window with the specified position, size, and title.
@@ -222,9 +242,17 @@ impl Window {
             crate::application::is_main_thread_running(),
             "Call app_window::application::main"
         );
+        #[cfg(feature = "exfiltrate")]
+        let registry_id = crate::registry::opened(
+            crate::registry::Origin::Requested,
+            title.clone(),
+            Some((position, size)),
+        );
         Window {
             sys: crate::sys::Window::new(position, size, title).await,
             created_surface: false,
+            #[cfg(feature = "exfiltrate")]
+            registry_id,
         }
     }
 
@@ -269,7 +297,17 @@ impl Window {
     pub async fn surface(&mut self) -> Surface {
         assert!(!self.created_surface, "Surface already created");
         self.created_surface = true;
-        self.sys.surface().await
+        #[cfg(feature = "exfiltrate")]
+        if let Some(id) = self.registry_id {
+            crate::registry::surface_attached(id);
+        }
+        #[allow(unused_mut)]
+        let mut surface = self.sys.surface().await;
+        #[cfg(feature = "exfiltrate")]
+        {
+            surface.registry_id = self.registry_id;
+        }
+        surface
     }
 
     /// Creates a new window with platform-appropriate default settings.
@@ -311,9 +349,17 @@ impl Window {
             "{}",
             CALL_MAIN
         );
+        #[cfg(feature = "exfiltrate")]
+        let registry_id = crate::registry::opened(
+            crate::registry::Origin::PlatformDefault,
+            String::new(),
+            None,
+        );
         Window {
             sys: crate::sys::Window::default().await,
             created_surface: false,
+            #[cfg(feature = "exfiltrate")]
+            registry_id,
         }
     }
 }

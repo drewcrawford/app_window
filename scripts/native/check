@@ -7,3 +7,6 @@ fi
 # --all-targets: examples and tests are where the platform backends and the
 # benchmark live, and a bare `cargo check` never built them.
 RUSTFLAGS="$WARN_FLAGS" cargo check --all-targets
+# Again with the optional registry on. Without this the `exfiltrate` feature --
+# and the `Window`/`Surface` fields it adds -- is never compiled by the gate.
+RUSTFLAGS="$WARN_FLAGS" cargo check --all-targets --features exfiltrate

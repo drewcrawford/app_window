@@ -254,11 +254,30 @@ async fn check_field_gating() {
     });
     done_rx.await;
 
-    let events = EVENTS.lock().unwrap().clone();
-    let overran = events
-        .iter()
-        .find(|seen| seen.name == "app_window.main_thread.submission_overran")
-        .expect("a 25ms main-thread closure should report an overrun");
+    // The closure signals from *inside* itself, so it returns before
+    // `submit_to_main_thread`'s wrapper has measured the duration and emitted
+    // the event. Reading `EVENTS` the instant the await resolves is therefore a
+    // race the test loses whenever the main thread is descheduled between the
+    // two -- which it does reliably now that the wrapper does a little more
+    // work in that gap. Wait for the event instead of assuming it is already
+    // there.
+    let deadline =
+        wasm_lite_std::time::Instant::now() + wasm_lite_std::time::Duration::from_secs(5);
+    let overran = loop {
+        let events = EVENTS.lock().unwrap().clone();
+        if let Some(seen) = events
+            .iter()
+            .find(|seen| seen.name == "app_window.main_thread.submission_overran")
+        {
+            break seen.clone();
+        }
+        assert!(
+            wasm_lite_std::time::Instant::now() < deadline,
+            "a 25ms main-thread closure should report an overrun; saw {events:?}"
+        );
+        wasm_lite_std::sleep_async(wasm_lite_std::time::Duration::from_millis(5)).await;
+    };
+    let overran = &overran;
 
     for (name, privacy, detail, materialized) in &overran.fields {
         match (privacy, detail) {

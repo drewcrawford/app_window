@@ -146,7 +146,7 @@ impl Window {
 
         let sys_surface = fut.await;
 
-        crate::surface::Surface { sys: sys_surface }
+        crate::surface::Surface::new(sys_surface)
     }
 }
 

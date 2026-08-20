@@ -197,7 +197,7 @@ impl Window {
             })
         })
         .await;
-        crate::surface::Surface { sys: sys_surface }
+        crate::surface::Surface::new(sys_surface)
     }
     pub async fn default() -> Self {
         Window::new(

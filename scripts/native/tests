@@ -51,10 +51,12 @@ if [[ "$OSTYPE" == "linux-gnu"* ]] && command -v weston &> /dev/null; then
 
     # Run tests
     RUSTFLAGS="$WARN_FLAGS" RUSTDOCFLAGS="$WARN_FLAGS" cargo test
+    RUSTFLAGS="$WARN_FLAGS" RUSTDOCFLAGS="$WARN_FLAGS" cargo test --features exfiltrate
 
     # Cleanup
     kill $WESTON_PID || true
 else
     # Non-Linux or Weston not available, run tests normally
     RUSTFLAGS="$WARN_FLAGS" RUSTDOCFLAGS="$WARN_FLAGS" cargo test
+    RUSTFLAGS="$WARN_FLAGS" RUSTDOCFLAGS="$WARN_FLAGS" cargo test --features exfiltrate
 fi

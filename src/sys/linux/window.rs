@@ -287,13 +287,11 @@ impl Window {
             .as_ref()
             .expect("No surface")
             .clone();
-        crate::surface::Surface {
-            sys: Surface {
-                wl_display: display,
-                wl_surface: surface,
-                window_internal: self.internal.clone(),
-            },
-        }
+        crate::surface::Surface::new(Surface {
+            wl_display: display,
+            wl_surface: surface,
+            window_internal: self.internal.clone(),
+        })
     }
 }
 

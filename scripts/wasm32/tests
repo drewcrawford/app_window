@@ -27,3 +27,10 @@ CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm_lite run" \
     RUSTDOCFLAGS="$WASM32_RUSTDOCFLAGS" \
     cargo +nightly test \
         --target=wasm32-unknown-unknown --lib --tests --examples "${CARGO_ARGS[@]}"
+
+# Again with the optional registry on, like the native side.
+CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="wasm_lite run" \
+    RUSTFLAGS="$WASM32_RUSTFLAGS" \
+    RUSTDOCFLAGS="$WASM32_RUSTDOCFLAGS" \
+    cargo +nightly test \
+        --target=wasm32-unknown-unknown --lib --tests --examples --features exfiltrate "${CARGO_ARGS[@]}"

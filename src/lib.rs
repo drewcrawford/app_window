@@ -527,6 +527,17 @@ pub mod some_executor;
 /// ```
 pub mod main_thread_cell;
 
+/// Main-thread liveness accounting, always compiled in.
+pub mod instrument;
+
+/// A bounded record of this process's windows.
+#[cfg(feature = "exfiltrate")]
+pub mod registry;
+
+/// Window and main-thread state as exfiltrate `snapshot` subsystems.
+#[cfg(feature = "exfiltrate")]
+pub mod exfiltrate_provider;
+
 /// Test support utilities for working with the main thread.
 ///
 /// This module provides utilities for writing tests (both doctests and integration tests)
