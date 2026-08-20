@@ -131,9 +131,14 @@ async fn ax_loop(mut receiver: Receiver<Event>) {
     let connection = match connection {
         Ok(c) => c,
         Err(e) => {
-            logwise::error_async!(
-                "Failed to connect to ATSPI: {e}",
-                e = logwise::privacy::LogIt(e)
+            // Accessibility key events are unavailable for the rest of the
+            // process when this fails, which the application may want to
+            // surface -- so it is operational rather than a developer aside.
+            logwise::event!(
+                class: operational,
+                severity: error,
+                name: "app_window.input.atspi_connect_failed",
+                detail error = local(logwise::ValueRef::debug(&e)),
             );
             return;
         }

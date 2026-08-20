@@ -138,7 +138,12 @@ pub(crate) fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM
                 x if x == XBUTTON2 => 4,
                 _ => {
                     //synthesized input can carry other values; don't panic in the wndproc
-                    logwise::warn_sync!("Unknown xbutton {xbutton}", xbutton = xbutton);
+                    logwise::event!(
+                        class: operational,
+                        severity: warn,
+                        name: "app_window.input.button_unmapped",
+                        detail button = local(xbutton as u64),
+                    );
                     return LRESULT(1);
                 }
             };
@@ -153,7 +158,12 @@ pub(crate) fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM
                 x if x == XBUTTON1 => 3,
                 x if x == XBUTTON2 => 4,
                 _ => {
-                    logwise::warn_sync!("Unknown xbutton {xbutton}", xbutton = xbutton);
+                    logwise::event!(
+                        class: operational,
+                        severity: warn,
+                        name: "app_window.input.button_unmapped",
+                        detail button = local(xbutton as u64),
+                    );
                     return LRESULT(1);
                 }
             };

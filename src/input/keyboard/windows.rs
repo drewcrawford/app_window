@@ -99,7 +99,12 @@ pub fn kbd_window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM) -
                     LRESULT(1)
                 }
             } else {
-                logwise::warn_sync!("Unknown key {key}", key = w_param.0);
+                logwise::event!(
+                    class: operational,
+                    severity: warn,
+                    name: "app_window.input.key_unmapped",
+                    detail key = local(w_param.0 as u64),
+                );
                 LRESULT(1)
             }
         }
@@ -118,7 +123,12 @@ pub fn kbd_window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM) -
                     LRESULT(1)
                 }
             } else {
-                logwise::warn_sync!("Unknown key {key}", key = w_param.0);
+                logwise::event!(
+                    class: operational,
+                    severity: warn,
+                    name: "app_window.input.key_unmapped",
+                    detail key = local(w_param.0 as u64),
+                );
                 LRESULT(1)
             }
         }
@@ -176,12 +186,12 @@ extern "system" fn debug_window_proc(
     w_param: WPARAM,
     l_param: LPARAM,
 ) -> LRESULT {
-    logwise::debuginternal_sync!(
+    logwise::log!(
         "got msg hwnd {hwnd} msg {msg} w_param {w_param} l_param {l_param}",
-        hwnd = logwise::privacy::LogIt(&hwnd),
+        hwnd = (&hwnd),
         msg = msg,
-        w_param = logwise::privacy::LogIt(&w_param),
-        l_param = logwise::privacy::LogIt(&l_param)
+        w_param = (&w_param),
+        l_param = (&l_param)
     );
     if crate::input::window_proc(hwnd, msg, w_param, l_param) == LRESULT(0) {
         LRESULT(0)

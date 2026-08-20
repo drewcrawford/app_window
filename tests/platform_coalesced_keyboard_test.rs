@@ -14,11 +14,10 @@ use std::thread;
 use wasm_lite_std as thread;
 
 use some_executor::task::{Configuration, Task};
-logwise::declare_logging_domain!();
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    logwise::warn_sync!("=== PlatformCoalescedKeyboard Non-Main Thread Test ===");
+    logwise::log!("=== PlatformCoalescedKeyboard Non-Main Thread Test ===");
 
     app_window::application::main(|| {
         thread::spawn(|| {
@@ -47,13 +46,13 @@ fn wasm_main() {
         let (c, r) = r#continue::continuation();
 
         app_window::application::main(move || {
-            logwise::warn_sync!("=== PlatformCoalescedKeyboard Non-Main Thread Test ===");
+            logwise::log!("=== PlatformCoalescedKeyboard Non-Main Thread Test ===");
 
             let t = Task::without_notifications(
                 "platform_coalesced_keyboard_test".to_string(),
                 Configuration::default(),
                 async move {
-                    logwise::info_sync!("WASM main thread started");
+                    logwise::log!("WASM main thread started");
                     test_platform_coalesced_keyboard_creation().await;
                     c.send(());
                 },
@@ -66,13 +65,13 @@ fn wasm_main() {
 }
 
 async fn test_platform_coalesced_keyboard_creation() {
-    logwise::info_sync!("Starting PlatformCoalescedKeyboard creation test from non-main thread");
+    logwise::log!("Starting PlatformCoalescedKeyboard creation test from non-main thread");
 
     let (tx, rx) = r#continue::continuation();
 
     // Spawn a non-main thread to create PlatformCoalescedKeyboard
     thread::spawn(move || {
-        logwise::info_sync!("Non-main thread started, creating PlatformCoalescedKeyboard");
+        logwise::log!("Non-main thread started, creating PlatformCoalescedKeyboard");
         // This is the main test: creating a PlatformCoalescedKeyboard from a non-main thread
         // Note: Unlike Mouse::coalesced(), Keyboard::coalesced() is synchronous
         let spawn_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -82,10 +81,8 @@ async fn test_platform_coalesced_keyboard_creation() {
                 async move {
                     // Try to create the keyboard - this should work since it's async
                     let _keyboard = app_window::input::keyboard::Keyboard::coalesced().await;
-                    logwise::info_sync!("Successfully created PlatformCoalescedKeyboard");
-                    logwise::warn_sync!(
-                        "✅ SUCCESS: PlatformCoalescedKeyboard created successfully"
-                    );
+                    logwise::log!("Successfully created PlatformCoalescedKeyboard");
+                    logwise::log!("✅ SUCCESS: PlatformCoalescedKeyboard created successfully");
                     tx.send(true);
                 },
             );
@@ -99,9 +96,9 @@ async fn test_platform_coalesced_keyboard_creation() {
     let success = rx.await;
 
     if success {
-        logwise::warn_sync!("🎉 Test completed successfully");
+        logwise::log!("🎉 Test completed successfully");
     } else {
-        logwise::error_sync!("💥 Test failed");
+        logwise::log!("💥 Test failed");
         panic!("PlatformCoalescedKeyboard creation from non-main thread failed");
     }
 }

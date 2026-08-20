@@ -82,7 +82,7 @@
 //! # Performance Monitoring
 //!
 //! The module includes built-in performance monitoring for main thread operations.
-//! Operations taking longer than 10ms will generate warnings via `logwise`,
+//! Operations taking longer than 10ms emit `app_window.main_thread.submission_overran`,
 //! helping identify UI responsiveness issues:
 //!
 //! ```text
@@ -251,9 +251,10 @@ pub(crate) fn is_main_thread_running() -> bool {
 /// # Performance Monitoring
 ///
 /// Operations are automatically monitored for performance:
-/// - Operations taking >10ms generate a warning via `logwise`
+/// - Operations taking >10ms emit `app_window.main_thread.submission_overran`
 /// - The `debug_label` helps identify slow operations
-/// - Each operation runs in a new `logwise` task context for tracing
+/// - Each operation runs in its own durable `logwise` context, entered only
+///   while the operation runs
 ///
 /// # Thread Safety
 ///
@@ -397,7 +398,7 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 /// # Performance Monitoring
 ///
 /// Like [`on_main_thread()`], this function includes automatic performance monitoring:
-/// - Creates a new `logwise` task context for the operation
+/// - Mints a durable `logwise` context for the operation
 /// - Logs a warning if execution takes >10ms
 /// - Preserves the calling context for tracing
 ///
@@ -487,31 +488,40 @@ pub async fn on_main_thread<R: Send + 'static, F: FnOnce() -> R + Send + 'static
 /// This function wraps the closure with performance monitoring before calling
 /// the platform-specific `sys::on_main_thread()`. The wrapper:
 /// 1. Records the start time
-/// 2. Creates a new logwise task context
-/// 3. Executes the closure
-/// 4. Restores the previous context
-/// 5. Logs if execution was slow (>10ms)
+/// 2. Mints a durable child context for the work
+/// 3. Enters it, runs the closure, and restores the previous context
+/// 4. Reports if execution was slow (>10ms)
 pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, closure: F) {
     assert!(is_main_thread_running(), "{}", CALL_MAIN);
+    // Captured here, on the *submitting* thread. Calling `capture()` inside the
+    // closure would read the main thread's context instead, so the work would
+    // descend from whatever the main thread happened to be doing rather than
+    // from whoever asked for it -- which is the whole point of carrying a
+    // durable token across the hand-off.
+    let submitter = logwise::context::capture();
     let perf = move || {
         let start = time::Instant::now();
-        let prior = logwise::context::Context::current();
-        let c = logwise::context::Context::new_task(
-            Some(prior.clone()),
-            debug_label.clone(),
-            logwise::Level::DebugInternal,
-            logwise::log_enabled!(logwise::Level::DebugInternal),
-        );
-        c.set_current();
-        closure();
-        prior.set_current();
+        // Entered only around the closure. The guard restores the previous
+        // context on drop, so the rest of the main-thread turn is not
+        // attributed to this work.
+        let context = logwise::context::child(submitter, "app_window.main_thread");
+        {
+            let _entered = logwise::context::enter(context);
+            closure();
+        }
 
         let duration = start.elapsed();
         if duration > time::Duration::from_millis(10) {
-            logwise::warn_sync!(
-                "submit_to_main_thread operation took too long: {duration}\n",
-                duration = logwise::privacy::LogIt(duration),
-                debug_label = logwise::privacy::IPromiseItsNotPrivate(debug_label)
+            // Everything else on the main thread was blocked for this long, so
+            // it is an operational fact about the application rather than a
+            // developer aside. The label is caller-supplied text, hence local
+            // and detail; the duration is a number this crate measured.
+            logwise::event!(
+                class: performance,
+                severity: warn,
+                name: "app_window.main_thread.submission_overran",
+                duration_ms = support(duration.as_millis() as u64),
+                detail debug_label = local(debug_label.as_str()),
             );
         }
     };

@@ -92,7 +92,14 @@ impl Waker {
 ///
 /// Each task contains a pinned future, unique ID, and shared state for wake notifications.
 struct Task {
-    context: logwise::context::Context,
+    /// The task's durable causal context.
+    ///
+    /// A token, not a guard: the token outlives every poll and is entered only
+    /// while the task is actually being polled. A `ContextGuard` is `!Send` and
+    /// restores thread-local state on drop, so storing one in a task that
+    /// outlives its poll would be wrong even here, where the executor is
+    /// main-thread-only.
+    context: logwise::ContextToken,
     our_task_id: usize,
     future: Pin<Box<dyn Future<Output = ()> + 'static>>,
     wake_inner: Arc<Inner>,
@@ -208,20 +215,14 @@ pub fn already_on_main_thread_submit<F: Future<Output = ()> + 'static>(
 
     // Create task with unique ID
     let wake_inner = Arc::new(Inner::new(task_id));
-    let parent_context = logwise::context::Context::current();
-    //creating a task is a bit heavyweight, particularly on the main thread.
-    // let new_context = logwise::context::Context::from_parent(parent_context);
-    let new_context = logwise::context::Context::new_task(
-        Some(parent_context),
-        debug_label.clone(),
-        logwise::Level::DebugInternal,
-        logwise::log_enabled!(logwise::Level::DebugInternal),
-    );
+    // Minted from whatever is entered at the submit site, so the task's lineage
+    // records who asked for it rather than which thread happened to run it.
+    let new_context = logwise::context::child(logwise::context::capture(), "app_window.task");
 
-    logwise::debuginternal_sync!(
-        "Creating task {id} {label}",
-        id = logwise::privacy::IPromiseItsNotPrivate(new_context.task_id()),
-        label = logwise::privacy::LogIt(debug_label)
+    logwise::log!(
+        "app_window: creating task {id} {label}",
+        id = task_id,
+        label = debug_label
     );
     let task = Task {
         our_task_id: task_id,
@@ -290,7 +291,7 @@ fn main_executor_iter() {
                     return;
                 }
             };
-            let task_id = task.context.task_id();
+            let task_id = task.our_task_id;
             let mut in_flight = IN_FLIGHT.take();
             in_flight.push(task.our_task_id);
             IN_FLIGHT.replace(in_flight);
@@ -300,12 +301,14 @@ fn main_executor_iter() {
                 inner: task.wake_inner.clone(),
             };
             let into_waker = waker.into_waker();
-            let parent = logwise::context::Context::current();
-            task.context.clone().set_current();
-            // logwise::info_sync!("Polling task {id}", id = task.id);
             let mut context = Context::from_waker(&into_waker);
-            let poll_result = task.future.as_mut().poll(&mut context);
-            parent.set_current();
+            // Entered only for the poll. The guard restores the previous context
+            // when it drops, so work that runs after this task -- including the
+            // rest of this iteration -- is not attributed to it.
+            let poll_result = {
+                let _entered = logwise::context::enter(task.context);
+                task.future.as_mut().poll(&mut context)
+            };
             let mut in_flight = IN_FLIGHT.take();
             in_flight.retain(|&id| id != task.our_task_id);
             IN_FLIGHT.replace(in_flight);
@@ -323,10 +326,15 @@ fn main_executor_iter() {
             //there MAY be more pollable tasks.  However, we want to yield here
             submit_to_main_thread("main_executor_iter".to_string(), main_executor_iter);
             if begin_iter.elapsed() > crate::application::time::Duration::from_millis(10) {
-                logwise::warn_sync!(
-                    "main_executor_iter {task} took too long: {duration}",
-                    task = logwise::privacy::IPromiseItsNotPrivate(task_id),
-                    duration = logwise::privacy::IPromiseItsNotPrivate(begin_iter.elapsed())
+                // A main-thread poll that overruns is an operational problem for
+                // the whole application, not a developer aside: everything else
+                // on this thread was blocked for that long.
+                logwise::event!(
+                    class: performance,
+                    severity: warn,
+                    name: "app_window.main_executor.poll_overran",
+                    task = support(task_id as u64),
+                    duration_ms = support(begin_iter.elapsed().as_millis() as u64),
                 );
             }
         }

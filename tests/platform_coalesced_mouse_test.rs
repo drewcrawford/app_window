@@ -7,7 +7,6 @@
 //!
 //! Run with: `cargo test --test platform_coalesced_mouse_test`
 //! Run on WASM with: `scripts/wasm32/tests --test platform_coalesced_mouse_test`
-logwise::declare_logging_domain!();
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
@@ -18,7 +17,7 @@ use some_executor::task::{Configuration, Task};
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    logwise::warn_sync!("=== PlatformCoalescedMouse Non-Main Thread Test ===");
+    logwise::log!("=== PlatformCoalescedMouse Non-Main Thread Test ===");
     app_window::application::main(|| {
         thread::spawn(|| {
             let t = Task::without_notifications(
@@ -46,13 +45,13 @@ fn wasm_main() {
         let (c, r) = r#continue::continuation();
 
         app_window::application::main(move || {
-            logwise::warn_sync!("=== PlatformCoalescedMouse Non-Main Thread Test ===");
+            logwise::log!("=== PlatformCoalescedMouse Non-Main Thread Test ===");
 
             let t = Task::without_notifications(
                 "platform_coalesced_mouse_test".to_string(),
                 Configuration::default(),
                 async move {
-                    logwise::info_sync!("WASM main thread started");
+                    logwise::log!("WASM main thread started");
                     test_platform_coalesced_mouse_creation().await;
                     c.send(());
                 },
@@ -65,13 +64,13 @@ fn wasm_main() {
 }
 
 async fn test_platform_coalesced_mouse_creation() {
-    logwise::info_sync!("Starting PlatformCoalescedMouse creation test from non-main thread");
+    logwise::log!("Starting PlatformCoalescedMouse creation test from non-main thread");
 
     let (tx, rx) = r#continue::continuation();
 
     // Spawn a non-main thread to create PlatformCoalescedMouse
     thread::spawn(move || {
-        logwise::info_sync!("Non-main thread started, creating PlatformCoalescedMouse");
+        logwise::log!("Non-main thread started, creating PlatformCoalescedMouse");
 
         // This is the main test: creating a PlatformCoalescedMouse from a non-main thread
         // Note: Since Mouse::coalesced() is now async, we spawn an async task
@@ -82,8 +81,8 @@ async fn test_platform_coalesced_mouse_creation() {
                 async move {
                     // Try to create the mouse - this will now happen on the main thread via MainThreadCell
                     app_window::input::mouse::Mouse::coalesced().await;
-                    logwise::info_sync!("Successfully created PlatformCoalescedMouse");
-                    logwise::warn_sync!("✅ SUCCESS: PlatformCoalescedMouse created successfully");
+                    logwise::log!("Successfully created PlatformCoalescedMouse");
+                    logwise::log!("✅ SUCCESS: PlatformCoalescedMouse created successfully");
                     tx.send(true);
                 },
             );
@@ -97,9 +96,9 @@ async fn test_platform_coalesced_mouse_creation() {
     let success = rx.await;
 
     if success {
-        logwise::warn_sync!("🎉 Test completed successfully");
+        logwise::log!("🎉 Test completed successfully");
     } else {
-        logwise::error_sync!("💥 Test failed");
+        logwise::log!("💥 Test failed");
         panic!("PlatformCoalescedMouse creation from non-main thread failed");
     }
 }

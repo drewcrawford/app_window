@@ -109,7 +109,12 @@ pub fn button_event(_time: u32, button: u32, state: u32, window: ObjectId) {
         0x118 => 8,
         0x119 => 9,
         _ => {
-            logwise::warn_sync!("Unknown button code: {button}", button = button);
+            logwise::event!(
+                class: operational,
+                severity: warn,
+                name: "app_window.input.button_unmapped",
+                detail button = local(button as u64),
+            );
             return;
         }
     };

@@ -165,7 +165,7 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
                         .expect("Can't dispatch events");
                     event_queue.flush().expect("Failed to flush event queue");
                     //try again
-                    logwise::debuginternal_sync!("Retrying");
+                    logwise::log!("Retrying");
                 }
             }
         }
@@ -181,9 +181,13 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
         match r {
             Ok(_) => {}
             Err(e) => {
-                logwise::error_sync!(
-                    "Can't submit and wait: {err}",
-                    err = logwise::privacy::LogIt(e)
+                // The main-thread io_uring loop could not submit. Operational:
+                // the window system stops responding when this happens.
+                logwise::event!(
+                    class: operational,
+                    severity: error,
+                    name: "app_window.main_thread.submit_and_wait_failed",
+                    detail error = local(logwise::ValueRef::debug(&e)),
                 );
                 continue;
             }

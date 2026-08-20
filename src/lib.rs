@@ -705,5 +705,3 @@ pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
 /// See [`WGPU_SURFACE_STRATEGY`] documentation for details.
 #[cfg(target_arch = "wasm32")]
 pub const WGPU_SURFACE_STRATEGY: WGPUStrategy = WGPUStrategy::MainThread;
-
-logwise::declare_logging_domain!();

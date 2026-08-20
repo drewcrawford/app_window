@@ -86,10 +86,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for AppData {
         _: &Connection,
         _qh: &QueueHandle<AppData>,
     ) {
-        logwise::debuginternal_sync!(
-            "Got wlRegistery event {event}",
-            event = logwise::privacy::LogIt(&event)
-        );
+        logwise::log!("Got wlRegistery event {event:?}", event = (&event));
     }
 }
 
@@ -102,10 +99,7 @@ impl Dispatch<WlCompositor, ()> for AppData {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        logwise::debuginternal_sync!(
-            "Got compositor event {event}",
-            event = logwise::privacy::LogIt(&event)
-        );
+        logwise::log!("Got compositor event {event:?}", event = (&event));
     }
 }
 
@@ -118,10 +112,7 @@ impl Dispatch<WlShm, ()> for AppData {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        logwise::debuginternal_sync!(
-            "Got shm event {event}",
-            event = logwise::privacy::LogIt(&event)
-        );
+        logwise::log!("Got shm event {event:?}", event = (&event));
     }
 }
 
@@ -134,10 +125,7 @@ impl Dispatch<WlSurface, ()> for AppData {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        logwise::debuginternal_sync!(
-            "Got WlSurface event {event}",
-            event = logwise::privacy::LogIt(&event)
-        )
+        logwise::log!("Got WlSurface event {event:?}", event = (&event))
     }
 }
 impl Dispatch<WlShmPool, ()> for AppData {
@@ -149,10 +137,7 @@ impl Dispatch<WlShmPool, ()> for AppData {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        logwise::debuginternal_sync!(
-            "Got WlShmPool event {event}",
-            event = logwise::privacy::LogIt(&event)
-        )
+        logwise::log!("Got WlShmPool event {event:?}", event = (&event))
     }
 }
 
@@ -165,10 +150,7 @@ impl Dispatch<WlBuffer, ()> for AppData {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        logwise::debuginternal_sync!(
-            "Got WlBuffer event {event}",
-            event = logwise::privacy::LogIt(&event)
-        )
+        logwise::log!("Got WlBuffer event {event:?}", event = (&event))
     }
 }
 
@@ -184,10 +166,7 @@ impl Dispatch<XdgWmBase, ()> for AppData {
         match event {
             Event::Ping { serial } => proxy.pong(serial),
             _ => {
-                logwise::debuginternal_sync!(
-                    "Got XdgWmBase event {event}",
-                    event = logwise::privacy::LogIt(&event)
-                )
+                logwise::log!("Got XdgWmBase event {event:?}", event = (&event))
             }
         }
     }
@@ -202,10 +181,7 @@ impl Dispatch<XdgSurface, ()> for AppData {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        logwise::debuginternal_sync!(
-            "Got XdgSurface event {event}",
-            event = logwise::privacy::LogIt(&event)
-        )
+        logwise::log!("Got XdgSurface event {event:?}", event = (&event))
     }
 }
 
@@ -218,10 +194,7 @@ impl Dispatch<WlSeat, ()> for AppData {
         _conn: &Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
-        logwise::debuginternal_sync!(
-            "Got WlSeat event {event}",
-            event = logwise::privacy::LogIt(&event)
-        )
+        logwise::log!("Got WlSeat event {event:?}", event = (&event))
     }
 }
 
@@ -237,10 +210,7 @@ impl wayland_client::Dispatch<wl_registry::WlRegistry, GlobalListContents> for A
         _conn: &Connection,
         _qhandle: &QueueHandle<AppData>,
     ) {
-        logwise::debuginternal_sync!(
-            "Got registry event {event}",
-            event = logwise::privacy::LogIt(&event)
-        )
+        logwise::log!("Got registry event {event:?}", event = (&event))
     }
 }
 
@@ -262,10 +232,7 @@ impl Dispatch<XdgToplevel, ()> for AppData {
                 xdg_toplevel_configure_event(width, height);
             }
             _ => {
-                logwise::debuginternal_sync!(
-                    "Got XdgTopLevel event {event}",
-                    event = logwise::privacy::LogIt(&event)
-                )
+                logwise::log!("Got XdgTopLevel event {event:?}", event = (&event))
             }
         }
     }
@@ -298,10 +265,7 @@ impl Dispatch<WlPointer, ObjectId> for AppData {
                 axis_event(time, axis.into(), value, window.clone());
             }
             _ => {
-                logwise::debuginternal_sync!(
-                    "got WlPointer event {event}",
-                    event = logwise::privacy::LogIt(&event)
-                )
+                logwise::log!("got WlPointer event {event:?}", event = (&event))
             }
         }
     }
@@ -322,7 +286,12 @@ pub fn wl_keyboard_event(_serial: u32, _time: u32, key: u32, state: u32, surface
             });
         ax::ax_press(key, down);
     } else {
-        logwise::warn_sync!("Unknown key {key}", key = key);
+        logwise::event!(
+            class: operational,
+            severity: warn,
+            name: "app_window.input.key_unmapped",
+            detail key = local(key as u64),
+        );
     }
 }
 
@@ -359,10 +328,7 @@ impl Dispatch<WlKeyboard, ObjectId> for AppData {
                 wl_keyboard_event(serial, time, key, state.into(), data.clone());
             }
             _ => {
-                logwise::debuginternal_sync!(
-                    "Got wlKeyboard event {event}",
-                    event = logwise::privacy::LogIt(&event)
-                );
+                logwise::log!("Got wlKeyboard event {event:?}", event = (&event));
             }
         }
     }
@@ -399,7 +365,9 @@ pub fn debug_window_show() {
     let _pointer = seat.get_pointer(&qh, surface.id());
     let _keyboard = seat.get_keyboard(&qh, surface.id());
 
-    logwise::debuginternal_sync!("Window should be displayed. Running event loop...");
+    #[cfg(feature = "logwise-diagnostic")]
+
+    logwise::log!("Window should be displayed. Running event loop...");
 
     loop {
         event_queue.blocking_dispatch(&mut app_data).unwrap();

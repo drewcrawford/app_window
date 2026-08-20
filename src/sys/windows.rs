@@ -199,12 +199,12 @@ unsafe impl Send for Window {}
 unsafe impl Sync for Window {}
 
 extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
-    logwise::debuginternal_sync!(
+    logwise::log!(
         "got msg hwnd {hwnd} msg {msg} w_param {w_param} l_param {l_param}",
-        hwnd = logwise::privacy::LogIt(&hwnd),
+        hwnd = (&hwnd),
         msg = msg,
-        w_param = logwise::privacy::LogIt(&w_param),
-        l_param = logwise::privacy::LogIt(&l_param)
+        w_param = (&w_param),
+        l_param = (&l_param)
     );
     if crate::input::window_proc(hwnd, msg, w_param, l_param) == LRESULT(0) {
         return LRESULT(0);
@@ -340,7 +340,7 @@ impl Drop for Window {
     fn drop(&mut self) {
         let unsafe_hwnd = unsafe { *self.hwnd.get_unchecked() };
         let unsafe_port_hwnd = send_cells::unsafe_send_cell::UnsafeSendCell::new(unsafe_hwnd);
-        logwise::debuginternal_sync!("Destroying window");
+        logwise::log!("Destroying window");
         on_main_thread(move || {
             unsafe { DestroyWindow(*unsafe_port_hwnd.get()) }.expect("Can't close window");
         });

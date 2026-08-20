@@ -2,8 +2,6 @@
 //! Implements browser window, canvas, and resize operations through wasm_lite.
 
 use crate::coordinates::{Position, Size};
-use logwise::Level;
-use logwise::context::Context;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle, WebDisplayHandle, WebWindowHandle};
 use send_cells::send_cell::SendCell;
 use std::cell::RefCell;
@@ -165,7 +163,7 @@ impl Window {
                 SendCell::new((strong_closure, error_closure))
             });
         let closures = main_thread_job.await;
-        logwise::warn_sync!("Waiting for fut...");
+        logwise::log!("app_window: waiting for the fullscreen future");
         let fullscreen_result = fut.await;
         //drop our closures
         crate::application::on_main_thread("Drop fs".to_string(), move || {
@@ -232,42 +230,34 @@ pub fn run_main_thread<F: FnOnce() + Send + 'static>(closure: F) {
     });
     assert!(sent, "Don't call run_main_thread more than once");
 
-    let push_context = Context::current();
-    let push_context_2 = push_context.clone();
+    // Captured here, on the calling thread, and carried into the worker. This
+    // is what a durable token is for: the worker is a different realm, so a
+    // thread-local "current context" could not have crossed.
+    let spawn_context = logwise::context::capture();
 
-    // logwise::info_sync!("worker WILL spawn");
-
-    wasm_lite_std::spawn(|| {
-        // logwise::info_sync!("worker spawn");
-        let new_context = Context::new_task(
-            Some(push_context_2),
-            "app_window after MT context".to_string(),
-            Level::DebugInternal,
-            logwise::log_enabled!(Level::DebugInternal),
-        );
-        let new_id = new_context.context_id();
-        new_context.set_current();
+    wasm_lite_std::spawn(move || {
+        let worker_context = logwise::context::child(spawn_context, "app_window.after_main_thread");
+        // Entered on the worker, restored when the closure returns.
+        let _entered = logwise::context::enter(worker_context);
         closure();
-        Context::pop(new_id);
     });
 
-    let event_loop_context = Context::new_task(
-        Some(Context::current()),
-        "main thread eventloop".to_string(),
-        Level::DebugInternal,
-        logwise::log_enabled!(Level::DebugInternal),
+    let event_loop_context = logwise::context::child(
+        logwise::context::capture(),
+        "app_window.main_thread_eventloop",
     );
-    let apply_context = logwise::context::ApplyContext::new(event_loop_context, async move {
+    wasm_lite_std::spawn_local(async move {
         loop {
-            // logwise::debuginternal_sync!("Waiting for main thread event");
             let event = receiver.receive().await.expect("Can't receive event");
-            // logwise::debuginternal_sync!("Received main thread event");
+            // Entered around the turn and never across the await above: the
+            // guard is `!Send` and restores thread-local state on drop, so it
+            // must not be held across a yield point.
+            let _entered = logwise::context::enter(event_loop_context);
             match event {
                 MainThreadEvent::Execute(f) => f(),
             }
         }
     });
-    wasm_lite_std::spawn_local(apply_context);
 }
 
 pub fn on_main_thread<F: FnOnce() + Send + 'static>(closure: F) {

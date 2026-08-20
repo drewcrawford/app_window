@@ -8,7 +8,6 @@
 //!
 //! Run with: `cargo test --test submit_to_main_thread_benchmark`
 //! Run on WASM with: `scripts/wasm32/tests --test submit_to_main_thread_benchmark`
-logwise::declare_logging_domain!();
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
@@ -40,7 +39,7 @@ impl TimingStats {
 
     fn report(&self) {
         if self.samples.is_empty() {
-            logwise::error_sync!("No samples collected!");
+            logwise::log!("No samples collected!");
             return;
         }
 
@@ -62,21 +61,21 @@ impl TimingStats {
             / self.samples.len() as f64;
         let std_dev = variance.sqrt();
 
-        logwise::warn_sync!("=== Timing Statistics ===");
-        logwise::warn_sync!("Samples: {samples}", samples = self.samples.len());
-        logwise::warn_sync!("Average: {avg}µs", avg = format!("{:.3}", avg_micros));
-        logwise::warn_sync!(
+        logwise::log!("=== Timing Statistics ===");
+        logwise::log!("Samples: {samples}", samples = self.samples.len());
+        logwise::log!("Average: {avg}µs", avg = format!("{:.3}", avg_micros));
+        logwise::log!(
             "Min: {min}µs",
             min = format!("{:.3}", min.as_micros() as f64)
         );
-        logwise::warn_sync!(
+        logwise::log!(
             "Max: {max}µs",
             max = format!("{:.3}", max.as_micros() as f64)
         );
-        logwise::warn_sync!("Std Dev: {std_dev}µs", std_dev = format!("{:.3}", std_dev));
+        logwise::log!("Std Dev: {std_dev}µs", std_dev = format!("{:.3}", std_dev));
 
         // Show distribution
-        logwise::warn_sync!("Distribution:");
+        logwise::log!("Distribution:");
         let buckets = [
             (0.0, 10.0, "  <10µs"),
             (10.0, 50.0, " 10-50µs"),
@@ -97,7 +96,7 @@ impl TimingStats {
                 .count();
             if count > 0 {
                 let percentage = (count as f64 / self.samples.len() as f64) * 100.0;
-                logwise::warn_sync!(
+                logwise::log!(
                     "{label}: {count} ({percentage}%)",
                     label = *label,
                     count = format!("{:3}", count),
@@ -110,7 +109,7 @@ impl TimingStats {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    logwise::warn_sync!("=== submit_to_main_thread Latency Benchmark ===");
+    logwise::log!("=== submit_to_main_thread Latency Benchmark ===");
 
     app_window::application::main(|| {
         thread::spawn(|| {
@@ -135,29 +134,29 @@ fn wasm_main() {
     wasm_lite_std::async_doctest!(async {
         assert!(app_window::application::is_main_thread());
         let (c, r) = r#continue::continuation();
-        logwise::info_sync!("WILL call main thread");
+        logwise::log!("WILL call main thread");
         app_window::application::main(move || {
-            logwise::warn_sync!("=== submit_to_main_thread_benchmark ===");
+            logwise::log!("=== submit_to_main_thread_benchmark ===");
 
             let t = Task::without_notifications(
                 "submit_to_main_thread_benchmark".to_string(),
                 Configuration::default(),
                 async move {
-                    logwise::info_sync!("WASM main thread started");
+                    logwise::log!("WASM main thread started");
                     run_benchmark().await;
                     c.send(());
                 },
             );
             t.spawn_static_current();
         });
-        logwise::info_sync!("Awaiting benchmark completion...");
+        logwise::log!("Awaiting benchmark completion...");
         r.await;
-        logwise::info_sync!("Benchmark completed, exiting...");
+        logwise::log!("Benchmark completed, exiting...");
     });
 }
 
 async fn run_benchmark() {
-    logwise::warn_sync!(
+    logwise::log!(
         "\nRunning {iterations} iterations...",
         iterations = NUM_ITERATIONS
     );
@@ -173,7 +172,7 @@ async fn run_benchmark() {
     }
 
     thread::spawn(move || {
-        logwise::info_sync!(
+        logwise::log!(
             "Background thread started, will submit {count} tasks",
             count = senders.len()
         );
@@ -195,26 +194,26 @@ async fn run_benchmark() {
             // Wait a bit between submissions to get clean measurements
             thread::sleep(Duration::from_millis(20));
         }
-        logwise::info_sync!(
+        logwise::log!(
             "Background thread finished submitting all {count} tasks",
             count = NUM_ITERATIONS
         );
     });
 
     // Collect results
-    logwise::warn_sync!(
+    logwise::log!(
         "Starting to collect {count} results...",
         count = futures.len()
     );
-    for (_i, recv) in futures.into_iter().enumerate() {
-        // logwise::info_sync!("Waiting for result {partial}/{total}", partial = i + 1, total = NUM_ITERATIONS);
+    for recv in futures {
+        // logwise::log!("Waiting for result {partial}/{total}", partial = i + 1, total = NUM_ITERATIONS);
         let r = recv.await;
         //eprintln!("Received result {i}");
         //eprintln!("Received result {}/{}: {:?}", i + 1, NUM_ITERATIONS, r); //this prevents reproduction apparently
-        //logwise::info_sync!("Received result {partial}/{total}", partial = i + 1, total = NUM_ITERATIONS);
+        //logwise::log!("Received result {partial}/{total}", partial = i + 1, total = NUM_ITERATIONS);
         stats.add_sample(r.1);
     }
-    logwise::warn_sync!("Finished collecting all results!");
+    logwise::log!("Finished collecting all results!");
 
     // Report results
     stats.report();

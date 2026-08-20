@@ -23,7 +23,12 @@ unsafe extern "C" fn raw_input_key_notify_func(
         //ignore unknown key codes; panicking would unwind out of extern "C" and abort
         match KeyboardKey::from_code(key_code) {
             Some(key_code) => shared.set_key_state(key_code, down, window),
-            None => logwise::warn_sync!("Unknown key code {key_code}", key_code = key_code),
+            None => logwise::event!(
+                class: operational,
+                severity: warn,
+                name: "app_window.input.key_unmapped",
+                detail key = local(key_code as u64),
+            ),
         }
     }
     std::mem::forget(shared); //keep weak reference alive as it is still owned by the target function

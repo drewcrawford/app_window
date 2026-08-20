@@ -64,9 +64,15 @@ impl<T> Drop for Shared<T> {
             } else {
                 // Dropping T here could violate its thread-affinity invariant. With no
                 // running main-thread dispatcher, leaking is the only safe option.
-                logwise::error_sync!(
-                    "Leaking {type_name}: its MainThreadCell was dropped off the main thread after the dispatcher stopped",
-                    type_name = logwise::privacy::IPromiseItsNotPrivate(std::any::type_name::<T>())
+                // A deliberate leak is an operational fact a consumer needs to
+                // see: the alternative was violating T's thread affinity. The
+                // type name is a compile-time constant from this build, not
+                // caller data, so it is support-safe.
+                logwise::event!(
+                    class: operational,
+                    severity: error,
+                    name: "app_window.main_thread_cell.leaked",
+                    type_name = support(std::any::type_name::<T>()),
                 );
                 std::mem::forget(take);
             }
@@ -307,21 +313,21 @@ impl<T> MainThreadCell<T> {
         C: FnOnce() -> F + Send + 'static,
         F: Future<Output = T> + Send + 'static,
     {
-        logwise::info_sync!("MainThreadCell::new_on_main_thread() started");
+        logwise::log!("MainThreadCell::new_on_main_thread() started");
         let new_on_main_thread = format!(
             "MainThreadCell::new_on_main_thread({})",
             std::any::type_name::<T>()
         );
         let value = crate::executor::on_main_thread_async(new_on_main_thread, async move {
-            logwise::info_sync!("Inside main thread closure");
+            logwise::log!("Inside main thread closure");
             let f = c();
-            logwise::info_sync!("Calling provided closure f()...");
+            logwise::log!("Calling provided closure f()...");
             let r = f.await;
-            logwise::info_sync!("Closure completed, creating MainThreadCell...");
+            logwise::log!("Closure completed, creating MainThreadCell...");
             MainThreadCell::new(r)
         })
         .await;
-        logwise::info_sync!("Main thread execution completed, returning value");
+        logwise::log!("Main thread execution completed, returning value");
         value
     }
 }

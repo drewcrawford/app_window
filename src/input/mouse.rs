@@ -245,9 +245,9 @@ impl Shared {
     }
 
     fn set_window_location(&self, location: MouseWindowLocation) {
-        logwise::debuginternal_sync!(
-            "Set mouse window location {location}",
-            location = logwise::privacy::LogIt(&location)
+        logwise::log!(
+            "Set mouse window location {location:?}",
+            location = (&location)
         );
         *self.window_lock() = Some(location);
         self.last_window.store(
@@ -256,14 +256,14 @@ impl Shared {
         )
     }
     fn set_key_state(&self, key: u8, down: bool, window: *mut c_void) {
-        logwise::debuginternal_sync!("Set mouse key {key} state {down}", key = key, down = down);
+        logwise::log!("Set mouse key {key} state {down}", key = key, down = down);
         self.buttons[key as usize].store(down, std::sync::atomic::Ordering::Relaxed);
         self.last_window
             .store(window, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn add_scroll_delta(&self, delta_x: f64, delta_y: f64, window: *mut c_void) {
-        logwise::debuginternal_sync!(
+        logwise::log!(
             "Add mouse scroll delta {delta_x},{delta_y}",
             delta_x = delta_x,
             delta_y = delta_y

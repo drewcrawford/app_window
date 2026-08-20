@@ -28,7 +28,7 @@ impl AllocatedBuffer {
         queue_handle: &QueueHandle<App>,
         window_internal: Arc<Mutex<WindowInternal>>,
     ) -> AllocatedBuffer {
-        logwise::debuginternal_sync!(
+        logwise::log!(
             "Creating shm buffer width {width}, height {height}",
             width = width,
             height = height

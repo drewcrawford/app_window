@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 /*! An example for wgpu.
 */
-logwise::declare_logging_domain!();
 
 mod gpu {
     use app_window::window::Window;
@@ -24,12 +23,8 @@ mod gpu {
         match strategy {
             WGPUStrategy::Relaxed => for_closure(),
             WGPUStrategy::MainThread => {
-                let f = app_window::application::on_main_thread(
-                    "use_strategy".to_string(),
-                    move || for_closure(),
-                )
-                .await;
-                f
+                app_window::application::on_main_thread("use_strategy".to_string(), for_closure)
+                    .await
             }
             WGPUStrategy::NotMainThread => {
                 if app_window::application::is_main_thread() {
@@ -115,7 +110,7 @@ mod gpu {
     }
 
     async fn wgpu_run(mut window: Window) {
-        logwise::warn_sync!("main_run");
+        logwise::log!("main_run");
         let mut app_surface = window.surface().await;
         let (sender, mut receiver) = wasm_lite_std::mpsc::channel();
         let (size, _scale) = app_surface.size_scale().await;

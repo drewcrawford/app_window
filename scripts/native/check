@@ -4,4 +4,6 @@ WARN_FLAGS="-D warnings"
 if [[ " $* " =~ " --relaxed " ]]; then
     WARN_FLAGS=""
 fi
-RUSTFLAGS="$WARN_FLAGS" cargo check
+# --all-targets: examples and tests are where the platform backends and the
+# benchmark live, and a bare `cargo check` never built them.
+RUSTFLAGS="$WARN_FLAGS" cargo check --all-targets
