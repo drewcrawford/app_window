@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   malformed, forged, or replayed window message is ignored instead of being
   treated as an address to dereference and free.
 
+- **[Windows] The Windows target builds again.** Its message diagnostics no
+  longer ask Win32 handle wrappers to implement unsupported display formatting,
+  and routine logs no longer include raw handles or pointer-sized parameters.
+
 ## [0.3.4] - 2026-08-17
 
 ### Added

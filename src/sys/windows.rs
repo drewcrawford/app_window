@@ -255,13 +255,7 @@ unsafe impl Send for Window {}
 unsafe impl Sync for Window {}
 
 extern "system" fn window_proc(hwnd: HWND, msg: u32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
-    logwise::log!(
-        "got msg hwnd {hwnd} msg {msg} w_param {w_param} l_param {l_param}",
-        hwnd = (&hwnd),
-        msg = msg,
-        w_param = (&w_param),
-        l_param = (&l_param)
-    );
+    logwise::log!("got Windows message {msg}", msg = msg);
     if crate::input::window_proc(hwnd, msg, w_param, l_param) == LRESULT(0) {
         return LRESULT(0);
     }
