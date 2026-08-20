@@ -41,12 +41,12 @@ raw-window-handle = "0.6.2"
 # that can share a graph with this one must name the *same* logwise revision:
 # two git revisions of the facade are two crates to cargo, hence two
 # install-once dispatch globals.
-logwise = { git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/logwise.git", rev = "1be396ff30588ad32453596bbaa45afb568368f7" }
+logwise = { version = "0.7.0", git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/logwise.git", rev = "1be396ff30588ad32453596bbaa45afb568368f7" }
 thiserror = "2.0.17"
-some_executor = { git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_executor.git", rev = "45b02a16c410405867c6770144ae3168b58c532e" }
+some_executor = { version = "0.7.1", git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/some_executor.git", rev = "45b02a16c410405867c6770144ae3168b58c532e" }
 continue = "0.1.3"
 send_cells = "0.2.5"
-exfiltrate = { git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/exfiltrate.git", rev = "dfbbdbe6f003643557fe2d1b0c5fb97083bdc11c", optional = true }
+exfiltrate = { version = "0.3.0", git = "ssh://gitea@gitea.mermaid-gecko.ts.net/Metropolis/exfiltrate.git", rev = "dfbbdbe6f003643557fe2d1b0c5fb97083bdc11c", optional = true }
 
 [dev-dependencies]
 # needed for gpu example

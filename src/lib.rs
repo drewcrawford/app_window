@@ -3,23 +3,133 @@
 /*!
 # app_window
 
-A cross-platform window management crate with async-first APIs.
+A cross-platform window crate with an async-first API.
 
 ![logo](https://github.com/drewcrawford/app_window/raw/main/art/logo.png)
 
-`app_window` provides a modern alternative to winit for creating and managing windows across
-Windows, macOS, Linux, and WebAssembly. The crate's primary goal is to provide a unified,
-async-first API that works seamlessly across platforms with wildly different threading
-requirements.
+`app_window` creates windows and rendering surfaces on Windows, macOS, Linux, and
+WebAssembly. It is deliberately small: you get a window, a surface that plugs into
+anything that consumes `raw-window-handle` (wgpu, OpenGL, Vulkan), cross-platform
+keyboard and mouse input, and a main-thread executor. You bring the renderer and
+the rest of your application.
 
-# Key Features
+The crate exists because platforms disagree about threads. macOS insists UI runs
+on the main thread. Wayland compositors behave best when rendering stays *off*
+the main thread. In the browser, the main thread is the event loop and blocking
+it is fatal. Most windowing libraries hand this problem to you: they own an event
+loop, call you back on a thread of their choosing, and your architecture bends
+around theirs. `app_window` inverts that. It takes ownership of the main thread
+once, at startup, and from then on every API is an async function you can call
+from any thread. The crate routes each call to whatever thread the current
+platform requires; you write straight-line code.
 
-- **Async-first design**: All APIs are async functions that can be called from any thread
-- **Modern platform backends**: Win32 on Windows, AppKit on macOS, Wayland on Linux, Canvas on Web
-- **Unified threading model**: Works correctly whether the platform requires UI on the main thread or not
-- **Graphics API integration**: Provides `raw-window-handle` for wgpu, OpenGL, Vulkan, etc.
-- **Built-in input handling**: Cross-platform keyboard and mouse support
-- **Executor-agnostic**: Works with any async runtime via [`some_executor`](https://sealedabstract.com/code/some_executor)
+# What it is — and isn't
+
+`app_window` provides:
+
+- **Windows** — created from any thread; a window closes when its `Window` value drops
+- **Surfaces** — implement the `raw-window-handle` traits, so wgpu, glutin, ash, and friends plug in directly
+- **Input** — keyboard (physical keys, layout-independent) and mouse, unified across platforms
+- **Main-thread dispatch** — `application::on_main_thread`, a main-thread executor integrated with the native event loop, and `MainThreadCell` for values pinned to that thread
+
+It is **not** a GUI toolkit. There are no widgets, no layout engine, no text
+rendering. If you want buttons out of the box, look at egui, iced, or Slint
+instead. The intended pairing is `app_window` + wgpu + your own rendering code —
+a game, a visualization, a custom-drawn UI.
+
+# Where it fits in the ecosystem
+
+```text
+┌─────────────────────────────────────────────────┐
+│                your application                 │
+├─────────────────────────────────────────────────┤
+│     wgpu / OpenGL / Vulkan / your renderer      │
+│            (via raw-window-handle)              │
+├─────────────────────────────────────────────────┤
+│    app_window: window · surface · input ·       │
+│             main-thread executor                │
+├──────────┬────────────┬───────────┬─────────────┤
+│  Win32   │   AppKit   │  Wayland  │   Canvas    │
+│(Windows) │(macOS, via │  (Linux)  │   (Web)     │
+│          │   Swift)   │           │             │
+└──────────┴────────────┴───────────┴─────────────┘
+```
+
+Three integration points matter:
+
+- **raw-window-handle** is the Rust ecosystem's standard interface between
+  windowing and graphics. `Surface` implements it, so any renderer that consumes
+  it works without `app_window` knowing anything about it: wgpu (recommended; see
+  `examples/gpu.rs`), OpenGL via glutin, Vulkan via ash, Metal via metal-rs,
+  DirectX via windows-rs.
+- **Async runtimes.** The crate is executor-agnostic through
+  [`some_executor`](https://sealedabstract.com/code/some_executor). At startup it
+  installs its main-thread executor via those traits, and it interoperates with
+  any runtime that speaks the same interface. There is no tokio dependency and no
+  runtime lock-in.
+- **WebAssembly.** The browser backend is built on
+  [`wasm_lite`](https://github.com/drewcrawford/wasm_lite) — hand-written DOM
+  bindings — rather than web-sys/wasm-bindgen, and targets shared-memory
+  threading (atomics + bulk memory), so the same multithreaded architecture you
+  use natively runs in the browser. wgpu still uses wasm-bindgen internally; a
+  one-line patch (see the WASM + wgpu section below) lets the two coexist.
+
+The macOS backend is written in Swift and doubles as a Swift package
+(`SwiftAppWindow/`), so the same windowing layer is callable from Swift.
+
+# Alternatives
+
+The Rust windowing space has a clear incumbent and several specialists. What
+follows is an honest comparison; `app_window` is not the right choice for every
+project.
+
+**[winit](https://crates.io/crates/winit)** is the de facto standard and the
+default answer for most projects — Bevy, eframe, and iced all sit on top of it.
+It supports a much larger platform matrix than `app_window`: X11 as well as
+Wayland, Android, iOS. The trade is architectural: winit owns your event loop and
+calls back into your `ApplicationHandler`, and each platform's thread-affinity
+rules — what must happen on the main thread, what must not — are yours to know
+and manage. Choose winit when you need its platform breadth or its ecosystem;
+choose `app_window` when you'd rather write async code and let the library carry
+the threading rules.
+
+**[tao](https://crates.io/crates/tao)** is Tauri's fork of winit, extended with
+app menus and a system tray, and GTK-backed on Linux. It's the natural choice if
+you're building around a webview.
+
+**[sdl2](https://crates.io/crates/sdl2)** / **[sdl3](https://crates.io/crates/sdl3)**
+bind the C SDL library: windowing plus audio, game controllers, haptics, and
+more, with decades of portability behind it. You accept a C dependency and a
+polling-style API. A good fit for games that want batteries included.
+
+**[glfw](https://crates.io/crates/glfw)** binds the C GLFW library: minimal,
+OpenGL-oriented, desktop-focused.
+
+**[miniquad](https://crates.io/crates/miniquad)** (and macroquad above it)
+bundles windowing with its own graphics abstraction and produces very small wasm
+builds — but you use its rendering API rather than wgpu.
+
+**[minifb](https://crates.io/crates/minifb)** puts a CPU framebuffer in a
+window. If "give me pixels" is the whole requirement, it's the simplest thing
+that works.
+
+**egui/eframe, iced, Slint, gtk4-rs, fltk-rs** are toolkits, not windowing
+crates: they bundle windowing (usually winit) and give you widgets. Compare them
+against `app_window` plus your renderer, not against `app_window` alone.
+
+| Crate      | API model                    | Linux         | Mobile | Web                         | Scope                          |
+|------------|------------------------------|---------------|--------|-----------------------------|--------------------------------|
+| app_window | async, call from any thread  | Wayland       | —      | wasm, shared-memory threads | window + surface + input       |
+| winit      | event loop, callbacks        | Wayland + X11 | yes    | wasm-bindgen                | window + surface + input       |
+| tao        | event loop, callbacks        | GTK           | yes    | —                           | winit fork + menus/tray        |
+| sdl2/sdl3  | C library, polling           | Wayland + X11 | yes    | emscripten                  | windowing + audio + controllers|
+| glfw       | C library, polling           | Wayland + X11 | —      | —                           | OpenGL-focused windowing       |
+| miniquad   | event callbacks              | X11 + Wayland | yes    | tiny wasm                   | window + built-in renderer     |
+
+In short: reach for `app_window` for the async API, the unified threading model,
+first-class shared-memory wasm, and a native Wayland backend. Pass on it if you
+need X11 or mobile, if a framework you use requires winit, or if you want the
+largest possible community behind your windowing layer.
 
 # Quick Start
 
@@ -58,12 +168,13 @@ let window = Window::new(
 # }
 ```
 
-# Design Principles
+Windows are tied to their Rust value: drop the `Window` and the window closes.
+There is no separate close/destroy step to forget.
 
-## 1. Async-First API
+# Threading Model
 
-Unlike traditional windowing libraries, `app_window` uses async functions throughout.
-This design elegantly handles platform differences:
+Every public API is async and callable from any thread; the crate dispatches to
+the right place per platform:
 
 ```
 # async fn example() {
@@ -79,24 +190,37 @@ let window = Window::default().await;
 # }
 ```
 
-## 2. Window Lifetime Management
+Under the hood:
 
-Windows are tied to their Rust object lifetime. No manual cleanup needed:
+- **macOS**: All UI operations dispatched to main thread via GCD
+- **Windows**: UI operations can run on any thread
+- **Linux (Wayland)**: Compositor-dependent, handled per-connection
+- **WebAssembly**: Single-threaded, operations run directly
+
+When you need the main thread explicitly, ask for it:
 
 ```
 # async fn example() {
-use app_window::window::Window;
+use app_window::application;
 
-{
-    let window = Window::default().await;
-    // Window is open and visible
-} // Window automatically closes when dropped
+// This works everywhere, regardless of platform requirements
+let result = application::on_main_thread("my_task".to_string(), || {
+    // Guaranteed to run on main thread
+    42
+}).await;
 # }
 ```
 
-## 3. Platform-Specific Strategies
+## wgpu threading strategies
 
-The crate provides platform-specific strategies for graphics APIs:
+Platforms also disagree about which thread may drive the GPU. The crate encodes
+those rules in two constants so your rendering setup can branch on them instead
+of hardcoding per-OS knowledge:
+
+- `WGPU_STRATEGY` — where general wgpu work should happen
+- `WGPU_SURFACE_STRATEGY` — where surfaces may be created and configured
+  (notably: macOS is `Relaxed` for general wgpu use but `MainThread` for
+  surface creation)
 
 ```
 use app_window::{WGPU_STRATEGY, WGPUStrategy};
@@ -116,29 +240,6 @@ match WGPU_STRATEGY {
         // Default to the safest option
     }
 }
-```
-
-# Threading Model
-
-This crate abstracts over platform threading differences:
-
-- **macOS**: All UI operations dispatched to main thread via GCD
-- **Windows**: UI operations can run on any thread
-- **Linux (Wayland)**: Compositor-dependent, handled per-connection
-- **WebAssembly**: Single-threaded, operations run directly
-
-You write the same async code for all platforms:
-
-```
-# async fn example() {
-use app_window::application;
-
-// This works everywhere, regardless of platform requirements
-let result = application::on_main_thread("my_task".to_string(), || {
-    // Guaranteed to run on main thread
-    42
-}).await;
-# }
 ```
 
 # Examples
@@ -179,6 +280,12 @@ surface.size_update(|new_size: Size| {
 
 ## Input handling
 
+Keyboard input reports physical keys — the key labeled W on a QWERTY board,
+regardless of active layout. That makes it a fit for game controls and
+shortcuts, not for text entry. Mappings cover alphanumeric and symbol keys,
+F1–F24, the numeric keypad, media and navigation keys, modifiers, and
+international layouts (JIS, ISO).
+
 ```
 # async fn example() {
 use app_window::input::{
@@ -190,30 +297,12 @@ use app_window::input::{
 let keyboard = Keyboard::coalesced().await;
 let mut mouse = Mouse::coalesced().await;
 
-// Check keyboard state - KeyboardKey represents physical keys,
-// not logical characters, making it ideal for game controls and shortcuts.
-// Supports comprehensive key mappings including alphanumeric, function keys,
-// numeric keypad, media controls, navigation keys, and international layouts.
 if keyboard.is_pressed(KeyboardKey::Space) {
     println!("Space key is pressed!");
 }
 
-if keyboard.is_pressed(KeyboardKey::F11) {
-    println!("F11 (fullscreen) pressed!");
-}
-
 if keyboard.is_pressed(KeyboardKey::W) {
     println!("W key pressed - move forward!");
-}
-
-// Media control keys
-if keyboard.is_pressed(KeyboardKey::Play) {
-    println!("Play/Pause media key pressed!");
-}
-
-// Numeric keypad keys
-if keyboard.is_pressed(KeyboardKey::KeypadEnter) {
-    println!("Numeric keypad Enter pressed!");
 }
 
 // Check mouse state
@@ -295,21 +384,29 @@ WASM linker settings shown in this repository's `.cargo/config.toml`.
 | Linux    | Wayland | ✅ Stable | Client-side decorations, compositor-dependent |
 | Web      | Canvas API | ✅ Stable | Requires atomics & bulk memory features |
 
-# Performance Considerations
+Linux support is Wayland-only; there is no X11 backend. Requires Rust 1.95+
+(2024 edition).
 
-- **Lazy surface creation**: Surfaces are only allocated when requested via `window.surface()`
-- **Input coalescing**: Input events can be coalesced for better performance in high-frequency scenarios
-- **Efficient executor**: The main thread executor processes both async tasks and native events
-- **Platform optimizations**: Each backend uses platform-specific optimizations
+# Cargo Features
 
-# Integration with Graphics APIs
+The default feature set is empty; everything above works with no features
+enabled. The optional extras are diagnostic:
 
-The crate implements `raw-window-handle` traits, enabling integration with:
-- **wgpu** (recommended, see `examples/gpu.rs`)
-- **OpenGL/WebGL** via glutin or similar
-- **Vulkan** via ash or vulkano
-- **Metal** (macOS) via metal-rs
-- **DirectX** (Windows) via windows-rs
+- `exfiltrate` — keeps a bounded registry of the windows this process has
+  created and exposes it, along with main-thread state, through the
+  `exfiltrate` crate's `snapshot` command for inspecting live processes. Off by
+  default because it costs a lock and a record per window.
+- `logwise-diagnostic`, `logwise-forensic`, `logwise-performance` — enable
+  progressively more detailed logging through the `logwise` facade. Operational
+  failures — a window that won't open, a frozen main thread — are always
+  compiled in and need no feature.
+
+# Development
+
+`scripts/check_all` runs the full gate: formatting, native and wasm checks,
+clippy, tests, and docs, with warnings as errors. Per-target variants live in
+`scripts/native/` and `scripts/wasm32/`; wasm tests run under the `wasm_lite`
+runner on nightly.
 
 ## License
 
