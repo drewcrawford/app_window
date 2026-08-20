@@ -108,12 +108,19 @@ use crate::sys;
 pub(crate) static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
 static MAIN_CALLED: AtomicBool = AtomicBool::new(false);
 
+fn try_mark_main_started(main_called: &AtomicBool, running: &AtomicBool) -> bool {
+    if main_called.swap(true, Ordering::AcqRel) {
+        return false;
+    }
+    running.store(true, Ordering::Release);
+    true
+}
+
 fn mark_main_started(main_called: &AtomicBool, running: &AtomicBool) {
     assert!(
-        !main_called.swap(true, Ordering::AcqRel),
+        try_mark_main_started(main_called, running),
         "Do not call main more than once."
     );
-    running.store(true, Ordering::Release);
 }
 
 /// Error message constant used when operations require initialization.
@@ -596,7 +603,7 @@ pub fn is_main_thread() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::mark_main_started;
+    use super::try_mark_main_started;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
@@ -604,11 +611,10 @@ mod tests {
     fn stopping_does_not_allow_main_to_start_twice() {
         let called = AtomicBool::new(false);
         let running = AtomicBool::new(false);
-        mark_main_started(&called, &running);
+        assert!(try_mark_main_started(&called, &running));
         running.store(false, Ordering::Release);
 
-        let second_start = std::panic::catch_unwind(|| mark_main_started(&called, &running));
-        assert!(second_start.is_err());
+        assert!(!try_mark_main_started(&called, &running));
         assert!(!running.load(Ordering::Acquire));
     }
 }

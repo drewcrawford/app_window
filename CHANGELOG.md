@@ -61,6 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a race where an immediate `surface()` call could force-unwrap a window that
   its detached creation task had not installed yet.
 
+- **[WASM] The lifecycle regression test now survives panic-abort builds.** It
+  verifies one-shot startup through a non-panicking internal transition, so the
+  browser runner checks the rejection instead of aborting on the expected panic.
+
 ## [0.3.4] - 2026-08-17
 
 ### Added
