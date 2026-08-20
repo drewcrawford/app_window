@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer ask Win32 handle wrappers to implement unsupported display formatting,
   and routine logs no longer include raw handles or pointer-sized parameters.
 
+- **Application startup remains one-shot after shutdown.** The lifetime guard
+  is now separate from the event loop's liveness flag, so a stopped application
+  cannot accidentally reuse backend channels and globals that were designed to
+  initialize exactly once.
+
 ## [0.3.4] - 2026-08-17
 
 ### Added

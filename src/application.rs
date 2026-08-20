@@ -97,7 +97,7 @@
 //! This is intentional as it represents a programming error. Always ensure
 //! `main` is called at the start of your program.
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use std::time;
 #[cfg(target_arch = "wasm32")]
@@ -106,6 +106,15 @@ pub(crate) use wasm_lite_std::time;
 use crate::sys;
 
 pub(crate) static IS_MAIN_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
+static MAIN_CALLED: AtomicBool = AtomicBool::new(false);
+
+fn mark_main_started(main_called: &AtomicBool, running: &AtomicBool) {
+    assert!(
+        !main_called.swap(true, Ordering::AcqRel),
+        "Do not call main more than once."
+    );
+    running.store(true, Ordering::Release);
+}
 
 /// Error message constant used when operations require initialization.
 ///
@@ -171,9 +180,7 @@ pub(crate) const CALL_MAIN: &str = "Call app_window::application::main";
 /// ```
 pub fn main<F: FnOnce() + Send + 'static>(closure: F) {
     assert!(sys::is_main_thread(), "Call main from the first thread");
-    let old = IS_MAIN_THREAD_RUNNING.swap(true, std::sync::atomic::Ordering::Release);
-
-    assert!(!old, "Do not call main more than once.");
+    mark_main_started(&MAIN_CALLED, &IS_MAIN_THREAD_RUNNING);
     main_postlude(closure)
 }
 
@@ -216,7 +223,7 @@ where
 /// - Executor initialization checks
 /// - Platform-specific initialization verification
 pub(crate) fn is_main_thread_running() -> bool {
-    IS_MAIN_THREAD_RUNNING.load(std::sync::atomic::Ordering::Acquire)
+    IS_MAIN_THREAD_RUNNING.load(Ordering::Acquire)
 }
 
 /// Executes a closure on the main thread and returns its result.
@@ -585,4 +592,23 @@ pub fn submit_to_main_thread<F: FnOnce() + Send + 'static>(debug_label: String, 
 /// ```
 pub fn is_main_thread() -> bool {
     sys::is_main_thread()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mark_main_started;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[cfg_attr(target_arch = "wasm32", wasm_lite::wasm_lite_test)]
+    #[test]
+    fn stopping_does_not_allow_main_to_start_twice() {
+        let called = AtomicBool::new(false);
+        let running = AtomicBool::new(false);
+        mark_main_started(&called, &running);
+        running.store(false, Ordering::Release);
+
+        let second_start = std::panic::catch_unwind(|| mark_main_started(&called, &running));
+        assert!(second_start.is_err());
+        assert!(!running.load(Ordering::Acquire));
+    }
 }
