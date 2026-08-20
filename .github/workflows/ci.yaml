@@ -1,4 +1,4 @@
-# matrix v12
+# matrix v13
 on: [push,pull_request]
 jobs:
   ci:
@@ -22,10 +22,10 @@ jobs:
         # If so, they should be preserved
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Cache target
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           key: target-${{ github.event.repository.name }}-${{ matrix.os }}-${{ matrix.target || 'host' }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
           path: |

@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2026-08-20
+
+### Added
+
+- **`snapshot --subsystem main_thread` says whether the event loop is
+  pumping**, and it is deliberately *not* behind a feature. A frozen UI is an
+  operational fact about the application, and an operational fact is not
+  something a consumer should have to opt into observing. The cost is three
+  relaxed atomics on a path that already allocates a `String`, takes an
+  `Instant` and mints a context. The probe does not itself wait on the main
+  thread, so a wedged main thread is reported rather than joined.
+
+- **`snapshot --subsystem windows` reports every window this process created**
+  — what was asked for, whether a surface is attached, the geometry the
+  application last observed, and whether it is still open. This one is behind
+  the `exfiltrate` feature: it costs a lock and a record per window, and adds a
+  field to `Window` and `Surface`.
+
+  They are two subsystems rather than one because they fail independently. The
+  window registry can be locked while the main thread is fine, and the main
+  thread can be wedged while the registry answers instantly.
+
+### Changed
+
+- **Migrated to the logwise facade and durable context tokens.** Window and
+  input instrumentation now goes through the zero-dependency facade, so an
+  application that installs no runtime pays nothing for it.
+
 ## [Unreleased]
 
 ## [0.3.4] - 2026-08-17

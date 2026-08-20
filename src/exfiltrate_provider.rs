@@ -46,6 +46,8 @@ const WEDGED_AFTER: std::time::Duration = std::time::Duration::from_secs(3);
 /// Registers the `windows` and `main_thread` subsystems. Idempotent.
 ///
 /// ```no_run
+/// # // no_run because: `begin` opens exfiltrate's listening socket and installs
+/// # // process-global state, which a doctest process must not do.
 /// exfiltrate::begin();
 /// app_window::exfiltrate_provider::install();
 /// ```
