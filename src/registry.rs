@@ -3,7 +3,7 @@
 //! A bounded record of the windows and surfaces this process has created.
 //!
 //! Window state is exactly what differs between "works on my machine" and a bug
-//! report, and none of it is visible from outside the process. A [`Window`] has
+//! report, and none of it is visible from outside the process. A [`Window`](crate::window::Window) has
 //! no accessors -- it is created, it is dropped, and everything in between is
 //! the platform's business -- so this records what the crate itself knows at
 //! the moments it knows it.
@@ -27,7 +27,7 @@
 //! # Bounded, and honest about it
 //!
 //! Keeps the most recent `N`; `N` comes from `APP_WINDOW_REGISTRY_CAPACITY` and
-//! defaults to [`DEFAULT_CAPACITY`]. Overflow forgets *closed* windows before
+//! defaults to [`DEFAULT_CAPACITY`](crate::registry::DEFAULT_CAPACITY). Overflow forgets *closed* windows before
 //! live ones -- a live one is the whole reason to look -- and every drop is
 //! counted and reported, so a caller cannot mistake "that is all of them" for
 //! "I lost some".
@@ -42,6 +42,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::application::time;
 use crate::coordinates::{Position, Size};
 
+/// How many window records to keep when `APP_WINDOW_REGISTRY_CAPACITY` is
+/// unset.
 pub const DEFAULT_CAPACITY: usize = 256;
 
 /// Which constructor made the window, since they differ in what the caller
@@ -59,6 +61,8 @@ pub enum Origin {
 }
 
 impl Origin {
+    /// The stable wire name reported by `snapshot`, matched by external
+    /// tooling rather than rendered from `Debug`.
     pub const fn name(self) -> &'static str {
         match self {
             Origin::Requested => "requested",
@@ -71,21 +75,29 @@ impl Origin {
 /// One window's record.
 #[derive(Clone, Debug)]
 pub struct Entry {
+    /// A locally minted id, always distinct. What `--id` selects.
     pub id: u64,
+    /// How the window came to exist, which is what says whether `requested`
+    /// means anything.
     pub origin: Origin,
+    /// The window's title. Caller-derived, so it is local-only.
     pub title: String,
     /// What was asked for. `None` for [`Origin::PlatformDefault`], where the
     /// caller asked for nothing.
     pub requested: Option<(Position, Size)>,
+    /// When the window was created.
     pub created_at: time::Instant,
     /// `None` while the window is open.
     pub closed_at: Option<time::Instant>,
+    /// Whether a rendering surface has been attached. An open window with no
+    /// surface draws nothing, which looks like a hang from outside.
     pub surface_attached: bool,
     /// The last size and scale the application itself observed, and when.
     pub last_observed: Option<(Size, f64, time::Instant)>,
 }
 
 impl Entry {
+    /// Whether the window is still open.
     pub fn is_open(&self) -> bool {
         self.closed_at.is_none()
     }

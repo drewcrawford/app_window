@@ -94,7 +94,9 @@ pub(crate) fn completed(duration: Duration, overran: bool) {
 pub struct MainThreadStats {
     /// Has [`application::main`](crate::application::main) been reached?
     pub running: bool,
+    /// Turns handed to the main thread over the process's life.
     pub submitted: u64,
+    /// How many of those finished.
     pub completed: u64,
     /// Submitted but not yet finished: queued plus the one in flight.
     pub outstanding: u64,
@@ -118,6 +120,11 @@ fn age(stamp: &AtomicU64) -> Option<Duration> {
     }
 }
 
+/// Reads the main thread's state without asking the main thread anything.
+///
+/// This is three relaxed atomic loads and never waits, which is the point: a
+/// wedged main thread is exactly the case where a probe that joined it would
+/// wedge too, and report nothing.
 pub fn stats() -> MainThreadStats {
     let submitted = SUBMITTED.load(Ordering::Relaxed);
     let completed = COMPLETED.load(Ordering::Relaxed);

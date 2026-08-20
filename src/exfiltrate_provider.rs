@@ -2,7 +2,7 @@
 
 //! Exposes window and main-thread state through exfiltrate's `snapshot` command.
 //!
-//! Call [`install`] once, after `exfiltrate::begin()`. It registers two
+//! Call [`install`](crate::exfiltrate_provider::install) once, after `exfiltrate::begin()`. It registers two
 //! subsystems:
 //!
 //! * `windows` -- every window this process created: what was asked for, where
