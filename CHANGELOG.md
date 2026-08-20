@@ -56,6 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dangling native handle to wgpu or another renderer. The actual window closes
   when its last window-or-surface owner goes away.
 
+- **[macOS] Awaiting window creation now awaits the actual AppKit window.** The
+  Swift bridge completes Rust's constructor only after MainActor setup, closing
+  a race where an immediate `surface()` call could force-unwrap a window that
+  its detached creation task had not installed yet.
+
 ## [0.3.4] - 2026-08-17
 
 ### Added

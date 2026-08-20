@@ -17,62 +17,44 @@ final class NSWindowCustomize: NSWindow {
 }
 
 public final class Window: Sendable {
-    @MainActor var window: NSWindow?
-    
-    init(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, title: String) {
-        Task {
-            await MainActor.run {
-                NSApplication.shared.setActivationPolicy(.regular)
-                NSApplication.shared.activate()
-                let _window = NSWindowCustomize(contentRect: NSRect(origin: .zero, size: .init(width: width, height: height)) , styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-                _window.isReleasedWhenClosed = false
-                _window.contentView = SurfaceView()
+    @MainActor let window: NSWindow
 
-                self.window = _window
-                
-                _window.title = title
-                let screen = _window.screen!
-                _window.setFrameOrigin(.init(rustX: x, rustY: y, outerBounds: screen.frame))
-                self.window!.makeKeyAndOrderFront(nil)
-            }
-        }
+    @MainActor init(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, title: String) {
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate()
+        let window = NSWindowCustomize(contentRect: NSRect(origin: .zero, size: .init(width: width, height: height)) , styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = SurfaceView()
+        window.title = title
+        let screen = window.screen!
+        window.setFrameOrigin(.init(rustX: x, rustY: y, outerBounds: screen.frame))
+        window.makeKeyAndOrderFront(nil)
+        self.window = window
     }
-    
-    init(fullscreen: (), title: String) {
-        
-        Task {
-            await MainActor.run {
-                NSApplication.shared.setActivationPolicy(.regular)
-                NSApplication.shared.activate()
-                let _window = NSWindowCustomize(contentRect: .init(origin: .zero, size: NSScreen.main!.frame.size), styleMask: [.borderless], backing: .buffered, defer: false)
-                _window.isReleasedWhenClosed = false
-                _window.contentView = SurfaceView()
-                self.window = _window
-                
-                _window.title = title
-                _window.collectionBehavior = [.fullScreenPrimary]
-                _window.setFrame(_window.screen!.frame, display: true)
-                _window.makeKeyAndOrderFront(nil)
-                _window.toggleFullScreen(nil)
-                
-            }
-        }
+
+    @MainActor init(fullscreen: (), title: String) {
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate()
+        let window = NSWindowCustomize(contentRect: .init(origin: .zero, size: NSScreen.main!.frame.size), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = SurfaceView()
+        window.title = title
+        window.collectionBehavior = [.fullScreenPrimary]
+        window.setFrame(window.screen!.frame, display: true)
+        window.makeKeyAndOrderFront(nil)
+        window.toggleFullScreen(nil)
+        self.window = window
     }
     deinit {
-        //I'm not really sure why but there's some ARC issue here
-        if let window {
-            Task {
-                await MainActor.run {
-                    print("Close the moved window?")
-                    print("description \(window)")
-                    window.close()
-                }
+        let window = self.window
+        Task {
+            await MainActor.run {
+                window.close()
             }
         }
     }
     public func surface() async -> Surface {
         let view = await MainActor.run {
-            let window = self.window!
             let view = window.contentView! as! SurfaceView
             return view
         }
@@ -80,16 +62,20 @@ public final class Window: Sendable {
     }
 }
 
-@_cdecl("SwiftAppWindow_WindowNew") public func WindowNew(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, title: SRString) -> UnsafeMutableRawPointer {
-    let w = Window(x: x, y: y, width: width, height: height, title: title.toString())
-    let unmanaged = Unmanaged.passRetained(w).toOpaque()
-    return unmanaged
+@_cdecl("SwiftAppWindow_WindowNew") public func WindowNew(context: UInt64, x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, title: SRString, ret: @convention(c) @Sendable (UInt64, UnsafeMutableRawPointer) -> ()) {
+    let title = title.toString()
+    Task { @MainActor in
+        let window = Window(x: x, y: y, width: width, height: height, title: title)
+        ret(context, Unmanaged.passRetained(window).toOpaque())
+    }
 }
 
-@_cdecl("SwiftAppWindow_WindowNewFullscreen") public func WindowNew(title: SRString) -> UnsafeMutableRawPointer {
-    let w = Window(fullscreen: (), title: title.toString())
-    let unmanaged = Unmanaged.passRetained(w).toOpaque()
-    return unmanaged
+@_cdecl("SwiftAppWindow_WindowNewFullscreen") public func WindowNewFullscreen(context: UInt64, title: SRString, ret: @convention(c) @Sendable (UInt64, UnsafeMutableRawPointer) -> ()) {
+    let title = title.toString()
+    Task { @MainActor in
+        let window = Window(fullscreen: (), title: title)
+        ret(context, Unmanaged.passRetained(window).toOpaque())
+    }
 }
 
 @_cdecl("SwiftAppWindow_WindowFree") public func WindowFree(window: UInt64) {
@@ -102,5 +88,4 @@ public final class Window: Sendable {
         await window.surface()
     }
 }
-
 

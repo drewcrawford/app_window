@@ -29,9 +29,9 @@ impl Display for FullscreenError {
 
 swift!(fn SwiftAppWindowIsMainThread() -> bool);
 swift!(fn SwiftAppWindowRunMainThread());
-swift!(fn SwiftAppWindow_WindowNew( x: f64, y: f64, width: f64, height: f64, title: SRString)  -> *mut c_void);
+swift!(fn SwiftAppWindow_WindowNew(ctx: *mut c_void, x: f64, y: f64, width: f64, height: f64, title: SRString, ret: *mut c_void)  -> ());
 swift!(fn SwiftAppWindow_WindowFree(window: *mut c_void)  -> ());
-swift!(fn SwiftAppWindow_WindowNewFullscreen(title: SRString)  -> *mut c_void);
+swift!(fn SwiftAppWindow_WindowNewFullscreen(ctx: *mut c_void, title: SRString, ret: *mut c_void)  -> ());
 swift!(fn SwiftAppWindow_WindowSurface(ctx: *mut c_void, window: *mut c_void, ret: *mut c_void)  -> ());
 swift!(fn SwiftAppWindow_OnMainThread(ctx: *mut c_void, c_fn: *mut c_void)  -> ());
 swift!(fn SwiftAppWindow_StopMainThread()  -> ());
@@ -88,6 +88,11 @@ extern "C" fn recv_surface(ctx: *mut Sender<Surface>, surface: *mut c_void) {
     })
 }
 
+extern "C" fn recv_window(ctx: *mut Sender<usize>, window: *mut c_void) {
+    let sender: Sender<usize> = *unsafe { Box::from_raw(ctx) };
+    sender.send(window as usize);
+}
+
 extern "C" fn recv_size(
     ctx: *mut Sender<(Size, f64)>,
     size_w: f64,
@@ -108,16 +113,22 @@ unsafe impl Send for Window {}
 unsafe impl Sync for Window {}
 impl Window {
     pub async fn new(position: Position, size: Size, title: String) -> Self {
-        let imp = unsafe {
+        let (sender, future) = r#continue::continuation();
+        let sender = Box::into_raw(Box::new(sender));
+        unsafe {
             SwiftAppWindow_WindowNew(
+                sender as *mut c_void,
                 position.x(),
                 position.y(),
                 size.width(),
                 size.height(),
                 SRString::from(title.as_str()),
-            )
+                recv_window as *mut c_void,
+            );
         };
-        Window { imp }
+        Window {
+            imp: future.await as *mut c_void,
+        }
     }
     pub async fn default() -> Self {
         Self::new(
@@ -129,8 +140,18 @@ impl Window {
     }
 
     pub async fn fullscreen(title: String) -> Result<Self, FullscreenError> {
-        let imp = unsafe { SwiftAppWindow_WindowNewFullscreen(SRString::from(title.as_str())) };
-        Ok(Window { imp })
+        let (sender, future) = r#continue::continuation();
+        let sender = Box::into_raw(Box::new(sender));
+        unsafe {
+            SwiftAppWindow_WindowNewFullscreen(
+                sender as *mut c_void,
+                SRString::from(title.as_str()),
+                recv_window as *mut c_void,
+            );
+        }
+        Ok(Window {
+            imp: future.await as *mut c_void,
+        })
     }
     pub async fn surface(&self) -> Surface {
         let (sender, fut) = r#continue::continuation();
