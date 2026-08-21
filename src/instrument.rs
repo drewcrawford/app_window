@@ -90,7 +90,7 @@ pub(crate) fn completed(duration: Duration, overran: bool) {
 }
 
 /// What an observer can say about the main thread without touching it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct MainThreadStats {
     /// Has [`application::main`](crate::application::main) been reached?
     pub running: bool,
