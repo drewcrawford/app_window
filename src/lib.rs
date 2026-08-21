@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /*!
+<!-- The authoritative version of this document is the crate documentation in src/lib.rs. Edit there, then mirror the changes here. -->
+
 # app_window
 
 A cross-platform window crate with an async-first API.
