@@ -113,7 +113,7 @@ unsafe impl Send for Window {}
 unsafe impl Sync for Window {}
 impl Window {
     pub async fn new(position: Position, size: Size, title: String) -> Self {
-        let (sender, future) = r#continue::continuation();
+        let (sender, future) = r#continue::continuation::<usize>();
         let sender = Box::into_raw(Box::new(sender));
         unsafe {
             SwiftAppWindow_WindowNew(
@@ -140,7 +140,7 @@ impl Window {
     }
 
     pub async fn fullscreen(title: String) -> Result<Self, FullscreenError> {
-        let (sender, future) = r#continue::continuation();
+        let (sender, future) = r#continue::continuation::<usize>();
         let sender = Box::into_raw(Box::new(sender));
         unsafe {
             SwiftAppWindow_WindowNewFullscreen(
@@ -154,7 +154,7 @@ impl Window {
         })
     }
     pub async fn surface(&self) -> Surface {
-        let (sender, fut) = r#continue::continuation();
+        let (sender, fut) = r#continue::continuation::<Surface>();
 
         let sender_box = Box::into_raw(Box::new(sender));
         unsafe {
@@ -204,7 +204,7 @@ impl Surface {
     Returns the size and scale factor of the surface.
     */
     pub async fn size_scale(&self) -> (Size, f64) {
-        let (sender, fut) = r#continue::continuation();
+        let (sender, fut) = r#continue::continuation::<(Size, f64)>();
         let boxed_sender = Box::into_raw(Box::new(sender));
         unsafe {
             SwiftAppWindow_SurfaceSize(
